@@ -424,10 +424,12 @@ async function deleteContractHistoryEntry(id: string): Promise<void> {
 async function getLatestContractEndDates(): Promise<Record<string, string>> {
   return supabaseGuarded(async () => {
     const rows = await fetchAllRowsParallel("contract_history", "employee_id, contract_end", "id");
+    const today = new Date().toISOString().slice(0, 10);
     const result: Record<string, string> = {};
     for (const row of rows as unknown as { employee_id: string; contract_end: string }[]) {
+      if (!row.contract_end || row.contract_end < today) continue;
       const current = result[row.employee_id];
-      if (!current || row.contract_end > current) result[row.employee_id] = row.contract_end;
+      if (!current || row.contract_end < current) result[row.employee_id] = row.contract_end;
     }
     return result;
   });

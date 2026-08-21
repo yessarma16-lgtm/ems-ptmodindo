@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { DatabaseSync } from "node:sqlite";
+
 import { SIMPLE_MASTER_SHEETS, LOOKUP_TYPES, type SimpleMasterCategory } from "@/config/master-data-sheets";
 import { calculateAge, calculateMasaKerja } from "@/lib/calculations";
 import { computeDashboardStats } from "@/lib/database/dashboard-stats";
@@ -321,9 +323,15 @@ async function deleteContractHistoryEntry(id: string): Promise<void> {
 
 async function getLatestContractEndDates(): Promise<Record<string, string>> {
   const db = getDb();
+  return getNearestContractEndDates(db);
+}
+
+export function getNearestContractEndDates(db: DatabaseSync, today = new Date().toISOString().slice(0, 10)): Record<string, string> {
   const rows = db
-    .prepare("SELECT employee_id, MAX(contract_end) as latest_end FROM contract_history GROUP BY employee_id")
-    .all() as { employee_id: string; latest_end: string }[];
+    .prepare(
+      "SELECT employee_id, MIN(contract_end) as latest_end FROM contract_history WHERE contract_end <> '' AND contract_end >= ? GROUP BY employee_id",
+    )
+    .all(today) as { employee_id: string; latest_end: string }[];
   const result: Record<string, string> = {};
   for (const row of rows) result[row.employee_id] = row.latest_end;
   return result;
