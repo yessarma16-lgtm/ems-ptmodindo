@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AttendanceImportPanel } from "@/components/attendance/AttendanceImportPanel";
 import { BracketMasterManager } from "@/components/attendance/BracketMasterManager";
+import { CalculationPanel } from "@/components/attendance/CalculationPanel";
 
 const originalFetch = globalThis.fetch;
 
@@ -74,5 +75,40 @@ describe("attendance components", () => {
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("Diubah")).toBeInTheDocument();
     expect(within(dialog).getAllByText(/1–2 jam/)).toHaveLength(2);
+  });
+
+  it("menjalankan crosscheck, menolak note kosong, lalu menyimpan koreksi manual", async () => {
+    const before = [{ id: 3, rawId: 9, dayType: "Senin-Jumat", bracketUsed: "Bracket Senin-Jumat", systemCalculatedOth: 1, finalOth: 1, status: "Tidak Sesuai", correctedBy: null, correctedAt: null, correctionNote: null, calculatedAt: "2026-08-20T10:00:00.000Z", nik: "1001", nama: "NAMA TEST", department: "CUTTING", tanggal: "2026-08-10" }];
+    const after = [{ ...before[0], finalOth: 2, status: "Dikoreksi Manual", correctedBy: "tester", correctionNote: "Persetujuan manager" }];
+    let calculationReads = 0;
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/attendance/calculation") {
+        calculationReads += 1;
+        return Promise.resolve(response({ rows: calculationReads >= 3 ? after : before }));
+      }
+      if (url === "/api/attendance/crosscheck") return Promise.resolve(response({ summary: { processed: 1, sesuai: 0, tidakSesuai: 1, cekManual: 0, tidakBerlaku: 0, preservedManualCorrections: 0 } }));
+      if (url === "/api/attendance/calculation/correct") {
+        expect(JSON.parse(String(init?.body))).toEqual({ id: 3, newValue: 2, note: "Persetujuan manager" });
+        return Promise.resolve(response({ ok: true }));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    globalThis.fetch = fetchMock;
+
+    render(<CalculationPanel />);
+    await screen.findByText("Tidak Sesuai");
+    fireEvent.click(screen.getByRole("button", { name: "Jalankan Crosscheck" }));
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === "/api/attendance/crosscheck")).toBe(true));
+
+    const statusCell = screen.getByText("Tidak Sesuai");
+    fireEvent.click(statusCell.closest("tr") as HTMLTableRowElement);
+    expect(screen.getByRole("button", { name: "Simpan Koreksi" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Final OTH baru"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Correction note wajib diisi"), { target: { value: "Persetujuan manager" } });
+    fireEvent.click(screen.getByRole("button", { name: "Simpan Koreksi" }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === "/api/attendance/calculation/correct")).toBe(true));
+    await screen.findByText("Dikoreksi Manual");
+    expect(screen.getByText("2")).toBeInTheDocument();
   });
 });

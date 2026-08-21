@@ -29,10 +29,11 @@ Keputusan scope (dikonfirmasi dengan user):
 | `lib/attendance-import.ts` (orkestrasi: `importer.ts` -> preview konflik -> `adapter.importRawAttendance()`, resolusi Timpa/Lewati) | ✅ Selesai, 2 test lulus | `lib/attendance-import.ts`, `__tests__/attendance/attendance-import.test.ts` |
 | Zod schema (`schemas/attendance.schema.ts`), API routes (import preview/commit/history, bracket-master + history) | ✅ Selesai | `app/api/attendance/**` |
 | Page 1 UI: Tab "Import Data Absensi" + Tab "Master Durasi Jam antara" (diff visual, riwayat) | ✅ Selesai, ditest manual lewat browser end-to-end | `app/(app)/attendance/import/page.tsx`, `components/attendance/*` |
-| Integrasi `config/navigation.ts` + `config/module-permissions.ts` | ✅ Selesai (1 nav item, belum ada child — Page 2/3 belum ada) | `config/navigation.ts`, `config/module-permissions.ts` |
-| Page 2 (MPP Calculation) & Page 3 (Report) | ⬜ Belum dikerjakan — langkah selanjutnya | — |
+| Integrasi `config/navigation.ts` + `config/module-permissions.ts` | ✅ Selesai (child Page 1 + Page 2 terdaftar; Page 3 belum ada) | `config/navigation.ts`, `config/module-permissions.ts` |
+| Page 2 (MPP Calculation) | ✅ Selesai, termasuk test UI crosscheck/koreksi | `app/(app)/attendance/calculation/page.tsx`, `components/attendance/CalculationPanel.tsx`, `components/attendance/CorrectionDialog.tsx`, `app/api/attendance/calculation/**`, `app/api/attendance/crosscheck/route.ts` |
+| Page 3 (Report) | ⬜ Belum dikerjakan — langkah selanjutnya | — |
 
-Total suite saat ini: **23 test, 23 lulus** (`npm run test`) — 4 rule engine +
+Total suite saat ini: **26 test, 26 lulus** (`npm run test`) — 4 rule engine +
 8 importer + 8 adapter + 2 orkestrasi import. `npm run db:init:sqlite` sudah
 dijalankan ulang dan berhasil menambahkan 4 tabel baru ke `data/employee.db`
 yang asli (additive, tidak menyentuh data lain). `tsc --noEmit` dan `eslint`

@@ -44,3 +44,16 @@ export const importCommitSchema = z.object({
   decisions: z.record(z.string(), z.enum(["overwrite", "skip"])),
 });
 export type ImportCommitInput = z.infer<typeof importCommitSchema>;
+
+export const attendanceCalculationFilterSchema = z.object({
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  department: z.string().trim().optional(),
+  status: z.enum(["Sesuai", "Tidak Sesuai", "Dikoreksi Manual", "Cek Manual", "Tidak Berlaku"]).optional(),
+});
+
+export const attendanceCorrectionSchema = z.object({
+  id: z.coerce.number().int().positive(),
+  newValue: z.coerce.number().finite().min(0),
+  note: z.string().trim().min(1, "Correction note wajib diisi."),
+});

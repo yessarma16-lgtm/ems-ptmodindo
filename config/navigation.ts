@@ -41,12 +41,15 @@ export const MAIN_NAV: NavItem[] = [
     ],
   },
   { label: "Recruitment", href: "/recruitment", icon: UserPlus },
-  // Modul Attendance/Overtime (docs/ATTENDANCE_OVERTIME_MODULE_SPEC.md).
-  // Cuma 1 child sekarang karena cuma Page 1 yang sudah dibangun (langkah 5)
-  // -- MPP Calculation & Overtime Report ditambah sebagai child di sini
-  // begitu halamannya masing-masing dibuat (langkah 6-7), jangan link ke
-  // route yang belum ada.
-  { label: "Attendance", href: "/attendance/import", icon: ClipboardCheck },
+  {
+    label: "Attendance",
+    href: "/attendance/import",
+    icon: ClipboardCheck,
+    children: [
+      { label: "NK Attendance Data", href: "/attendance/import" },
+      { label: "MPP Calculation", href: "/attendance/calculation" },
+    ],
+  },
   {
     label: "Report",
     href: "/reports/employee",
