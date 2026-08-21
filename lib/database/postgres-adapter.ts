@@ -423,13 +423,35 @@ async function deleteContractHistoryEntry(id: string): Promise<void> {
 
 async function getLatestContractEndDates(): Promise<Record<string, string>> {
   return supabaseGuarded(async () => {
-    const rows = await fetchAllRowsParallel("contract_history", "employee_id, contract_end", "id");
     const today = new Date().toISOString().slice(0, 10);
+    const client = getSupabaseClient();
+    const { count, error: countError } = await client
+      .from("contract_history")
+      .select("id", { count: "exact", head: true })
+      .gte("contract_end", today);
+    if (countError) throw countError;
+
+    const total = count ?? 0;
+    const pageCount = Math.ceil(total / SUPABASE_PAGE_SIZE);
+    const pages = await Promise.all(
+      Array.from({ length: pageCount }, (_, i) => {
+        const from = i * SUPABASE_PAGE_SIZE;
+        return client
+          .from("contract_history")
+          .select("employee_id, contract_end")
+          .gte("contract_end", today)
+          .order("id", { ascending: true })
+          .range(from, from + SUPABASE_PAGE_SIZE - 1);
+      }),
+    );
+
     const result: Record<string, string> = {};
-    for (const row of rows as unknown as { employee_id: string; contract_end: string }[]) {
-      if (!row.contract_end || row.contract_end < today) continue;
-      const current = result[row.employee_id];
-      if (!current || row.contract_end < current) result[row.employee_id] = row.contract_end;
+    for (const page of pages) {
+      if (page.error) throw page.error;
+      for (const row of (page.data ?? []) as unknown as { employee_id: string; contract_end: string }[]) {
+        const current = result[row.employee_id];
+        if (!current || row.contract_end < current) result[row.employee_id] = row.contract_end;
+      }
     }
     return result;
   });

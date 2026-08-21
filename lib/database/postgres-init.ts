@@ -117,6 +117,15 @@ export async function ensureSchema(client: Client): Promise<void> {
   await client.query(buildEmployeesTableSql());
   await ensureEmployeeColumnsExist(client);
 
+  // Common employee-list filters and sorts. These are additive and idempotent
+  // so rerunning db:init:postgres is safe on an existing database.
+  await client.query("CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status);");
+  await client.query("CREATE INDEX IF NOT EXISTS idx_employees_category ON employees(category);");
+  await client.query("CREATE INDEX IF NOT EXISTS idx_employees_department ON employees(department);");
+  await client.query("CREATE INDEX IF NOT EXISTS idx_employees_join_date ON employees(join_date);");
+  await client.query("CREATE INDEX IF NOT EXISTS idx_employees_exit_date ON employees(exit_date);");
+  await client.query("CREATE INDEX IF NOT EXISTS idx_employees_name ON employees(name);");
+
   for (const table of Object.values(SIMPLE_MASTER_SHEETS)) {
     const tableName = table.toLowerCase();
     await client.query(`CREATE TABLE IF NOT EXISTS ${tableName} (${SIMPLE_MASTER_TABLE_DDL});`);
