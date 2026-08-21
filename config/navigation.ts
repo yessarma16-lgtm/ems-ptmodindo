@@ -48,6 +48,7 @@ export const MAIN_NAV: NavItem[] = [
     children: [
       { label: "NK Attendance Data", href: "/attendance/import" },
       { label: "MPP Calculation", href: "/attendance/calculation" },
+      { label: "Overtime Report", href: "/attendance/report" },
     ],
   },
   {

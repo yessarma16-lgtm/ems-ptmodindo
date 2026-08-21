@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AttendanceImportPanel } from "@/components/attendance/AttendanceImportPanel";
 import { BracketMasterManager } from "@/components/attendance/BracketMasterManager";
 import { CalculationPanel } from "@/components/attendance/CalculationPanel";
+import { AttendanceReportPanel } from "@/components/attendance/AttendanceReportPanel";
 
 const originalFetch = globalThis.fetch;
 
@@ -110,5 +111,22 @@ describe("attendance components", () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === "/api/attendance/calculation/correct")).toBe(true));
     await screen.findByText("Dikoreksi Manual");
     expect(screen.getByText("2")).toBeInTheDocument();
+  }, 15000);
+
+  it("memicu download report dengan filename periode dari response endpoint", async () => {
+    let downloaded = "";
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) { downloaded = this.download; });
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:test") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new Blob(["xlsx"]), { status: 200, headers: { "Content-Disposition": 'attachment; filename="attendance-employee-2026-08-01_2026-08-31.xlsx"' } }));
+    globalThis.fetch = fetchMock;
+    render(<AttendanceReportPanel />);
+    fireEvent.change(document.getElementById("report-date-from") as HTMLInputElement, { target: { value: "2026-08-01" } });
+    fireEvent.change(document.getElementById("report-date-to") as HTMLInputElement, { target: { value: "2026-08-31" } });
+    fireEvent.click(screen.getByRole("button", { name: /Rekap per karyawan/ }));
+    await waitFor(() => expect(click).toHaveBeenCalled());
+    expect(fetchMock).toHaveBeenCalledWith("/api/attendance/report", expect.objectContaining({ method: "POST" }));
+    expect(downloaded).toBe("attendance-employee-2026-08-01_2026-08-31.xlsx");
+    click.mockRestore();
   });
 });

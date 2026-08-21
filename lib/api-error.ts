@@ -12,6 +12,7 @@ import {
 } from "@/lib/online-register-service";
 import { AttendanceProviderNotSupportedError, AttendanceValidationError } from "@/lib/database/attendance-errors";
 import { ImportParseError } from "@/lib/attendance/importer";
+import { ModuleAuthenticationError, ModulePermissionError } from "@/lib/module-permission";
 
 /**
  * Converts a thrown error from the service layer into a safe JSON response.
@@ -21,6 +22,8 @@ import { ImportParseError } from "@/lib/attendance/importer";
  * provider, since both throw (or extend) these generic error classes.
  */
 export function toApiErrorResponse(err: unknown): NextResponse {
+  if (err instanceof ModuleAuthenticationError) return NextResponse.json({ error: err.message }, { status: 401 });
+  if (err instanceof ModulePermissionError) return NextResponse.json({ error: err.message }, { status: 403 });
   if (err instanceof EmployeeNotFoundError) {
     return NextResponse.json({ error: "Employee not found." }, { status: 404 });
   }

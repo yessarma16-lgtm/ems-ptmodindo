@@ -12,6 +12,7 @@ export const PERMISSION_MODULES = [
   { key: "onlineRegister", label: "Recruitment - Online Register" },
   { key: "attendanceImport", label: "Attendance - NK Attendance Data" },
   { key: "attendanceCalculation", label: "Attendance - MPP Calculation" },
+  { key: "attendanceReport", label: "Attendance - Overtime Report" },
   { key: "export", label: "Export" },
   { key: "masterData", label: "Master Data" },
   { key: "settingsDatabase", label: "Settings - Database" },

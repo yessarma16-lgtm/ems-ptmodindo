@@ -29,11 +29,11 @@ Keputusan scope (dikonfirmasi dengan user):
 | `lib/attendance-import.ts` (orkestrasi: `importer.ts` -> preview konflik -> `adapter.importRawAttendance()`, resolusi Timpa/Lewati) | ✅ Selesai, 2 test lulus | `lib/attendance-import.ts`, `__tests__/attendance/attendance-import.test.ts` |
 | Zod schema (`schemas/attendance.schema.ts`), API routes (import preview/commit/history, bracket-master + history) | ✅ Selesai | `app/api/attendance/**` |
 | Page 1 UI: Tab "Import Data Absensi" + Tab "Master Durasi Jam antara" (diff visual, riwayat) | ✅ Selesai, ditest manual lewat browser end-to-end | `app/(app)/attendance/import/page.tsx`, `components/attendance/*` |
-| Integrasi `config/navigation.ts` + `config/module-permissions.ts` | ✅ Selesai (child Page 1 + Page 2 terdaftar; Page 3 belum ada) | `config/navigation.ts`, `config/module-permissions.ts` |
+| Integrasi `config/navigation.ts` + `config/module-permissions.ts` | ✅ Selesai (child Page 1–3 terdaftar) | `config/navigation.ts`, `config/module-permissions.ts` |
 | Page 2 (MPP Calculation) | ✅ Selesai, termasuk test UI crosscheck/koreksi | `app/(app)/attendance/calculation/page.tsx`, `components/attendance/CalculationPanel.tsx`, `components/attendance/CorrectionDialog.tsx`, `app/api/attendance/calculation/**`, `app/api/attendance/crosscheck/route.ts` |
-| Page 3 (Report) | ⬜ Belum dikerjakan — langkah selanjutnya | — |
+| Page 3 (Report) | ✅ Selesai, 4 test komponen/service/permission | `app/(app)/attendance/report/page.tsx`, `components/attendance/AttendanceReportPanel.tsx`, `lib/attendance-report-service.ts`, `app/api/attendance/report/route.ts` |
 
-Total suite saat ini: **26 test, 26 lulus** (`npm run test`) — 4 rule engine +
+Total suite saat ini: **30 test, 30 lulus** (`npm run test`) — 4 rule engine +
 8 importer + 8 adapter + 2 orkestrasi import. `npm run db:init:sqlite` sudah
 dijalankan ulang dan berhasil menambahkan 4 tabel baru ke `data/employee.db`
 yang asli (additive, tidak menyentuh data lain). `tsc --noEmit` dan `eslint`
@@ -688,6 +688,8 @@ Sama pola dengan `app/(app)/settings/master-data/page.tsx`: `Tabs` dengan
   (pola `lib/export-service.ts`): Rekap per karyawan, Rekap per
   departemen, Laporan eksepsi (`status IN ('Tidak Sesuai', 'Dikoreksi Manual')`)
 - Semua 3 report ambil dari `final_oth`, bukan `system_calculated_oth`
+- Endpoint report mewajibkan session dan permission `attendanceReport`; export SQLite dicatat melalui `audit_log` dengan jenis report, periode, department, jumlah baris, dan total Final OTH. Project belum memiliki audit-log export lintas provider yang seragam; Postgres audit export belum ditambahkan karena writer audit yang tersedia memang SQLite-only.
+- **KNOWN GAP produksi:** `npm install` melaporkan 5 moderate severity vulnerabilities pada dependency tree. Belum dijalankan `npm audit fix` karena dapat mengubah versi dependency dan berpotensi memicu regresi; lakukan review dependency terpisah sebelum deployment.
 
 ## Integrasi ke shell aplikasi (bagian yang tidak ada padanannya di spec asli sama sekali)
 
