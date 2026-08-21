@@ -2,6 +2,7 @@ import "server-only";
 import ExcelJS from "exceljs";
 
 import { ALL_EMPLOYEE_FORM_FIELDS } from "@/config/employee-fields";
+import { normalizeExcelBuffer } from "@/lib/excel-import";
 import { FIELD_MASTER_DATA_SOURCE } from "@/config/field-master-data-map";
 import { employeeSchema } from "@/schemas/employee.schema";
 import { createEmployee, bulkCreateEmployees } from "@/lib/employee-service";
@@ -9,7 +10,7 @@ import { getAllMasterData } from "@/lib/master-data-service";
 import type { EmployeeInput } from "@/lib/database/types";
 
 /**
- * Bulk-import employees from an .xlsx file — used by the Import button on
+ * Bulk-import employees from an .xls or .xlsx file — used by the Import button on
  * both Active and Inactive Employees pages (a new record's STATUS column
  * decides which list it shows up in afterward). Column headers must match
  * the labels used in `ALL_EMPLOYEE_FORM_FIELDS` (same labels the template
@@ -122,9 +123,9 @@ export async function importEmployeesFromWorkbook(
   const workbook = new ExcelJS.Workbook();
   try {
     // Cast needed for a Node/@types/node Buffer generic mismatch (Buffer<ArrayBufferLike> vs Buffer) — same value at runtime.
-    await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+    await workbook.xlsx.load(normalizeExcelBuffer(buffer) as unknown as Parameters<typeof workbook.xlsx.load>[0]);
   } catch {
-    throw new ImportParseError("This doesn't look like a valid .xlsx file.");
+    throw new ImportParseError("This doesn't look like a valid .xls or .xlsx file.");
   }
 
   const sheet = workbook.worksheets[0];

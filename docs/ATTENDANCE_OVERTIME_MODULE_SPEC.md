@@ -417,7 +417,26 @@ test SQLite di atas terhadap Supabase sungguhan — terutama transaksi
 lintas-statement, satu-satunya yang punya risiko nyata beda perilaku dari
 SQLite kalau ada bug di SQL function-nya).
 
-## Rule engine — logika TIDAK berubah, hanya bahasa
+**KNOWN GAP - belum ada penanganan wraparound tengah malam**:
+`lib/attendance/overtime-rules.ts` menghitung `toHours()` dan selisih waktu
+secara linear, tanpa membungkus waktu yang melewati pukul 00:00. Contoh
+`OutTime=23:00`, `OT1=00:30` menghasilkan `0.5 - 23 = -22.5`, sehingga
+dikembalikan sebagai 0 jam overtime, padahal durasinya 1.5 jam. Status:
+**belum diperbaiki**, menunggu konfirmasi product owner apakah operasional
+nyata memiliki shift melewati tengah malam. Jika ada, ini menjadi prioritas
+perbaikan sebelum modul dipakai untuk shift malam; jika tidak, asumsi ini
+perlu dipertahankan sebagai batasan operasional eksplisit.
+
+**KNOWN GAP - kategori Hari Libur/Lembur case-sensitive tanpa trim**:
+Rule engine mencocokkan kategori dengan exact match `input.kategori ===
+"Hari Libur/Lembur"`, tanpa `.trim()` dan tanpa normalisasi kapitalisasi.
+Spasi tambahan atau variasi seperti `hari libur/lembur` dapat masuk ke
+cabang bracket-table biasa tanpa exception, sehingga hasilnya berpotensi
+salah tanpa peringatan. Status: **belum diperbaiki**; perbaikan murah di
+importer atau rule engine ditunda sampai ada keputusan eksplisit product
+owner.
+
+## Rule engine - logika TIDAK berubah, hanya bahasa
 
 `lib/attendance/day-type.ts`:
 ```ts

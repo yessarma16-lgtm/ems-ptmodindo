@@ -49,11 +49,15 @@ export const attendanceCalculationFilterSchema = z.object({
   dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   department: z.string().trim().optional(),
+  search: z.string().trim().optional(),
   status: z.enum(["Sesuai", "Tidak Sesuai", "Dikoreksi Manual", "Cek Manual", "Tidak Berlaku"]).optional(),
 });
 
 export const attendanceCorrectionSchema = z.object({
   id: z.coerce.number().int().positive(),
+  rawId: z.coerce.number().int().positive(),
+  it1: z.string().regex(/^\d{1,2}:\d{2}$/).nullable(),
+  ot1: z.string().regex(/^\d{1,2}:\d{2}$/).nullable(),
   newValue: z.coerce.number().finite().min(0),
   note: z.string().trim().min(1, "Correction note wajib diisi."),
 });

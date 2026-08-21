@@ -34,6 +34,7 @@ export const MAIN_NAV: NavItem[] = [
     label: "Employees",
     href: "/employees",
     icon: UsersRound,
+    collapsible: true,
     children: [
       { label: "Active Employees", href: "/employees" },
       { label: "Inactive Employees", href: "/employees/inactive" },
@@ -45,6 +46,7 @@ export const MAIN_NAV: NavItem[] = [
     label: "Attendance",
     href: "/attendance/import",
     icon: ClipboardCheck,
+    collapsible: true,
     children: [
       { label: "NK Attendance Data", href: "/attendance/import" },
       { label: "MPP Calculation", href: "/attendance/calculation" },
@@ -55,6 +57,7 @@ export const MAIN_NAV: NavItem[] = [
     label: "Report",
     href: "/reports/employee",
     icon: FileBarChart2,
+    collapsible: true,
     children: [{ label: "Employee Report", href: "/reports/employee" }],
   },
   { label: "Export", href: "/export", icon: FileSpreadsheet },

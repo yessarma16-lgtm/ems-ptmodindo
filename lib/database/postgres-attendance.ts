@@ -13,6 +13,7 @@ import type {
   RawAttendanceInput,
   RawAttendanceRecord,
   RawAttendanceFilter,
+  ImportHistoryFilter,
   ExistingRecord,
   ImportSummary,
   ImportHistoryEntry,
@@ -96,12 +97,14 @@ function hasCompleteTimeFields(raw: RawAttendanceRecord): boolean {
 function makeBracketLookup(): BracketLookupFn {
   return async (selisihHours, dayType) => {
     return supabaseGuarded(async () => {
+      const normalized = Math.round(selisihHours * 60) / 60;
+      const epsilon = 1e-6;
       const { data, error } = await getSupabaseClient()
         .from("bracket_master")
         .select("ot_hours")
         .eq("day_type", dayType)
-        .lte("durasi_start", selisihHours)
-        .gte("durasi_end", selisihHours)
+        .lte("durasi_start", normalized + epsilon)
+        .gte("durasi_end", normalized - epsilon)
         .order("durasi_start", { ascending: true })
         .limit(1)
         .maybeSingle();
@@ -172,12 +175,15 @@ async function findExistingByNikDate(pairs: NikDatePair[]): Promise<ExistingReco
   });
 }
 
-async function getImportHistory(): Promise<ImportHistoryEntry[]> {
+async function getImportHistory(filters: ImportHistoryFilter = {}): Promise<ImportHistoryEntry[]> {
   return supabaseGuarded(async () => {
     // PostgREST tidak punya GROUP BY di query builder -- ambil kolom yang
     // relevan saja lalu group di sisi aplikasi, sama seperti workaround
     // NOT EXISTS di runCrosscheck().
-    const { data, error } = await getSupabaseClient().from("raw_attendance").select("source_filename, imported_at, imported_by");
+    let query = getSupabaseClient().from("raw_attendance").select("source_filename, imported_at, imported_by");
+    if (filters.dateFrom) query = query.gte("imported_at", `${filters.dateFrom}T00:00:00.000Z`);
+    if (filters.dateTo) query = query.lte("imported_at", `${filters.dateTo}T23:59:59.999Z`);
+    const { data, error } = await query;
     if (error) throw error;
     const grouped = new Map<string, ImportHistoryEntry>();
     for (const row of data as SqlRow[]) {
@@ -187,6 +193,21 @@ async function getImportHistory(): Promise<ImportHistoryEntry[]> {
       else grouped.set(key, { sourceFilename: toStr(row.source_filename), importedAt: toStr(row.imported_at), importedBy: toStr(row.imported_by), rowCount: 1 });
     }
     return Array.from(grouped.values()).sort((a, b) => (a.importedAt < b.importedAt ? 1 : -1));
+  });
+}
+
+async function deleteImport(sourceFilename: string, importedAt: string): Promise<void> {
+  return supabaseGuarded(async () => {
+    const client = getSupabaseClient();
+    const { data, error } = await client.from("raw_attendance").select("id").eq("source_filename", sourceFilename).eq("imported_at", importedAt);
+    if (error) throw error;
+    const ids = (data as SqlRow[]).map((row) => toNum(row.id));
+    if (ids.length) {
+      const calc = await client.from("calculated_attendance").delete().in("raw_id", ids);
+      if (calc.error) throw calc.error;
+      const raw = await client.from("raw_attendance").delete().in("id", ids);
+      if (raw.error) throw raw.error;
+    }
   });
 }
 
@@ -200,6 +221,14 @@ async function getRawAttendance(filters: RawAttendanceFilter): Promise<RawAttend
     const { data, error } = await query.order("tanggal", { ascending: true }).order("nik", { ascending: true });
     if (error) throw error;
     return (data as SqlRow[]).map(rowToRawAttendance);
+  });
+}
+
+async function updateRawAttendanceTimes(rawId: number, it1: string | null, ot1: string | null): Promise<void> {
+  return supabaseGuarded(async () => {
+    const { data, error } = await getSupabaseClient().from("raw_attendance").update({ it1, ot1 }).eq("id", rawId).select("id");
+    if (error) throw error;
+    if (!data || data.length === 0) throw new AttendanceValidationError(`raw_attendance id ${rawId} tidak ditemukan.`);
   });
 }
 
@@ -347,14 +376,19 @@ async function getCalculatedAttendance(filters: CalculatedAttendanceFilter): Pro
     // PostgREST embed: calculated_attendance.raw_id -> raw_attendance(*), butuh FK yang sudah ada di schema.
     let query = getSupabaseClient()
       .from("calculated_attendance")
-      .select("*, raw_attendance!inner(nik, nama, department, tanggal)");
+      .select("*, raw_attendance!inner(nik, nama, department, tanggal, intime, outtime, it1, ot1, whour, kategori)");
     if (filters.status) query = query.eq("status", filters.status);
     if (filters.dateFrom) query = query.gte("raw_attendance.tanggal", filters.dateFrom);
     if (filters.dateTo) query = query.lte("raw_attendance.tanggal", filters.dateTo);
     if (filters.department) query = query.eq("raw_attendance.department", filters.department);
     const { data, error } = await query;
     if (error) throw error;
-    return (data as SqlRow[]).map((row) => {
+    const search = filters.search?.toLowerCase();
+    return (data as SqlRow[]).filter((row) => {
+      if (!search) return true;
+      const ra = row.raw_attendance as SqlRow;
+      return `${toStr(ra?.nik)} ${toStr(ra?.nama)}`.toLowerCase().includes(search);
+    }).map((row) => {
       const ra = row.raw_attendance as SqlRow;
       return {
         id: toNum(row.id),
@@ -372,6 +406,8 @@ async function getCalculatedAttendance(filters: CalculatedAttendanceFilter): Pro
         nama: toStr(ra?.nama),
         department: toStr(ra?.department),
         tanggal: toStr(ra?.tanggal),
+        intime: toStrOrNull(ra?.intime), outtime: toStrOrNull(ra?.outtime), it1: toStrOrNull(ra?.it1), ot1: toStrOrNull(ra?.ot1),
+        whour: toNumOrNull(ra?.whour), kategori: toStr(ra?.kategori),
       };
     });
   });
@@ -400,7 +436,9 @@ export function getPostgresAttendanceAdapter(): AttendanceDatabaseAdapter {
       importRawAttendance,
       findExistingByNikDate,
       getRawAttendance,
+      updateRawAttendanceTimes,
       getImportHistory,
+      deleteImport,
       getBracketMaster,
       updateBracketMaster,
       getBracketMasterHistory,

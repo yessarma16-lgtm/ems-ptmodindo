@@ -15,6 +15,7 @@ import type {
   RawAttendanceInput,
   RawAttendanceRecord,
   RawAttendanceFilter,
+  ImportHistoryFilter,
   ExistingRecord,
   ImportSummary,
   ImportHistoryEntry,
@@ -113,6 +114,8 @@ function rowToCalculated(row: SqlRow): CalculatedAttendanceRecord {
     nama: toStrOrNull(row.nama) ?? "",
     department: toStrOrNull(row.department) ?? "",
     tanggal: toStrOrNull(row.tanggal) ?? "",
+    intime: toStrOrNull(row.intime), outtime: toStrOrNull(row.outtime), it1: toStrOrNull(row.it1), ot1: toStrOrNull(row.ot1),
+    whour: toNumOrNull(row.whour), kategori: toStr(row.kategori),
   };
 }
 
@@ -129,11 +132,18 @@ function hasCompleteTimeFields(raw: RawAttendanceRecord): boolean {
 export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatabaseAdapter {
   function makeBracketLookup(): BracketLookupFn {
     return (selisihHours, dayType) => {
-      const row = db
-        .prepare(
-          "SELECT ot_hours FROM bracket_master WHERE day_type = ? AND durasi_start <= ? AND durasi_end >= ? ORDER BY durasi_start LIMIT 1",
-        )
-        .get(dayType, selisihHours, selisihHours) as SqlRow | undefined;
+      // Jam dari Excel menghasilkan pecahan floating-point (mis. 1.3 bisa
+      // menjadi 1.3000000000000007). Normalisasi ke menit dan gunakan
+      // toleransi supaya batas bracket tidak gagal dicocokkan.
+      const normalized = Math.round(selisihHours * 60) / 60;
+      const rows = db
+        .prepare("SELECT ot_hours, durasi_start, durasi_end FROM bracket_master WHERE day_type = ? ORDER BY durasi_start")
+        .all(dayType) as SqlRow[];
+      const row = rows.find((candidate) => {
+        const start = Number(candidate.durasi_start);
+        const end = Number(candidate.durasi_end);
+        return start - 1e-6 <= normalized && end + 1e-6 >= normalized;
+      });
       return row ? toNum(row.ot_hours) : null;
     };
   }
@@ -212,21 +222,36 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     return findExistingByNikDateSync(pairs);
   }
 
-  async function getImportHistory(): Promise<ImportHistoryEntry[]> {
+  async function getImportHistory(filters: ImportHistoryFilter = {}): Promise<ImportHistoryEntry[]> {
+    const conditions: string[] = [];
+    const params: string[] = [];
+    if (filters.dateFrom) { conditions.push("imported_at >= ?"); params.push(`${filters.dateFrom}T00:00:00.000Z`); }
+    if (filters.dateTo) { conditions.push("imported_at < ?"); params.push(`${filters.dateTo}T23:59:59.999Z`); }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const rows = db
       .prepare(
         `SELECT source_filename, imported_at, imported_by, COUNT(*) as row_count
-         FROM raw_attendance
+         FROM raw_attendance ${where}
          GROUP BY source_filename, imported_at, imported_by
          ORDER BY imported_at DESC`,
-      )
-      .all() as SqlRow[];
+      ).all(...params) as SqlRow[];
     return rows.map((row) => ({
       sourceFilename: toStr(row.source_filename),
       importedAt: toStr(row.imported_at),
       importedBy: toStr(row.imported_by),
       rowCount: toNum(row.row_count),
     }));
+  }
+
+  async function deleteImport(sourceFilename: string, importedAt: string): Promise<void> {
+    db.exec("BEGIN");
+    try {
+      const rows = db.prepare("SELECT id FROM raw_attendance WHERE source_filename = ? AND imported_at = ?").all(sourceFilename, importedAt) as SqlRow[];
+      const deleteCalculated = db.prepare("DELETE FROM calculated_attendance WHERE raw_id = ?");
+      const deleteRaw = db.prepare("DELETE FROM raw_attendance WHERE id = ?");
+      for (const row of rows) { deleteCalculated.run(toNum(row.id)); deleteRaw.run(toNum(row.id)); }
+      db.exec("COMMIT");
+    } catch (err) { db.exec("ROLLBACK"); throw err; }
   }
 
   async function getRawAttendance(filters: RawAttendanceFilter): Promise<RawAttendanceRecord[]> {
@@ -239,6 +264,11 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const rows = db.prepare(`SELECT * FROM raw_attendance ${where} ORDER BY tanggal, nik`).all(...params) as SqlRow[];
     return rows.map(rowToRawAttendance);
+  }
+
+  async function updateRawAttendanceTimes(rawId: number, it1: string | null, ot1: string | null): Promise<void> {
+    const result = db.prepare("UPDATE raw_attendance SET it1=?, ot1=? WHERE id=?").run(it1, ot1, rawId);
+    if (Number(result.changes) === 0) throw new AttendanceValidationError(`raw_attendance id ${rawId} tidak ditemukan.`);
   }
 
   async function getBracketMaster(dayType?: DayType): Promise<BracketMasterRow[]> {
@@ -410,11 +440,13 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     if (filters.dateFrom) { conditions.push("ra.tanggal >= ?"); params.push(filters.dateFrom); }
     if (filters.dateTo) { conditions.push("ra.tanggal <= ?"); params.push(filters.dateTo); }
     if (filters.department) { conditions.push("ra.department = ?"); params.push(filters.department); }
+    if (filters.search) { conditions.push("(ra.nik LIKE ? OR ra.nama LIKE ?)"); params.push(`%${filters.search}%`, `%${filters.search}%`); }
     if (filters.status) { conditions.push("ca.status = ?"); params.push(filters.status); }
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const rows = db
       .prepare(
-        `SELECT ca.*, ra.nik as nik, ra.nama as nama, ra.department as department, ra.tanggal as tanggal
+         `SELECT ca.*, ra.nik as nik, ra.nama as nama, ra.department as department, ra.tanggal as tanggal,
+                 ra.intime as intime, ra.outtime as outtime, ra.it1 as it1, ra.ot1 as ot1, ra.whour as whour, ra.kategori as kategori
          FROM calculated_attendance ca JOIN raw_attendance ra ON ra.id = ca.raw_id
          ${where} ORDER BY ra.tanggal, ra.nik`,
       )
@@ -438,7 +470,9 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     importRawAttendance,
     findExistingByNikDate,
     getRawAttendance,
+    updateRawAttendanceTimes,
     getImportHistory,
+    deleteImport,
     getBracketMaster,
     updateBracketMaster,
     getBracketMasterHistory,

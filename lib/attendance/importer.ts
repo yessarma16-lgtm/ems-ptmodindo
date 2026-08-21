@@ -1,5 +1,7 @@
 import ExcelJS from "exceljs";
 
+import { normalizeExcelBuffer } from "@/lib/excel-import";
+
 /**
  * Parsing & validasi murni file Excel absensi menjadi baris `raw_attendance`
  * — TIDAK menyentuh database (bulk-insert + resolusi konflik (nik, tanggal)
@@ -180,9 +182,9 @@ function cellToString(value: unknown): string {
 export async function parseAttendanceImportWorkbook(buffer: Buffer): Promise<ParsedAttendanceImport> {
   const workbook = new ExcelJS.Workbook();
   try {
-    await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+    await workbook.xlsx.load(normalizeExcelBuffer(buffer) as unknown as Parameters<typeof workbook.xlsx.load>[0]);
   } catch {
-    throw new ImportParseError("This doesn't look like a valid .xlsx file.");
+    throw new ImportParseError("This doesn't look like a valid .xls or .xlsx file.");
   }
 
   const sheet = workbook.getWorksheet("Data Cross Check NK") ?? workbook.worksheets[0];

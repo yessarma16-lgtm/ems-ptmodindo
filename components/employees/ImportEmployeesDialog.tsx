@@ -61,7 +61,7 @@ export function ImportEmployeesDialog() {
   function pickFile(f: File | undefined | null) {
     if (!f) return;
     if (!/\.xlsx?$/i.test(f.name)) {
-      toast.error("Please choose an .xlsx file.");
+      toast.error("Please choose an .xls or .xlsx file.");
       return;
     }
     setFile(f);
@@ -155,7 +155,7 @@ export function ImportEmployeesDialog() {
           <DialogHeader>
             <DialogTitle>Import Employees</DialogTitle>
             <DialogDescription>
-              Upload an .xlsx file to add multiple employees at once. Column headers must match the sample
+              Upload an .xls or .xlsx file to add multiple employees at once. Column headers must match the sample
               template.
             </DialogDescription>
           </DialogHeader>
@@ -200,7 +200,7 @@ export function ImportEmployeesDialog() {
             ) : (
               <>
                 <Upload className="size-8 text-muted-foreground" />
-                <p className="text-sm font-medium">Drag & drop your .xlsx file here</p>
+                <p className="text-sm font-medium">Drag & drop your .xls or .xlsx file here</p>
                 <p className="text-xs text-muted-foreground">or click to browse</p>
               </>
             )}

@@ -56,7 +56,7 @@ export function AttendanceImportPanel() {
   async function pickFile(f: File | undefined | null) {
     if (!f) return;
     if (!/\.xlsx?$/i.test(f.name)) {
-      toast.error("Pilih file .xlsx.");
+      toast.error("Please select an .xls or .xlsx file.");
       return;
     }
     setFile(f);
@@ -69,7 +69,7 @@ export function AttendanceImportPanel() {
       const res = await fetch("/api/attendance/import/preview", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Gagal membaca file.");
+        toast.error(data.error ?? "Failed to read the file.");
         return;
       }
       const p: ImportPreview = data.preview;
@@ -79,7 +79,7 @@ export function AttendanceImportPanel() {
       for (const c of p.conflicts) initialDecisions[c.key] = "skip";
       setDecisions(initialDecisions);
     } catch {
-      toast.error("Tidak bisa terhubung ke server.");
+      toast.error("Unable to connect to the server.");
     } finally {
       setParsing(false);
     }
@@ -113,7 +113,7 @@ export function AttendanceImportPanel() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? "Gagal menyimpan data import.");
+        toast.error(data.error ?? "Failed to save imported data.");
         return;
       }
       const overwrittenCount = preview.conflicts.filter((c) => decisions[c.key] === "overwrite").length;
@@ -124,12 +124,12 @@ export function AttendanceImportPanel() {
         skippedCount,
         rejected: preview.rejected,
       });
-      toast.success("Import selesai.");
+      toast.success("Import completed.");
       setHistoryRefreshKey((k) => k + 1);
       setFile(null);
       setPreview(null);
     } catch {
-      toast.error("Tidak bisa terhubung ke server.");
+      toast.error("Unable to connect to the server.");
     } finally {
       setCommitting(false);
     }
@@ -145,7 +145,7 @@ export function AttendanceImportPanel() {
         onDrop={parsing ? undefined : handleDrop}
         onClick={() => !parsing && inputRef.current?.click()}
         className={cn(
-          "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 text-center transition-colors",
+          "flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-4 text-center transition-colors",
           parsing ? "cursor-not-allowed opacity-60" : "cursor-pointer",
           dragOver ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
         )}
@@ -160,20 +160,20 @@ export function AttendanceImportPanel() {
         />
         {parsing ? (
           <>
-            <Loader2 className="size-8 animate-spin text-primary" />
-            <p className="text-sm font-medium">Membaca file...</p>
+            <Loader2 className="size-6 animate-spin text-primary" />
+            <p className="text-sm font-medium">Reading file...</p>
           </>
         ) : file ? (
           <>
-            <FileSpreadsheet className="size-8 text-primary" />
+            <FileSpreadsheet className="size-6 text-primary" />
             <p className="text-sm font-medium">{file.name}</p>
-            <p className="text-xs text-muted-foreground">Klik atau drop untuk ganti file</p>
+            <p className="text-xs text-muted-foreground">Click or drop to replace the file</p>
           </>
         ) : (
           <>
-            <Upload className="size-8 text-muted-foreground" />
-            <p className="text-sm font-medium">Drag & drop file .xlsx absensi di sini</p>
-            <p className="text-xs text-muted-foreground">atau klik untuk memilih file</p>
+            <Upload className="size-6 text-muted-foreground" />
+            <p className="text-sm font-medium">Drag & drop an attendance .xls or .xlsx file here</p>
+            <p className="text-xs text-muted-foreground">or click to choose a file</p>
           </>
         )}
       </div>
@@ -181,20 +181,20 @@ export function AttendanceImportPanel() {
       {preview && (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-3 text-sm">
-            <Badge variant="success">{preview.validRows.length} baris valid</Badge>
-            {preview.conflicts.length > 0 && <Badge variant="warning">{preview.conflicts.length} baris konflik</Badge>}
-            {preview.rejected.length > 0 && <Badge variant="destructive">{preview.rejected.length} baris ditolak</Badge>}
+            <Badge variant="success">{preview.validRows.length} valid rows</Badge>
+            {preview.conflicts.length > 0 && <Badge variant="warning">{preview.conflicts.length} conflicts</Badge>}
+            {preview.rejected.length > 0 && <Badge variant="destructive">{preview.rejected.length} rejected</Badge>}
           </div>
 
           {preview.rejected.length > 0 && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
               <div className="mb-1 flex items-center gap-2 text-sm font-medium text-destructive">
                 <XCircle className="size-4" />
-                Baris ditolak
+                Rejected rows
               </div>
               <ul className="ml-6 list-disc space-y-0.5 text-xs text-muted-foreground">
                 {preview.rejected.map((r, idx) => (
-                  <li key={idx}>Baris {r.rowNumber}: {r.reason}</li>
+                  <li key={idx}>Row {r.rowNumber}: {r.reason}</li>
                 ))}
               </ul>
             </div>
@@ -205,22 +205,22 @@ export function AttendanceImportPanel() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm font-medium text-warning">
                   <AlertTriangle className="size-4" />
-                  {preview.conflicts.length} baris (NIK + tanggal) sudah ada di database
+                  {preview.conflicts.length} rows (NIK + date) already exist in the database
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setAllDecisions("overwrite")}>Timpa Semua</Button>
-                  <Button size="sm" variant="outline" onClick={() => setAllDecisions("skip")}>Lewati Semua</Button>
+                  <Button size="sm" variant="outline" onClick={() => setAllDecisions("overwrite")}>Overwrite All</Button>
+                  <Button size="sm" variant="outline" onClick={() => setAllDecisions("skip")}>Skip All</Button>
                 </div>
               </div>
               <div className="max-h-80 overflow-y-auto rounded-lg border border-border">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Nama</TableHead>
-                      <TableHead>Tanggal</TableHead>
-                      <TableHead>Nilai Lama</TableHead>
-                      <TableHead>Nilai Baru</TableHead>
-                      <TableHead className="text-right">Keputusan</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Previous Value</TableHead>
+                      <TableHead>New Value</TableHead>
+                      <TableHead className="text-right">Decision</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -241,14 +241,14 @@ export function AttendanceImportPanel() {
                               variant={decisions[c.key] === "overwrite" ? "default" : "outline"}
                               onClick={() => setDecision(c.key, "overwrite")}
                             >
-                              Timpa
+                              Overwrite
                             </Button>
                             <Button
                               size="sm"
                               variant={decisions[c.key] === "skip" ? "default" : "outline"}
                               onClick={() => setDecision(c.key, "skip")}
                             >
-                              Lewati
+                              Skip
                             </Button>
                           </div>
                         </TableCell>
@@ -261,10 +261,10 @@ export function AttendanceImportPanel() {
           )}
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={reset} disabled={committing}>Batal</Button>
+            <Button variant="outline" onClick={reset} disabled={committing}>Cancel</Button>
             <Button onClick={handleCommit} disabled={committing || hasUnresolvedConflict}>
               {committing ? <Loader2 className="animate-spin" /> : <Upload />}
-              Konfirmasi Import
+              Confirm Import
             </Button>
           </div>
         </div>
@@ -274,20 +274,20 @@ export function AttendanceImportPanel() {
         <div className="rounded-lg border border-border p-4 text-sm">
           <div className="mb-2 flex items-center gap-2 font-medium text-success">
             <CheckCircle2 className="size-4" />
-            Import selesai
+            Import completed
           </div>
           <ul className="space-y-1 text-muted-foreground">
-            <li>{summary.newCount} baris masuk (baru)</li>
-            <li>{summary.overwrittenCount} baris ditimpa</li>
-            <li>{summary.skippedCount} baris dilewati</li>
-            <li>{summary.rejected.length} baris ditolak</li>
+            <li>{summary.newCount} new rows imported</li>
+            <li>{summary.overwrittenCount} rows overwritten</li>
+            <li>{summary.skippedCount} rows skipped</li>
+            <li>{summary.rejected.length} rows rejected</li>
           </ul>
           {summary.rejected.length > 0 && (
             <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
-              <div className="mb-1 text-xs font-medium text-destructive">Alasan penolakan</div>
+              <div className="mb-1 text-xs font-medium text-destructive">Rejection reasons</div>
               <ul className="ml-5 list-disc space-y-0.5 text-xs text-muted-foreground">
                 {summary.rejected.map((r, idx) => (
-                  <li key={`${r.rowNumber}-${idx}`}>Baris {r.rowNumber}: {r.reason}</li>
+                  <li key={`${r.rowNumber}-${idx}`}>Row {r.rowNumber}: {r.reason}</li>
                 ))}
               </ul>
             </div>
@@ -296,7 +296,7 @@ export function AttendanceImportPanel() {
       )}
 
       <div>
-        <h3 className="mb-2 text-sm font-medium">Riwayat Import</h3>
+        <h3 className="mb-2 text-sm font-medium">Import History</h3>
         <AttendanceImportHistory refreshKey={historyRefreshKey} />
       </div>
     </div>

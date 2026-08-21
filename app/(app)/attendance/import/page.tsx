@@ -11,7 +11,7 @@ export default function AttendanceImportPage() {
     <div>
       <PageHeader
         title="NK Attendance Data"
-        description="Import data absensi mentah dan kelola tabel Durasi Jam antara yang dipakai rule engine overtime."
+        description="Import raw attendance data and manage the interval duration table used by the overtime rule engine."
         breadcrumb={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Attendance" },
@@ -23,8 +23,8 @@ export default function AttendanceImportPage() {
         <CardContent className="pt-6">
           <Tabs defaultValue="import">
             <TabsList>
-              <TabsTrigger value="import">Import Data Absensi</TabsTrigger>
-              <TabsTrigger value="bracket">Master Durasi Jam antara</TabsTrigger>
+              <TabsTrigger value="import">Attendance Data Import</TabsTrigger>
+              <TabsTrigger value="bracket">Interval Duration Master</TabsTrigger>
             </TabsList>
             <TabsContent value="import">
               <AttendanceImportPanel />

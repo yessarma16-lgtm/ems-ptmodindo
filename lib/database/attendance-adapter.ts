@@ -15,6 +15,7 @@ import type {
   RawAttendanceInput,
   RawAttendanceRecord,
   RawAttendanceFilter,
+  ImportHistoryFilter,
   ExistingRecord,
   ImportSummary,
   ImportHistoryEntry,
@@ -49,8 +50,10 @@ export interface AttendanceDatabaseAdapter {
   importRawAttendance(rows: RawAttendanceInput[], onConflict?: "ask" | "skip" | "overwrite"): Promise<ImportSummary>;
   findExistingByNikDate(pairs: NikDatePair[]): Promise<ExistingRecord[]>;
   getRawAttendance(filters: RawAttendanceFilter): Promise<RawAttendanceRecord[]>;
+  updateRawAttendanceTimes(rawId: number, it1: string | null, ot1: string | null): Promise<void>;
   /** Diturunkan dari raw_attendance (GROUP BY), bukan tabel terpisah — lihat ImportHistoryEntry. */
-  getImportHistory(): Promise<ImportHistoryEntry[]>;
+  getImportHistory(filters?: ImportHistoryFilter): Promise<ImportHistoryEntry[]>;
+  deleteImport(sourceFilename: string, importedAt: string): Promise<void>;
 
   // bracket_master
   getBracketMaster(dayType?: DayType): Promise<BracketMasterRow[]>;

@@ -100,6 +100,11 @@ export interface ImportHistoryEntry {
   rowCount: number;
 }
 
+export interface ImportHistoryFilter {
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 export interface RawAttendanceFilter {
   dateFrom?: string;
   dateTo?: string;
@@ -126,12 +131,19 @@ export interface CalculatedAttendanceRecord {
   nama: string;
   department: string;
   tanggal: string;
+  intime?: string | null;
+  outtime?: string | null;
+  it1?: string | null;
+  ot1?: string | null;
+  whour?: number | null;
+  kategori?: string;
 }
 
 export interface CalculatedAttendanceFilter {
   dateFrom?: string;
   dateTo?: string;
   department?: string;
+  search?: string;
   status?: CalculatedStatus;
 }
 
