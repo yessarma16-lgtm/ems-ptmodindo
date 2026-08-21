@@ -1,0 +1,133 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.75rem;
+
+  --background: #f5f6fa;
+  --foreground: #1d1b2e;
+
+  --card: #ffffff;
+  --card-foreground: #1d1b2e;
+
+  --popover: #ffffff;
+  --popover-foreground: #1d1b2e;
+
+  --primary: #6d5dfb;
+  --primary-foreground: #ffffff;
+
+  --secondary: #f0f0fa;
+  --secondary-foreground: #1d1b2e;
+
+  --muted: #f1f2f6;
+  --muted-foreground: #6b7280;
+
+  --accent: #edeafe;
+  --accent-foreground: #4c3fd6;
+
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+
+  --success: #17a34a;
+  --success-foreground: #ffffff;
+
+  --warning: #f5a524;
+  --warning-foreground: #1d1b2e;
+
+  --border: #e6e7ee;
+  --input: #e2e3ec;
+  --ring: #6d5dfb;
+
+  --sidebar: #16132a;
+  --sidebar-foreground: #cbd0e6;
+  --sidebar-muted-foreground: #8985a8;
+  --sidebar-primary: #6d5dfb;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #221d3d;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #29234a;
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /*
+   * Text scale shifted down ~2px at every step (site-wide font-size
+   * reduction). Only overrides the `text-*` scale, not `--spacing-*`, so
+   * padding/gaps/icon sizes are untouched — just the type looks smaller.
+   * The "PT MOD INDO" sidebar wordmark is deliberately excluded (bumped to
+   * text-lg in Sidebar.tsx, which lands back on the old text-base size).
+   */
+  --text-xs: 0.625rem;
+  --text-xs--line-height: 0.875rem;
+  --text-sm: 0.75rem;
+  --text-sm--line-height: 1.125rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.5rem;
+  --text-xl: 1.125rem;
+  --text-xl--line-height: 1.625rem;
+  --text-2xl: 1.375rem;
+  --text-2xl--line-height: 1.75rem;
+  --text-3xl: 1.75rem;
+  --text-3xl--line-height: 2rem;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+/* Buttons render with the browser's default arrow cursor unless told
+   otherwise — restore the hand/pointer cursor on every clickable control. */
+button:not(:disabled),
+[role="button"],
+summary {
+  cursor: pointer;
+}

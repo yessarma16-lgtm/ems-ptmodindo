@@ -1,0 +1,529 @@
+import type { Client } from "pg";
+
+import { SIMPLE_MASTER_SHEETS, LOOKUP_TYPES } from "@/config/master-data-sheets";
+import { SIMPLE_MASTER_SEED, LOOKUP_SEED } from "@/config/master-data-seed";
+import { EMPLOYEE_COLUMNS, WRITABLE_EMPLOYEE_COLUMNS } from "@/lib/database/sqlite-columns";
+import { defaultModulePermissions } from "@/config/module-permissions";
+import { hashPassword, DEFAULT_PASSWORD } from "@/lib/auth/password";
+
+/**
+ * Postgres (Supabase) schema + seed — mirrors `lib/database/sqlite-init.ts`
+ * table-for-table, translated to Postgres syntax (SERIAL/BIGSERIAL, UUID,
+ * TIMESTAMPTZ, `ADD COLUMN IF NOT EXISTS`). Column lists for `employees` and
+ * `online_registrations` are derived from the same `EMPLOYEE_COLUMNS` single
+ * source of truth SQLite uses, so both providers' schemas stay in sync
+ * automatically as `config/employee-fields.ts` changes.
+ *
+ * Every statement is `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT
+ * EXISTS` / a guarded INSERT — safe to run repeatedly from
+ * `npm run db:init:postgres`. Never drops or clears a table.
+ *
+ * Runs over a raw `pg` connection (the Postgres wire protocol, using the
+ * direct/session connection string) because Supabase's PostgREST HTTP API
+ * (used everywhere else — see lib/supabase.ts) cannot execute DDL. This is
+ * the ONLY place in the codebase that uses a raw Postgres connection, and
+ * it's a one-time local/CI script, never part of a serverless request path.
+ */
+
+const SIMPLE_MASTER_TABLE_DDL = `
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Active',
+  sort_order INTEGER NOT NULL DEFAULT 0
+`;
+
+function buildEmployeesTableSql(): string {
+  const fieldColumns = EMPLOYEE_COLUMNS.map((c) => `  ${c.column} TEXT NOT NULL DEFAULT ''`).join(",\n");
+  return `
+    CREATE TABLE IF NOT EXISTS employees (
+      id BIGSERIAL PRIMARY KEY,
+      record_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+${fieldColumns},
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `;
+}
+
+async function ensureEmployeeColumnsExist(client: Client): Promise<void> {
+  for (const c of EMPLOYEE_COLUMNS) {
+    await client.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS ${c.column} TEXT NOT NULL DEFAULT ''`);
+  }
+}
+
+async function ensureLookupSeedsExist(client: Client): Promise<void> {
+  const { rows: existingRows } = await client.query<{ type: string; code: string }>("SELECT type, code FROM lookup");
+  const existing = new Set(existingRows.map((r) => `${r.type}::${r.code}`));
+  const maxSortOrderByType = new Map<string, number>();
+
+  for (const { type } of LOOKUP_TYPES) {
+    for (const row of LOOKUP_SEED[type]) {
+      if (existing.has(`${type}::${row.code}`)) continue;
+      if (!maxSortOrderByType.has(type)) {
+        const { rows } = await client.query<{ m: number }>(
+          "SELECT COALESCE(MAX(sort_order), 0) as m FROM lookup WHERE type = $1",
+          [type],
+        );
+        maxSortOrderByType.set(type, rows[0].m);
+      }
+      const nextSortOrder = (maxSortOrderByType.get(type) ?? 0) + 1;
+      maxSortOrderByType.set(type, nextSortOrder);
+      await client.query("INSERT INTO lookup (type, code, name, status, sort_order) VALUES ($1, $2, $3, 'Active', $4)", [
+        type,
+        row.code,
+        row.name,
+        nextSortOrder,
+      ]);
+    }
+  }
+}
+
+/** Adds every `employees` column to `online_registrations` too (employee-shaped drafts) — same pattern as sqlite-init.ts's ensureOnlineRegistrationsEmployeeShaped. */
+async function ensureOnlineRegistrationsEmployeeShaped(client: Client): Promise<void> {
+  for (const c of EMPLOYEE_COLUMNS) {
+    await client.query(
+      `ALTER TABLE online_registrations ADD COLUMN IF NOT EXISTS ${c.column} TEXT NOT NULL DEFAULT ''`,
+    );
+  }
+}
+
+/** Seeds one default admin account so login isn't empty on first use. Never runs if any user already exists. */
+async function seedDefaultUserIfEmpty(client: Client): Promise<void> {
+  const { rows } = await client.query<{ c: string }>("SELECT COUNT(*)::int as c FROM users");
+  if (Number(rows[0].c) > 0) return;
+  const { hash, salt } = hashPassword(DEFAULT_PASSWORD);
+  await client.query(
+    `INSERT INTO users (name, username, email, role, status, permissions, password_hash, password_salt)
+     VALUES ($1, $2, $3, $4, 'Active', $5, $6, $7)`,
+    ["Admin User", "admin", "admin@ptmodindo.com", "HR Administrator", JSON.stringify(defaultModulePermissions()), hash, salt],
+  );
+}
+
+export const PUBLIC_APPLY_TOKEN_KEY = "public_apply_token";
+
+/** Seeds the one fixed token used to build the walk-in application QR code. Never rotated automatically — only an explicit "Regenerate" action changes it. */
+async function ensurePublicApplyToken(client: Client): Promise<void> {
+  const { rows } = await client.query("SELECT value FROM settings WHERE key = $1", [PUBLIC_APPLY_TOKEN_KEY]);
+  if (rows.length > 0) return;
+  await client.query(
+    "INSERT INTO settings (key, value, description, updated_at) VALUES ($1, gen_random_uuid()::text, $2, now())",
+    [PUBLIC_APPLY_TOKEN_KEY, "Fixed token for the walk-in application QR code."],
+  );
+}
+
+/** Creates every table/index if missing. Idempotent — never drops or clears data. */
+export async function ensureSchema(client: Client): Promise<void> {
+  await client.query(buildEmployeesTableSql());
+  await ensureEmployeeColumnsExist(client);
+
+  for (const table of Object.values(SIMPLE_MASTER_SHEETS)) {
+    const tableName = table.toLowerCase();
+    await client.query(`CREATE TABLE IF NOT EXISTS ${tableName} (${SIMPLE_MASTER_TABLE_DDL});`);
+  }
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS lookup (
+      id SERIAL PRIMARY KEY,
+      type TEXT NOT NULL,
+      code TEXT NOT NULL,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Active',
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_lookup_type ON lookup(type);");
+  await ensureLookupSeedsExist(client);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS contract_history (
+      id BIGSERIAL PRIMARY KEY,
+      record_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+      employee_id TEXT NOT NULL,
+      contract_type TEXT NOT NULL DEFAULT '',
+      contract_start TEXT NOT NULL DEFAULT '',
+      contract_end TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_contract_history_employee ON contract_history(employee_id);");
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS family (
+      id BIGSERIAL PRIMARY KEY,
+      record_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+      employee_id TEXT NOT NULL,
+      relationship TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_family_employee ON family(employee_id);");
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS bpjs (
+      id BIGSERIAL PRIMARY KEY,
+      record_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+      employee_id TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT '',
+      number TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_bpjs_employee ON bpjs(employee_id);");
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await ensurePublicApplyToken(client);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id BIGSERIAL PRIMARY KEY,
+      record_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+      action TEXT NOT NULL,
+      entity TEXT NOT NULL,
+      entity_id TEXT NOT NULL DEFAULT '',
+      detail TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      "user" TEXT NOT NULL DEFAULT 'SYSTEM'
+    );
+  `);
+
+  // Online Register — candidate drafts, shaped like `employees` (see
+  // ensureOnlineRegistrationsEmployeeShaped) so the same EmployeeForm UI can
+  // edit a registration exactly like editing a real employee.
+  // `registration_status` (Pending/Approved/Rejected) is separate from the
+  // employee-shaped `status` column (Active/Inactive) to avoid colliding.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS online_registrations (
+      id BIGSERIAL PRIMARY KEY,
+      record_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
+      hp_number TEXT NOT NULL DEFAULT '',
+      applied_position TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT '',
+      registration_status TEXT NOT NULL DEFAULT 'Pending',
+      submitted_at TEXT NOT NULL DEFAULT '',
+      source_platform TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await ensureOnlineRegistrationsEmployeeShaped(client);
+
+  // User Management + login.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id BIGSERIAL PRIMARY KEY,
+      record_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
+      username TEXT NOT NULL DEFAULT '',
+      role TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'Active',
+      permissions TEXT NOT NULL DEFAULT '',
+      password_hash TEXT NOT NULL DEFAULT '',
+      password_salt TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await seedDefaultUserIfEmpty(client);
+
+  // Role Access — module permissions per ROLE (not per user). One row per
+  // role in config/user-roles.ts; self-heals via ensureRoleRows() in
+  // lib/database/postgres-role-access.ts if a role is missing a row.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS role_permissions (
+      role TEXT PRIMARY KEY,
+      permissions TEXT NOT NULL DEFAULT '',
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  // Export Template Builder — admin-defined export structures. Never stores
+  // employee data, only column/sheet configuration.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS export_templates (
+      id BIGSERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'Active',
+      key_field TEXT NOT NULL DEFAULT 'nik',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS export_template_sheets (
+      id BIGSERIAL PRIMARY KEY,
+      template_id BIGINT NOT NULL REFERENCES export_templates(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      sheet_order INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'Active',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_export_sheets_template ON export_template_sheets(template_id);");
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS export_template_columns (
+      id BIGSERIAL PRIMARY KEY,
+      sheet_id BIGINT NOT NULL REFERENCES export_template_sheets(id) ON DELETE CASCADE,
+      column_order INTEGER NOT NULL DEFAULT 0,
+      column_type TEXT NOT NULL DEFAULT 'FIELD',
+      source_field TEXT,
+      display_label TEXT NOT NULL DEFAULT '',
+      is_key BOOLEAN NOT NULL DEFAULT false,
+      blank_value TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_export_columns_sheet ON export_template_columns(sheet_id);");
+
+  // Attendance/Overtime module — mirror sqlite-init.ts table-for-table (see
+  // comments there for the FK RESTRICT / no-FK-on-history rationale).
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS bracket_master (
+      id SERIAL PRIMARY KEY,
+      day_type TEXT NOT NULL,
+      durasi_start REAL NOT NULL,
+      durasi_end REAL NOT NULL,
+      ot_hours REAL NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_by TEXT NOT NULL DEFAULT ''
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_bracket_master_day_type ON bracket_master(day_type);");
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS bracket_master_history (
+      id SERIAL PRIMARY KEY,
+      bracket_master_id INTEGER NOT NULL,
+      day_type TEXT NOT NULL,
+      durasi_start REAL,
+      durasi_end REAL,
+      ot_hours REAL,
+      changed_by TEXT NOT NULL DEFAULT '',
+      changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      change_type TEXT NOT NULL
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_bracket_master_history_bracket ON bracket_master_history(bracket_master_id);");
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS raw_attendance (
+      id BIGSERIAL PRIMARY KEY,
+      nik TEXT NOT NULL,
+      nama TEXT NOT NULL DEFAULT '',
+      department TEXT NOT NULL DEFAULT '',
+      tanggal TEXT NOT NULL,
+      intime TEXT,
+      outtime TEXT,
+      it1 TEXT,
+      ot1 TEXT,
+      whour REAL,
+      bhour REAL,
+      othour_recorded REAL,
+      kategori TEXT NOT NULL,
+      imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      imported_by TEXT NOT NULL DEFAULT '',
+      source_filename TEXT NOT NULL DEFAULT '',
+      UNIQUE (nik, tanggal)
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_raw_attendance_tanggal ON raw_attendance(tanggal);");
+  await client.query("CREATE INDEX IF NOT EXISTS idx_raw_attendance_nik ON raw_attendance(nik);");
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS calculated_attendance (
+      id BIGSERIAL PRIMARY KEY,
+      raw_id BIGINT NOT NULL REFERENCES raw_attendance(id) ON DELETE RESTRICT,
+      day_type TEXT NOT NULL,
+      bracket_used TEXT NOT NULL DEFAULT '',
+      system_calculated_oth REAL,
+      final_oth REAL,
+      status TEXT NOT NULL,
+      corrected_by TEXT,
+      corrected_at TIMESTAMPTZ,
+      correction_note TEXT,
+      calculated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_calculated_attendance_raw ON calculated_attendance(raw_id);");
+  await client.query("CREATE INDEX IF NOT EXISTS idx_calculated_attendance_status ON calculated_attendance(status);");
+
+  // update_bracket_master(rows, changed_by, day_types) — bulk create/update/delete satu
+  // day_type sekaligus + tulis bracket_master_history, atomik. Perlu fungsi
+  // Postgres (bukan beberapa panggilan Supabase client biasa) dengan alasan
+  // yang sama dengan approve_online_registration() di atas: request-time
+  // Postgres access di app ini lewat PostgREST (lib/supabase.ts), yang tidak
+  // punya BEGIN/COMMIT lintas-statement — SQLite dapat itu gratis lewat
+  // BEGIN/COMMIT/ROLLBACK (lihat sqlite-attendance.ts).
+  //
+  // p_rows: JSONB array of {id?, day_type, durasi_start, durasi_end, ot_hours}
+  // p_day_types: day_type yang disentuh caller, termasuk saat p_rows kosong.
+  // Baris existing di day_type yang sama tapi TIDAK ada di p_rows -> dihapus.
+  await client.query(`
+    DROP FUNCTION IF EXISTS update_bracket_master(JSONB, TEXT);
+    CREATE OR REPLACE FUNCTION update_bracket_master(p_rows JSONB, p_changed_by TEXT, p_day_types TEXT[] DEFAULT NULL)
+    RETURNS void AS $$
+    DECLARE
+      v_day_types TEXT[];
+      v_row RECORD;
+      v_incoming_ids INTEGER[];
+      v_existing RECORD;
+      v_new_id INTEGER;
+    BEGIN
+      SELECT array_agg(DISTINCT day_type) INTO v_day_types
+      FROM (
+        SELECT unnest(COALESCE(p_day_types, ARRAY[]::TEXT[])) AS day_type
+        UNION
+        SELECT x.day_type
+        FROM jsonb_to_recordset(p_rows) AS x(id INTEGER, day_type TEXT, durasi_start REAL, durasi_end REAL, ot_hours REAL)
+      ) touched
+      WHERE day_type IS NOT NULL;
+
+      IF v_day_types IS NULL THEN
+        RETURN; -- rows kosong -> no-op
+      END IF;
+
+      SELECT array_agg(x.id) INTO v_incoming_ids
+      FROM jsonb_to_recordset(p_rows) AS x(id INTEGER, day_type TEXT, durasi_start REAL, durasi_end REAL, ot_hours REAL)
+      WHERE x.id IS NOT NULL;
+
+      -- Hapus baris existing (di day_type yang disentuh p_rows) yang id-nya tidak lagi ada di p_rows.
+      FOR v_existing IN
+        SELECT * FROM bracket_master
+        WHERE day_type = ANY(v_day_types)
+          AND (v_incoming_ids IS NULL OR NOT (id = ANY(v_incoming_ids)))
+      LOOP
+        INSERT INTO bracket_master_history (bracket_master_id, day_type, durasi_start, durasi_end, ot_hours, changed_by, changed_at, change_type)
+        VALUES (v_existing.id, v_existing.day_type, v_existing.durasi_start, v_existing.durasi_end, v_existing.ot_hours, p_changed_by, now(), 'deleted');
+        DELETE FROM bracket_master WHERE id = v_existing.id;
+      END LOOP;
+
+      FOR v_row IN
+        SELECT * FROM jsonb_to_recordset(p_rows) AS x(id INTEGER, day_type TEXT, durasi_start REAL, durasi_end REAL, ot_hours REAL)
+      LOOP
+        IF v_row.id IS NULL THEN
+          INSERT INTO bracket_master (day_type, durasi_start, durasi_end, ot_hours, updated_at, updated_by)
+          VALUES (v_row.day_type, v_row.durasi_start, v_row.durasi_end, v_row.ot_hours, now(), p_changed_by)
+          RETURNING id INTO v_new_id;
+          INSERT INTO bracket_master_history (bracket_master_id, day_type, durasi_start, durasi_end, ot_hours, changed_by, changed_at, change_type)
+          VALUES (v_new_id, v_row.day_type, NULL, NULL, NULL, p_changed_by, now(), 'created');
+        ELSE
+          SELECT * INTO v_existing FROM bracket_master WHERE id = v_row.id;
+          IF v_existing.id IS NOT NULL AND (
+            v_existing.durasi_start IS DISTINCT FROM v_row.durasi_start OR
+            v_existing.durasi_end IS DISTINCT FROM v_row.durasi_end OR
+            v_existing.ot_hours IS DISTINCT FROM v_row.ot_hours
+          ) THEN
+            INSERT INTO bracket_master_history (bracket_master_id, day_type, durasi_start, durasi_end, ot_hours, changed_by, changed_at, change_type)
+            VALUES (v_existing.id, v_existing.day_type, v_existing.durasi_start, v_existing.durasi_end, v_existing.ot_hours, p_changed_by, now(), 'updated');
+            UPDATE bracket_master
+            SET durasi_start = v_row.durasi_start, durasi_end = v_row.durasi_end, ot_hours = v_row.ot_hours,
+                updated_at = now(), updated_by = p_changed_by
+            WHERE id = v_existing.id;
+          END IF;
+        END IF;
+      END LOOP;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+
+  // approve_online_registration(record_id, employee_fields) — atomically
+  // inserts an already-prepared employee row (built in JS by
+  // postgres-online-registrations.ts, finger code included — that
+  // generation logic stays in lib/database/finger-code.ts, not duplicated
+  // here) and marks the registration Approved, so a failure partway through
+  // can never leave a "ghost" employee with the registration still stuck on
+  // Pending (the risk the Sheets version explicitly could not avoid — see
+  // google-sheets-online-registrations.ts). Re-validates Pending status
+  // inside the transaction to close the race window the app-layer check
+  // alone can't close.
+  const writableColumnList = WRITABLE_EMPLOYEE_COLUMNS.map((c) => c.column).join(", ");
+  const writableColumnDefs = WRITABLE_EMPLOYEE_COLUMNS.map((c) => `${c.column} TEXT`).join(", ");
+  await client.query(`
+    CREATE OR REPLACE FUNCTION approve_online_registration(p_record_id UUID, p_employee_fields JSONB)
+    RETURNS UUID AS $$
+    DECLARE
+      v_employee_record_id UUID;
+      v_pending_count INT;
+    BEGIN
+      SELECT count(*) INTO v_pending_count FROM online_registrations
+        WHERE record_id = p_record_id AND lower(registration_status) = 'pending';
+      IF v_pending_count = 0 THEN
+        RAISE EXCEPTION 'Online registration % not found or not pending', p_record_id;
+      END IF;
+
+      INSERT INTO employees (${writableColumnList})
+      SELECT ${writableColumnList} FROM jsonb_to_record(p_employee_fields) AS x(${writableColumnDefs})
+      RETURNING record_id INTO v_employee_record_id;
+
+      UPDATE online_registrations
+      SET registration_status = 'Approved', updated_at = now()
+      WHERE record_id = p_record_id;
+
+      RETURN v_employee_record_id;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+}
+
+/** Seeds each master data table with a handful of sample rows — ONLY if the table is currently empty. Never touches a table that already has data. Returns which tables were seeded, for `npm run db:init:postgres` reporting. */
+export async function seedMasterDataIfEmpty(client: Client): Promise<Record<string, boolean>> {
+  const seeded: Record<string, boolean> = {};
+
+  for (const [category, table] of Object.entries(SIMPLE_MASTER_SHEETS)) {
+    const tableName = table.toLowerCase();
+    const { rows } = await client.query<{ c: string }>(`SELECT COUNT(*)::int as c FROM ${tableName}`);
+    if (Number(rows[0].c) > 0) {
+      seeded[table] = false;
+      continue;
+    }
+    const seedRows = SIMPLE_MASTER_SEED[category as keyof typeof SIMPLE_MASTER_SEED];
+    for (const [idx, row] of seedRows.entries()) {
+      await client.query("INSERT INTO " + tableName + " (code, name, status, sort_order) VALUES ($1, $2, 'Active', $3)", [
+        row.code,
+        row.name,
+        idx + 1,
+      ]);
+    }
+    seeded[table] = true;
+  }
+
+  const { rows: lookupCountRows } = await client.query<{ c: string }>("SELECT COUNT(*)::int as c FROM lookup");
+  if (Number(lookupCountRows[0].c) === 0) {
+    for (const { type } of LOOKUP_TYPES) {
+      const seedRows = LOOKUP_SEED[type];
+      for (const [idx, row] of seedRows.entries()) {
+        await client.query(
+          "INSERT INTO lookup (type, code, name, status, sort_order) VALUES ($1, $2, $3, 'Active', $4)",
+          [type, row.code, row.name, idx + 1],
+        );
+      }
+    }
+    seeded.Lookup = true;
+  } else {
+    seeded.Lookup = false;
+  }
+
+  return seeded;
+}
