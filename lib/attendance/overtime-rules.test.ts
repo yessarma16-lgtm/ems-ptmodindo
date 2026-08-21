@@ -74,4 +74,27 @@ describe("calculateOvertime", () => {
     );
     expect(hasil).toBe(0.0);
   });
+
+  it("Normal, Senin-Jumat, selisih 2:31 jam - memanggil lookupBracket dan mendapat 2.0", async () => {
+    let lookupCalled = false;
+    const lookupBracket: BracketLookupFn = (selisihHours, dayType) => {
+      lookupCalled = true;
+      expect(dayType).toBe("Senin-Jumat");
+      expect(selisihHours).toBeCloseTo(2 + 31 / 60, 8);
+      return 2.0;
+    };
+    const hasil = await calculateOvertime(
+      {
+        intime: "07:30",
+        it1: "07:30",
+        outtime: "15:30",
+        ot1: "18:01",
+        tanggal: "2026-08-06",
+        kategori: "Normal",
+      },
+      lookupBracket,
+    );
+    expect(lookupCalled).toBe(true);
+    expect(hasil).toBe(2.0);
+  });
 });

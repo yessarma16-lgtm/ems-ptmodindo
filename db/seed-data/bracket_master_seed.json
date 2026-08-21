@@ -1,0 +1,392 @@
+[
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "00:00",
+    "durasi_end": "00:30",
+    "ot_hours": 0.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "00:31",
+    "durasi_end": "00:45",
+    "ot_hours": 0.5
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "00:46",
+    "durasi_end": "01:00",
+    "ot_hours": 1.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "01:01",
+    "durasi_end": "01:30",
+    "ot_hours": 1.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "01:31",
+    "durasi_end": "02:00",
+    "ot_hours": 1.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "02:01",
+    "durasi_end": "02:15",
+    "ot_hours": 1.5
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "02:16",
+    "durasi_end": "02:30",
+    "ot_hours": 2.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "02:31",
+    "durasi_end": "03:00",
+    "ot_hours": 2.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "03:01",
+    "durasi_end": "03:15",
+    "ot_hours": 2.5
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "03:16",
+    "durasi_end": "03:30",
+    "ot_hours": 3.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "03:31",
+    "durasi_end": "04:00",
+    "ot_hours": 3.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "04:01",
+    "durasi_end": "04:15",
+    "ot_hours": 3.5
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "04:16",
+    "durasi_end": "04:30",
+    "ot_hours": 4.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "04:31",
+    "durasi_end": "05:00",
+    "ot_hours": 4.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "05:01",
+    "durasi_end": "05:15",
+    "ot_hours": 4.5
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "05:16",
+    "durasi_end": "05:30",
+    "ot_hours": 5.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "05:31",
+    "durasi_end": "06:00",
+    "ot_hours": 5.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "06:01",
+    "durasi_end": "06:30",
+    "ot_hours": 5.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "06:31",
+    "durasi_end": "06:45",
+    "ot_hours": 5.5
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "06:46",
+    "durasi_end": "07:00",
+    "ot_hours": 6.0
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "07:01",
+    "durasi_end": "07:45",
+    "ot_hours": 6.5
+  },
+  {
+    "day_type": "Senin-Jumat",
+    "durasi_start": "07:46",
+    "durasi_end": "08:00",
+    "ot_hours": 7.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "00:00",
+    "durasi_end": "00:30",
+    "ot_hours": 0.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "00:31",
+    "durasi_end": "00:45",
+    "ot_hours": 0.5
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "00:46",
+    "durasi_end": "01:00",
+    "ot_hours": 1.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "01:01",
+    "durasi_end": "01:30",
+    "ot_hours": 1.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "01:31",
+    "durasi_end": "01:45",
+    "ot_hours": 1.5
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "01:46",
+    "durasi_end": "02:00",
+    "ot_hours": 2.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "02:01",
+    "durasi_end": "02:30",
+    "ot_hours": 2.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "02:31",
+    "durasi_end": "02:45",
+    "ot_hours": 2.5
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "02:46",
+    "durasi_end": "03:00",
+    "ot_hours": 3.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "03:01",
+    "durasi_end": "03:30",
+    "ot_hours": 3.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "03:31",
+    "durasi_end": "04:00",
+    "ot_hours": 3.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "04:01",
+    "durasi_end": "04:15",
+    "ot_hours": 3.5
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "04:16",
+    "durasi_end": "04:30",
+    "ot_hours": 4.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "04:31",
+    "durasi_end": "05:00",
+    "ot_hours": 4.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "05:01",
+    "durasi_end": "05:15",
+    "ot_hours": 4.5
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "05:16",
+    "durasi_end": "05:30",
+    "ot_hours": 5.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "05:31",
+    "durasi_end": "06:00",
+    "ot_hours": 5.0
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "06:01",
+    "durasi_end": "06:15",
+    "ot_hours": 5.5
+  },
+  {
+    "day_type": "Sabtu",
+    "durasi_start": "06:16",
+    "durasi_end": "06:30",
+    "ot_hours": 6.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "00:00",
+    "durasi_end": "00:30",
+    "ot_hours": 0.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "00:31",
+    "durasi_end": "00:45",
+    "ot_hours": 0.5
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "00:46",
+    "durasi_end": "01:00",
+    "ot_hours": 1.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "01:01",
+    "durasi_end": "01:30",
+    "ot_hours": 1.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "01:31",
+    "durasi_end": "01:45",
+    "ot_hours": 1.5
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "01:46",
+    "durasi_end": "02:00",
+    "ot_hours": 2.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "02:01",
+    "durasi_end": "02:30",
+    "ot_hours": 2.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "02:31",
+    "durasi_end": "02:45",
+    "ot_hours": 2.5
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "02:46",
+    "durasi_end": "03:00",
+    "ot_hours": 3.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "03:01",
+    "durasi_end": "03:30",
+    "ot_hours": 3.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "03:31",
+    "durasi_end": "03:45",
+    "ot_hours": 3.5
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "03:46",
+    "durasi_end": "04:00",
+    "ot_hours": 4.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "04:01",
+    "durasi_end": "05:00",
+    "ot_hours": 4.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "05:01",
+    "durasi_end": "05:30",
+    "ot_hours": 4.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "05:31",
+    "durasi_end": "05:45",
+    "ot_hours": 4.5
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "05:46",
+    "durasi_end": "06:00",
+    "ot_hours": 5.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "06:01",
+    "durasi_end": "06:30",
+    "ot_hours": 5.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "06:31",
+    "durasi_end": "06:45",
+    "ot_hours": 5.5
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "06:46",
+    "durasi_end": "07:15",
+    "ot_hours": 6.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "07:16",
+    "durasi_end": "07:30",
+    "ot_hours": 6.5
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "07:31",
+    "durasi_end": "08:00",
+    "ot_hours": 7.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "08:01",
+    "durasi_end": "08:30",
+    "ot_hours": 7.0
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "08:31",
+    "durasi_end": "08:45",
+    "ot_hours": 7.5
+  },
+  {
+    "day_type": "Minggu",
+    "durasi_start": "08:46",
+    "durasi_end": "09:00",
+    "ot_hours": 8.0
+  }
+]
