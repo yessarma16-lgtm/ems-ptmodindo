@@ -1,6 +1,6 @@
 import "server-only";
 
-import XLSX from "xlsx";
+import * as XLSX from "xlsx";
 
 /** Converts legacy binary .xls workbooks to the .xlsx buffer expected by ExcelJS. */
 export function normalizeExcelBuffer(buffer: Buffer): Buffer {
