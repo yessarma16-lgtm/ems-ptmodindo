@@ -33,8 +33,24 @@ interface DraftRow {
   deleted: boolean;
 }
 
+function formatDuration(value: number): string {
+  const totalMinutes = Math.round(value * 60);
+  return `${Math.floor(totalMinutes / 60)}:${String(totalMinutes % 60).padStart(2, "0")}`;
+}
+
+function parseDuration(value: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) return Number.NaN;
+  const timeMatch = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  if (timeMatch) {
+    const minutes = Number(timeMatch[2]);
+    return minutes < 60 ? Number(timeMatch[1]) + minutes / 60 : Number.NaN;
+  }
+  return Number(trimmed);
+}
+
 function toDraft(row: ServerRow): DraftRow {
-  return { key: String(row.id), id: row.id, durasiStart: String(row.durasiStart), durasiEnd: String(row.durasiEnd), otHours: String(row.otHours), deleted: false };
+  return { key: String(row.id), id: row.id, durasiStart: formatDuration(row.durasiStart), durasiEnd: formatDuration(row.durasiEnd), otHours: String(row.otHours), deleted: false };
 }
 
 let newRowCounter = 0;
@@ -44,8 +60,8 @@ function rowStatus(draft: DraftRow, original: ServerRow | undefined): "new" | "d
   if (draft.deleted) return "deleted";
   if (!original) return "new";
   if (
-    Number(draft.durasiStart) !== original.durasiStart ||
-    Number(draft.durasiEnd) !== original.durasiEnd ||
+    parseDuration(draft.durasiStart) !== original.durasiStart ||
+    parseDuration(draft.durasiEnd) !== original.durasiEnd ||
     Number(draft.otHours) !== original.otHours
   ) {
     return "changed";
@@ -121,8 +137,8 @@ export function BracketMasterManager() {
   const errors = new Map<string, string>();
   for (const { draft, status } of rowsWithStatus) {
     if (status === "deleted") continue;
-    const start = Number(draft.durasiStart);
-    const end = Number(draft.durasiEnd);
+    const start = parseDuration(draft.durasiStart);
+    const end = parseDuration(draft.durasiEnd);
     if (draft.durasiStart === "" || draft.durasiEnd === "" || draft.otHours === "") {
       errors.set(draft.key, "Semua kolom wajib diisi.");
     } else if (Number.isNaN(start) || Number.isNaN(end) || Number.isNaN(Number(draft.otHours))) {
@@ -140,8 +156,8 @@ export function BracketMasterManager() {
       const a = activeRows[i].draft;
       const b = activeRows[j].draft;
       if (errors.has(a.key) || errors.has(b.key)) continue;
-      const aStart = Number(a.durasiStart), aEnd = Number(a.durasiEnd);
-      const bStart = Number(b.durasiStart), bEnd = Number(b.durasiEnd);
+      const aStart = parseDuration(a.durasiStart), aEnd = parseDuration(a.durasiEnd);
+      const bStart = parseDuration(b.durasiStart), bEnd = parseDuration(b.durasiEnd);
       if (aStart < bEnd && bStart < aEnd) {
         overlapWarnings.push(`Baris "${a.durasiStart}–${a.durasiEnd}" tumpang tindih dengan "${b.durasiStart}–${b.durasiEnd}".`);
       }
@@ -158,8 +174,8 @@ export function BracketMasterManager() {
       .map((r) => ({
         id: r.draft.id,
         dayType,
-        durasiStart: Number(r.draft.durasiStart),
-        durasiEnd: Number(r.draft.durasiEnd),
+        durasiStart: parseDuration(r.draft.durasiStart),
+        durasiEnd: parseDuration(r.draft.durasiEnd),
         otHours: Number(r.draft.otHours),
       }));
     // Baris yang tadinya ada di server tapi sekarang ditandai deleted TIDAK ikut dikirim --
@@ -271,8 +287,9 @@ export function BracketMasterManager() {
                   >
                     <TableCell>
                       <Input
-                        type="number"
-                        step="0.1"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="H:MM"
                         value={draft.durasiStart}
                         disabled={draft.deleted}
                         onChange={(e) => updateField(draft.key, "durasiStart", e.target.value)}
@@ -281,8 +298,9 @@ export function BracketMasterManager() {
                     </TableCell>
                     <TableCell>
                       <Input
-                        type="number"
-                        step="0.1"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="H:MM"
                         value={draft.durasiEnd}
                         disabled={draft.deleted}
                         onChange={(e) => updateField(draft.key, "durasiEnd", e.target.value)}

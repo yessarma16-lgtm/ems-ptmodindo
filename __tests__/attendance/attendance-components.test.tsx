@@ -65,10 +65,10 @@ describe("attendance components", () => {
     globalThis.fetch = fetchMock;
 
     render(<BracketMasterManager />);
-    await waitFor(() => expect(screen.getByDisplayValue("1")).toBeInTheDocument());
-    const inputs = screen.getAllByRole("spinbutton");
-    fireEvent.change(inputs[2], { target: { value: "1" } });
-    fireEvent.change(inputs[2], { target: { value: "1.5" } });
+    await waitFor(() => expect(screen.getByDisplayValue("1:00")).toBeInTheDocument());
+    const otInput = screen.getByDisplayValue("0.5");
+    fireEvent.change(otInput, { target: { value: "1" } });
+    fireEvent.change(otInput, { target: { value: "1.5" } });
     expect(screen.getByText("Diubah")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Lihat riwayat perubahan" }));
