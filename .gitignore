@@ -45,6 +45,11 @@ data/*.db-shm
 # vercel
 .vercel
 
+# Local employee export templates and UI mockup
+db_exspor.xlsx
+db_mod.xlsx
+model ui.JPG
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
