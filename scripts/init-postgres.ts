@@ -24,12 +24,11 @@ import path from "node:path";
 loadEnv({ path: path.resolve(process.cwd(), ".env.local") });
 
 async function main() {
-  const connectionString = process.env.SUPABASE_DB_URL;
+  const connectionString = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL;
   if (!connectionString) {
     console.log("Postgres connection: FAILED");
     console.log("");
-    console.log("SUPABASE_DB_URL is not set in .env.local.");
-    console.log("Find it in your Supabase project: Project Settings -> Database -> Connection string (URI).");
+    console.log("DATABASE_URL (local) or SUPABASE_DB_URL is not set in .env.local.");
     process.exitCode = 1;
     return;
   }

@@ -300,6 +300,10 @@ async function getLatestContractEndDates(): Promise<Record<string, string>> {
   return {};
 }
 
+async function getContractEndDates(): Promise<Record<string, string[]>> {
+  return {};
+}
+
 /* -------------------------------------------------------------------------- */
 /* Simple master data (Departments, Positions, Levels, Skills, Bank)          */
 /* -------------------------------------------------------------------------- */
@@ -518,6 +522,7 @@ async function testConnection(): Promise<{ ok: boolean; detail?: string }> {
 }
 
 export const googleSheetsAdapter: DatabaseAdapter = {
+  // Keep the legacy adapter's contract explicit for type-checking deployments.
   providerName: "google",
   ensureReady,
   testConnection,
@@ -538,6 +543,7 @@ export const googleSheetsAdapter: DatabaseAdapter = {
   updateContractHistoryEntry,
   deleteContractHistoryEntry,
   getLatestContractEndDates,
+  getContractEndDates,
 
   getSimpleMasterData,
   createSimpleMasterDataItem,

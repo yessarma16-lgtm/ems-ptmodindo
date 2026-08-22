@@ -114,6 +114,9 @@ async function ensurePublicApplyToken(client: Client): Promise<void> {
 
 /** Creates every table/index if missing. Idempotent — never drops or clears data. */
 export async function ensureSchema(client: Client): Promise<void> {
+  // Required by the UUID defaults used throughout the schema on plain
+  // PostgreSQL installations (Supabase enables this extension by default).
+  await client.query("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
   await client.query(buildEmployeesTableSql());
   await ensureEmployeeColumnsExist(client);
 
@@ -196,6 +199,16 @@ export async function ensureSchema(client: Client): Promise<void> {
     );
   `);
   await ensurePublicApplyToken(client);
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS activity_logs (
+      id BIGSERIAL PRIMARY KEY,
+      user_name TEXT NOT NULL DEFAULT 'System',
+      activity TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC, id DESC);");
 
   // Online Register — candidate drafts, shaped like `employees` (see
   // ensureOnlineRegistrationsEmployeeShaped) so the same EmployeeForm UI can
@@ -362,8 +375,53 @@ export async function ensureSchema(client: Client): Promise<void> {
       calculated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // runCrosscheck() uses upsert(..., { onConflict: "raw_id" }); the
+  // calculated table must therefore enforce one result per raw attendance row.
+  await client.query("CREATE UNIQUE INDEX IF NOT EXISTS uq_calculated_attendance_raw_id ON calculated_attendance(raw_id);");
   await client.query("CREATE INDEX IF NOT EXISTS idx_calculated_attendance_raw ON calculated_attendance(raw_id);");
   await client.query("CREATE INDEX IF NOT EXISTS idx_calculated_attendance_status ON calculated_attendance(status);");
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS ot_planning_estimates (
+      id BIGSERIAL PRIMARY KEY,
+      tanggal DATE NOT NULL,
+      shed TEXT NOT NULL,
+      division TEXT NOT NULL,
+      duration REAL NOT NULL,
+      person REAL NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (tanggal, shed, division, duration)
+    );
+    CREATE TABLE IF NOT EXISTS ot_planning_config_history (
+      id BIGSERIAL PRIMARY KEY,
+      effective_date DATE NOT NULL,
+      umr REAL NOT NULL,
+      usd_rate REAL NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_ot_estimate_date ON ot_planning_estimates(tanggal);
+    CREATE INDEX IF NOT EXISTS idx_ot_config_date ON ot_planning_config_history(effective_date);
+    CREATE TABLE IF NOT EXISTS ot_planning_mappings (
+      id BIGSERIAL PRIMARY KEY,
+      attendance_department TEXT NOT NULL UNIQUE,
+      shed TEXT NOT NULL,
+      division TEXT NOT NULL,
+      display_order INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS ot_planning_divisions (
+      id BIGSERIAL PRIMARY KEY,
+      shed TEXT NOT NULL,
+      division TEXT NOT NULL,
+      display_order INTEGER NOT NULL DEFAULT 0,
+      UNIQUE (shed, division)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ot_mapping_department ON ot_planning_mappings(attendance_department);
+    CREATE TABLE IF NOT EXISTS ot_planning_duration_multipliers (
+      id BIGSERIAL PRIMARY KEY,
+      duration REAL NOT NULL UNIQUE,
+      paid_hours REAL NOT NULL
+    );
+  `);
 
   // update_bracket_master(rows, changed_by, day_types) — bulk create/update/delete satu
   // day_type sekaligus + tulis bracket_master_history, atomik. Perlu fungsi
@@ -520,6 +578,13 @@ export async function seedMasterDataIfEmpty(client: Client): Promise<Record<stri
   } else {
     seeded.Lookup = false;
   }
+
+  const { rows: mappingRows } = await client.query<{ c: string }>("SELECT COUNT(*)::int AS c FROM ot_planning_mappings");
+  if (Number(mappingRows[0].c) === 0) { for (const [idx, line] of [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12].entries()) await client.query("INSERT INTO ot_planning_mappings (attendance_department, shed, division, display_order) VALUES ($1, 'SHED A', $2, $3) ON CONFLICT DO NOTHING", [`SEWING LINE ${String(line).padStart(2, "0")} SHED A.`, `SEW L${line}`, idx]); seeded.OtPlanningMappings = true; } else seeded.OtPlanningMappings = false;
+  const { rows: divisionRows } = await client.query<{ c: string }>("SELECT COUNT(*)::int AS c FROM ot_planning_divisions");
+  if (Number(divisionRows[0].c) === 0) { const defaults: Record<string, string[]> = { "SHED A": ["CUTTING", ...Array.from({ length: 10 }, (_, i) => `SEW L${i + 1}`), "QC", "ADM PRODUKSI", "MEKANIK"], "SHED B": ["CUTTING", "FINISHING", ...Array.from({ length: 10 }, (_, i) => `SEW L${i + 13}`), "SEW L14B", "QC", "ADM PRODUKSI", "MEKANIK"], "SHED C": ["CUTTING", "FINISHING", ...Array.from({ length: 5 }, (_, i) => `SEW L${i + 23}`), "SEW L28-32", "CNC", "QC", "ADM PRODUKSI", "MEKANIK"], COMMON: ["HRD & GA & DRIVER & CS & ELEKTRIK & perawat", "IE", "SAMPLE JSS", "QC COMMON", "SAMPLE OP WORKER", "SEWING COMMON", "WAREHOUSE", "PPIC & MD & EXIM", "SAMPLE OP STAFF"] }; for (const [shed, names] of Object.entries(defaults)) for (const [idx, division] of names.entries()) await client.query("INSERT INTO ot_planning_divisions (shed, division, display_order) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", [shed, division, idx]); seeded.OtPlanningDivisions = true; } else seeded.OtPlanningDivisions = false;
+  const { rows: multiplierRows } = await client.query<{ c: string }>("SELECT COUNT(*)::int AS c FROM ot_planning_duration_multipliers");
+  if (Number(multiplierRows[0].c) === 0) { for (const [duration, paid] of [[0.5,0.75],[1,1.5],[1.5,2.5],[2,3.5],[2.5,4.5],[3,5.5],[3.5,6.5],[4,7.5],[4.5,8.5],[5,9.5],[5.5,10.5],[6,11.5],[6.5,12.5],[7,13.5],[7.5,14.5],[8,15.5],[8.5,16.5],[9,17.5],[9.5,18.5],[10,19.5],[11,21.5],[12,22.5],[13,23.5]]) await client.query("INSERT INTO ot_planning_duration_multipliers (duration, paid_hours) VALUES ($1, $2) ON CONFLICT DO NOTHING", [duration, paid]); seeded.OtPlanningDurationMultipliers = true; } else seeded.OtPlanningDurationMultipliers = false;
 
   return seeded;
 }

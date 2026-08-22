@@ -131,3 +131,99 @@ button:not(:disabled),
 summary {
   cursor: pointer;
 }
+
+@page {
+  size: landscape;
+  margin: 8mm;
+}
+
+@media print {
+  /* OT Planning currently has no print-only wrapper, so identify the page
+     by its date filter. These rules keep the browser printout report-only. */
+  body:has(input[type="date"]) {
+    font-size: 8px !important;
+  }
+
+  body:has(input[type="date"]) aside,
+  body:has(input[type="date"]) nav,
+  body:has(input[type="date"]) button,
+  body:has(input[type="date"]) input[type="date"],
+  body:has(input[type="date"]) label:has(input[type="date"]),
+  body:has(input[type="date"]) div:has(> div > label > input[type="date"]) {
+    display: none !important;
+  }
+
+  body:has(input[type="date"]) table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    font-size: 7px !important;
+  }
+
+  body:has(input[type="date"]) table th,
+  body:has(input[type="date"]) table td {
+    padding: 2px !important;
+    line-height: 1.1 !important;
+  }
+
+  body:has(input[type="date"]) table tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  body:has(input[type="date"]) table thead {
+    display: table-header-group;
+  }
+
+  body:has(input[type="date"]) input[type="number"] {
+    border: 0 !important;
+    width: 100% !important;
+    padding: 0 !important;
+    height: auto !important;
+  }
+
+  body:has(input[type="date"]) h1 {
+    margin: 0 !important;
+    font-size: 14px !important;
+  }
+
+  .ot-planning-page-header,
+  .ot-planning-tabs,
+  .ot-planning-controls {
+    display: none !important;
+  }
+
+  .ot-planning-print,
+  .ot-planning-report,
+  .ot-planning-table,
+  .ot-planning-table > div {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .ot-planning-table {
+    break-inside: avoid;
+    box-shadow: none !important;
+    border: 0 !important;
+    margin-bottom: 8mm !important;
+  }
+
+  .ot-planning-table table {
+    min-width: 0 !important;
+    width: 100% !important;
+    font-size: 8px !important;
+  }
+
+  .ot-planning-table th,
+  .ot-planning-table td {
+    padding: 2px !important;
+    color: #000 !important;
+  }
+
+  .ot-planning-table input {
+    border: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    width: auto !important;
+  }
+}

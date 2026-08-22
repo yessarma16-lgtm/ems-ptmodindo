@@ -141,3 +141,7 @@ export async function deleteContractHistoryEntry(id: string): Promise<void> {
 export async function getLatestContractEndDates(): Promise<Record<string, string>> {
   return getDatabaseAdapter().getLatestContractEndDates();
 }
+
+export async function getContractEndDates(): Promise<Record<string, string[]>> {
+  return getDatabaseAdapter().getContractEndDates();
+}

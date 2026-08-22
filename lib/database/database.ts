@@ -2,7 +2,7 @@ import "server-only";
 
 import type { DatabaseAdapter } from "@/lib/database/database-adapter";
 import { postgresAdapter } from "@/lib/database/postgres-adapter";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import { isLocalPostgresConfigured, isSupabaseConfigured } from "@/lib/supabase";
 
 /**
  * Single centralized place that decides which database provider is active.
@@ -12,7 +12,8 @@ import { isSupabaseConfigured } from "@/lib/supabase";
  * the returned `DatabaseAdapter`, never knowing which concrete
  * implementation they got.
  *
- *   DATABASE_PROVIDER=postgres  -> Supabase Postgres adapter (DEV/PROD)
+ *   DATABASE_PROVIDER=postgres  -> Direct PostgreSQL when DATABASE_URL is set,
+ *                                  otherwise Supabase Postgres REST
  *   DATABASE_PROVIDER=sqlite    -> SQLite adapter  (data/employee.db)   — tests/legacy
  *   DATABASE_PROVIDER=google    -> Google Sheets adapter (legacy migration source)
  *
@@ -33,6 +34,6 @@ export function getDatabaseAdapter(): DatabaseAdapter {
 /**
  * True when the active provider is ready to use:
  *  - sqlite: always true (a local file is created on demand, no credentials needed)
- *  - postgres: true only when SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are both set
+ *  - postgres: true when DATABASE_URL is set, or when Supabase credentials are set
  */
-export function isDatabaseConfigured(): boolean { return isSupabaseConfigured(); }
+export function isDatabaseConfigured(): boolean { return isLocalPostgresConfigured() || isSupabaseConfigured(); }

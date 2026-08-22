@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getEmployeeListItems, getLatestContractEndDates } from "@/lib/employee-service";
+import { getContractEndDates, getEmployeeListItems, getLatestContractEndDates } from "@/lib/employee-service";
 import type { EmployeeListItem } from "@/lib/database/types";
 
 /** Company data starts in 2017 — years before that are excluded from both the year filter and the per-year charts. */
@@ -101,11 +101,15 @@ export function parseDashboardFilter(searchParams: Record<string, string | strin
 }
 
 export async function loadDashboardData(filter: DashboardFilter): Promise<DashboardData> {
-  const [items, latestContractEnd] = await Promise.all([getEmployeeListItems(), getLatestContractEndDates()]);
+  const [items, latestContractEnd, contractEnds] = await Promise.all([
+    getEmployeeListItems(),
+    getLatestContractEndDates(),
+    getContractEndDates(),
+  ]);
 
   const activeYear = Number(filter.year) || new Date().getFullYear();
 
-  const cards = computeCards(items, latestContractEnd, filter);
+  const cards = computeCards(items, latestContractEnd, contractEnds, filter);
   const newVsResignByMonth = computeNewVsResignByMonth(items, activeYear);
   const monthlyHeadcount = computeMonthlyHeadcount(items, activeYear);
   const contractTypeByMonth = computeContractTypeByMonth(items, activeYear);
@@ -135,11 +139,12 @@ function inPeriod(dateStr: string, filter: DashboardFilter): boolean {
 function computeCards(
   items: EmployeeListItem[],
   latestContractEnd: Record<string, string>,
+  contractEnds: Record<string, string[]>,
   filter: DashboardFilter,
 ): DashboardCards {
   const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth() + 1; // 1-indexed current month
+  const y = filter.month && filter.year ? Number(filter.year) : now.getUTCFullYear();
+  const m = filter.month ? Number(filter.month) : now.getUTCMonth() + 1; // 1-indexed
 
   const thisMonthStart = monthStart(y, m);
   const thisMonthEnd = monthEnd(y, m);
@@ -166,8 +171,9 @@ function computeCards(
     if (e.exitDate && inPeriod(e.exitDate, filter)) resigned++;
 
     if (!inactive) {
-      const end = latestContractEnd[e.recordId];
-      if (end) {
+      // Keep historical contract dates available when a past month is selected.
+      const ends = contractEnds[e.recordId] ?? (latestContractEnd[e.recordId] ? [latestContractEnd[e.recordId]] : []);
+      for (const end of ends) {
         const employee = {
           recordId: e.recordId,
           name: e.name || e.nik || "Unnamed employee",
@@ -189,6 +195,12 @@ function computeCards(
       }
     }
   }
+
+  const sortByEndDate = (a: ContractEndingEmployee, b: ContractEndingEmployee) =>
+    a.endDate.localeCompare(b.endDate);
+  endingThisMonthEmployees.sort(sortByEndDate);
+  endingNextMonthEmployees.sort(sortByEndDate);
+  endingNext2MonthsEmployees.sort(sortByEndDate);
 
   return {
     activeEmployees: active,

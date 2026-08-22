@@ -326,6 +326,16 @@ async function getLatestContractEndDates(): Promise<Record<string, string>> {
   return getNearestContractEndDates(db);
 }
 
+async function getContractEndDates(): Promise<Record<string, string[]>> {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT employee_id, contract_end FROM contract_history WHERE contract_end <> '' ORDER BY contract_end ASC")
+    .all() as { employee_id: string; contract_end: string }[];
+  const result: Record<string, string[]> = {};
+  for (const row of rows) (result[row.employee_id] ??= []).push(row.contract_end);
+  return result;
+}
+
 export function getNearestContractEndDates(db: DatabaseSync, today = new Date().toISOString().slice(0, 10)): Record<string, string> {
   const rows = db
     .prepare(
@@ -553,6 +563,7 @@ export const sqliteAdapter: DatabaseAdapter = {
   updateContractHistoryEntry,
   deleteContractHistoryEntry,
   getLatestContractEndDates,
+  getContractEndDates,
 
   getSimpleMasterData,
   createSimpleMasterDataItem,

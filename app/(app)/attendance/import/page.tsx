@@ -23,12 +23,12 @@ export default function AttendanceImportPage() {
         <CardContent className="pt-6">
           <Tabs defaultValue="import">
             <TabsList>
-              <TabsTrigger value="import">Attendance Data Import</TabsTrigger>
+          <TabsTrigger value="import">Attendance Data Import</TabsTrigger>
               <TabsTrigger value="bracket">Interval Duration Master</TabsTrigger>
             </TabsList>
-            <TabsContent value="import">
-              <AttendanceImportPanel />
-            </TabsContent>
+          <TabsContent value="import">
+            <AttendanceImportPanel />
+          </TabsContent>
             <TabsContent value="bracket">
               <BracketMasterManager />
             </TabsContent>

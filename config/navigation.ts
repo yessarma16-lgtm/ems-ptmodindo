@@ -69,7 +69,10 @@ export const MAIN_NAV: NavItem[] = [
     href: "/reports/employee",
     icon: FileBarChart2,
     collapsible: true,
-    children: [{ label: "Employee Report", href: "/reports/employee", icon: FileBarChart2 }],
+    children: [
+      { label: "Employee Report", href: "/reports/employee", icon: FileBarChart2 },
+      { label: "OT Planning", href: "/reports/ot-planning", icon: TimerReset },
+    ],
   },
   { label: "Export", href: "/export", icon: FileSpreadsheet },
   {

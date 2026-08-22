@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getUserByUsernameWithCredentials } from "@/lib/user-service";
 import { verifyPassword } from "@/lib/auth/password";
 import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "@/lib/auth/session";
+import { logActivity } from "@/lib/activity-log";
 
 const loginSchema = z.object({
   username: z.string().trim().min(1, "Username is required"),
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
   // Same generic message whether the username doesn't exist, the password is
   // wrong, or the account is inactive — never reveal which one it was.
   if (!user || !passwordOk || !activeOk) {
+    await logActivity(parsed.data.username, "Login gagal");
     return NextResponse.json({ error: "Invalid username or password." }, { status: 401 });
   }
 
@@ -36,5 +38,6 @@ export async function POST(request: NextRequest) {
     user: { id: user.id, name: user.name, username: user.username, email: user.email, role: user.role },
   });
   res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(parsed.data.rememberMe));
+  await logActivity(user.name, "Login");
   return res;
 }

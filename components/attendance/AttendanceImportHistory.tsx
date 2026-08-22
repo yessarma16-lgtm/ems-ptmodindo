@@ -6,12 +6,14 @@ import { toast } from "sonner";
 
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 
 interface HistoryEntry {
   sourceFilename: string;
   importedAt: string;
   importedBy: string;
   rowCount: number;
+  processStatus: "Done Process" | "Waiting Process";
 }
 
 /** Riwayat import ditampilkan sekali per sesi upload, diturunkan dari raw_attendance (bukan tabel terpisah) -- lihat getImportHistory() di AttendanceDatabaseAdapter. */
@@ -60,6 +62,7 @@ export function AttendanceImportHistory({ refreshKey }: { refreshKey: number }) 
             <TableHead>Imported by</TableHead>
             <TableHead>Import Date</TableHead>
             <TableHead className="text-right">Row Count</TableHead>
+            <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -69,7 +72,7 @@ export function AttendanceImportHistory({ refreshKey }: { refreshKey: number }) 
               <TableCell className="font-medium">{h.sourceFilename}</TableCell>
               <TableCell>{h.importedBy || "—"}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{new Date(h.importedAt).toLocaleString("id-ID")}</TableCell>
-              <TableCell className="text-right">{h.rowCount}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><a className="inline-flex size-8 items-center justify-center rounded-md hover:bg-muted" href={`/api/attendance/import/history/download?sourceFilename=${encodeURIComponent(h.sourceFilename)}&importedAt=${encodeURIComponent(h.importedAt)}`} title="Download again"><Download className="size-4" /></a><button className="inline-flex size-8 items-center justify-center rounded-md hover:bg-destructive/10" onClick={() => deleteHistory(h)} title="Delete"><Trash2 className="size-4 text-destructive" /></button></div></TableCell>
+              <TableCell className="text-right">{h.rowCount}</TableCell><TableCell><Badge variant={h.processStatus === "Done Process" ? "success" : "warning"}>{h.processStatus}</Badge></TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><a className="inline-flex size-8 items-center justify-center rounded-md hover:bg-muted" href={`/api/attendance/import/history/download?sourceFilename=${encodeURIComponent(h.sourceFilename)}&importedAt=${encodeURIComponent(h.importedAt)}`} title="Download again"><Download className="size-4" /></a><button className="inline-flex size-8 items-center justify-center rounded-md hover:bg-destructive/10" onClick={() => deleteHistory(h)} title="Delete"><Trash2 className="size-4 text-destructive" /></button></div></TableCell>
             </TableRow>
           ))}
         </TableBody>

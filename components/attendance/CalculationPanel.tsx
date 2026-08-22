@@ -13,6 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CorrectionDialog } from "@/components/attendance/CorrectionDialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { CalculatedAttendanceRecord, CalculatedStatus, CalculationSummary } from "@/lib/database/attendance-types";
+import { AttendanceDatePicker } from "@/components/attendance/AttendanceDatePicker";
+import { useCalculationSession } from "@/components/attendance/CalculationSession";
 
 const STATUSES: Array<CalculatedStatus | "all"> = ["all", "Sesuai", "Tidak Sesuai", "Dikoreksi Manual", "Cek Manual", "Tidak Berlaku"];
 const CALCULATION_JOB_KEY = "mpp-attendance-calculation-job";
@@ -31,22 +33,34 @@ function statusVariant(status: CalculatedStatus) {
 }
 
 export function CalculationPanel() {
-  const [rows, setRows] = useState<CalculatedAttendanceRecord[]>([]);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const { rows, setRows, dateFrom, setDateFrom, dateTo, setDateTo, summary, setSummary, clearSession } = useCalculationSession();
   const [department, setDepartment] = useState("");
   const [search, setSearch] = useState("");
   const [statuses, setStatuses] = useState<CalculatedStatus[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [crosscheckProgress, setCrosscheckProgress] = useState<{ processed: number; total: number } | null>(null);
   const [calculateDialogOpen, setCalculateDialogOpen] = useState(false);
   const [calculateFrom, setCalculateFrom] = useState("");
   const [calculateTo, setCalculateTo] = useState("");
   const [calculateController, setCalculateController] = useState<AbortController | null>(null);
-  const [summary, setSummary] = useState<CalculationSummary | null>(null);
   const [selected, setSelected] = useState<CalculatedAttendanceRecord | null>(null);
+  const [processedDates, setProcessedDates] = useState<string[]>([]);
   const departments = useMemo(() => Array.from(new Set(rows.map((row) => row.department).filter(Boolean))).sort(), [rows]);
+
+  useEffect(() => {
+    fetch("/api/attendance/status", { cache: "no-store" }).then((res) => res.json()).then((data) => setProcessedDates(data.processedDates ?? [])).catch(() => setProcessedDates([]));
+  }, []);
+
+  async function refreshProcessedDates() {
+    try {
+      const res = await fetch("/api/attendance/status", { cache: "no-store" });
+      const data = await res.json();
+      setProcessedDates(data.processedDates ?? []);
+    } catch {
+      // Keep the current indicators if the refresh request temporarily fails.
+    }
+  }
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -57,25 +71,30 @@ export function CalculationPanel() {
     return params.toString();
   }, [dateFrom, dateTo, department, search]);
 
-  const visibleRows = useMemo(() => statuses.length === 0 ? rows : rows.filter((row) => statuses.includes(row.status)), [rows, statuses]);
+  const visibleRows = useMemo(() => rows.filter((row) => {
+    if (statuses.length > 0 && !statuses.includes(row.status)) return false;
+    if (department && row.department !== department) return false;
+    if (search.trim()) {
+      const term = search.trim().toLowerCase();
+      if (!`${row.nik} ${row.nama}`.toLowerCase().includes(term)) return false;
+    }
+    return true;
+  }), [rows, statuses, department, search]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (requestedQuery = query, notifyWhenEmpty = false) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/attendance/calculation${query ? `?${query}` : ""}`, { cache: "no-store" });
+      const res = await fetch(`/api/attendance/calculation${requestedQuery ? `?${requestedQuery}` : ""}`, { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load calculation results.");
       setRows(data.rows ?? []);
+      if (notifyWhenEmpty && (data.rows ?? []).length === 0) toast.info("Attendance not yet processed.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load calculation results.");
     } finally {
       setLoading(false);
     }
-  }, [query]);
-
-  useEffect(() => {
-    queueMicrotask(load);
-  }, [load]);
+  }, [query, setRows]);
 
   useEffect(() => {
     try {
@@ -103,7 +122,7 @@ export function CalculationPanel() {
     const controller = new AbortController();
     setCalculateController(controller);
     try {
-      const res = await fetch("/api/attendance/crosscheck", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dateFrom: from, dateTo: to, limit: 500 }), signal: controller.signal });
+      const res = await fetch("/api/attendance/crosscheck", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dateFrom: from, dateTo: to }), signal: controller.signal });
       if (!res.ok || !res.body) { const data = await res.json().catch(() => null); throw new Error(data?.error ?? "Failed to run crosscheck."); }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -131,11 +150,8 @@ export function CalculationPanel() {
       const savedProcessed = savedJob ? Number((JSON.parse(savedJob) as { processed?: number }).processed ?? 0) : 0;
       localStorage.setItem(CALCULATION_JOB_KEY, JSON.stringify({ from, to, processed: savedProcessed + finalSummary.processed }));
       setSummary(finalSummary);
-      await load();
-      if (finalSummary.processed === 500) {
-        await runCrosscheck(from, to);
-        return;
-      }
+      await load(buildQuery(from, to));
+      await refreshProcessedDates();
       localStorage.removeItem(CALCULATION_JOB_KEY);
       toast.success("Crosscheck completed.");
     } catch (err) {
@@ -164,13 +180,34 @@ export function CalculationPanel() {
     void runCrosscheck(calculateFrom, calculateTo);
   }
 
+  function buildQuery(from: string, to: string) {
+    const params = new URLSearchParams();
+    if (from) params.set("dateFrom", from);
+    if (to) params.set("dateTo", to);
+    if (department.trim()) params.set("department", department.trim());
+    if (search.trim()) params.set("search", search.trim());
+    return params.toString();
+  }
+
+  function runFilters() {
+    if (!dateFrom || !dateTo) {
+      toast.error("Pilih tanggal mulai dan tanggal akhir terlebih dahulu.");
+      return;
+    }
+    if (dateFrom > dateTo) {
+      toast.error("Tanggal mulai tidak boleh lebih besar dari tanggal akhir.");
+      return;
+    }
+    setRows([]);
+    setSummary(null);
+    void load(buildQuery(dateFrom, dateTo), true);
+  }
+
   function clearFilters() {
-    setDateFrom("");
-    setDateTo("");
+    clearSession();
     setDepartment("");
     setSearch("");
     setStatuses([]);
-    setSummary(null);
     localStorage.removeItem(CALCULATION_JOB_KEY);
   }
 
@@ -185,24 +222,27 @@ export function CalculationPanel() {
 
   return (
     <div className="space-y-5">
-      <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 bg-card py-2">
-        <div className="ml-auto flex shrink-0 flex-wrap gap-2">
+      <div className="sticky top-0 z-20 flex flex-wrap items-end justify-between gap-3 bg-card py-2">
+        <div className="flex flex-wrap items-end gap-2">
+          <div><label className="mb-1 block text-xs font-medium">Date from</label><AttendanceDatePicker value={dateFrom} onChange={setDateFrom} processedDates={processedDates} /></div>
+          <div><label className="mb-1 block text-xs font-medium">Date to</label><AttendanceDatePicker value={dateTo} onChange={setDateTo} processedDates={processedDates} /></div>
+          <Button size="sm" onClick={runFilters} disabled={loading || running}><Search />Run</Button>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
           <Button variant="outline" onClick={clearFilters} disabled={loading || running}><X />Clear</Button>
-          <Button variant="outline" onClick={() => load()} disabled={loading || running}><RefreshCw className={loading ? "animate-spin" : ""} />Refresh</Button>
-          <Button variant="outline" onClick={exportRows} disabled={loading || running}><Download />Export</Button>
+          <Button variant="outline" onClick={() => load(query, true)} disabled={loading || running || !dateFrom || !dateTo}><RefreshCw className={loading ? "animate-spin" : ""} />Refresh</Button>
+          <Button variant="outline" onClick={exportRows} disabled={loading || running || rows.length === 0}><Download />Export</Button>
           {running && <Button variant="destructive" onClick={() => { localStorage.removeItem(CALCULATION_JOB_KEY); calculateController?.abort(); }}>Cancel Calculate</Button>}
-          <Button aria-label="Jalankan Crosscheck" onClick={() => setCalculateDialogOpen(true)} disabled={running}><Play />{running ? <Loader2 className="animate-spin" /> : null}{running && crosscheckProgress ? `${crosscheckProgress.processed}/${crosscheckProgress.total} data berhasil di-crosscheck` : "Jalankan Crosscheck"}</Button>
+          <Button aria-label="Calculate" onClick={() => setCalculateDialogOpen(true)} disabled={running}><Play />{running ? <Loader2 className="animate-spin" /> : null}{running && crosscheckProgress ? `${crosscheckProgress.processed}/${crosscheckProgress.total} data berhasil di-crosscheck` : "Calculate"}</Button>
         </div>
       </div>
 
-      <div className="text-sm font-medium">Total data MPP Attendance Calculation: {loading ? "—" : visibleRows.length}</div>
 
       <div className="grid gap-3 md:grid-cols-5">
         <div><label htmlFor="calc-search" className="mb-1 block text-xs font-medium">Name / NIK</label><div className="relative"><Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input className="pl-9 pr-9" id="calc-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or NIK" />{search && <button type="button" aria-label="Clear search" title="Clear search" className="absolute right-2 top-2 rounded p-0.5 text-muted-foreground hover:text-foreground" onClick={() => setSearch("")}><X className="size-4" /></button>}</div></div>
         <div><label htmlFor="calc-department" className="mb-1 block text-xs font-medium">Department</label><Select value={department || "all"} onValueChange={(value) => setDepartment(value === "all" ? "" : value)}><SelectTrigger id="calc-department"><SelectValue placeholder="All departments" /></SelectTrigger><SelectContent><SelectItem value="all">All departments</SelectItem>{departments.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-        <div><label htmlFor="calc-date-from" className="mb-1 block text-xs font-medium">Date from</label><div className="relative"><Input className="pr-9" id="calc-date-from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />{dateFrom && <button type="button" aria-label="Clear date from" title="Clear date from" className="absolute right-2 top-2 rounded p-0.5 text-muted-foreground hover:text-foreground" onClick={() => setDateFrom("")}><X className="size-4" /></button>}</div></div>
-        <div><label htmlFor="calc-date-to" className="mb-1 block text-xs font-medium">Date to</label><div className="relative"><Input className="pr-9" id="calc-date-to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />{dateTo && <button type="button" aria-label="Clear date to" title="Clear date to" className="absolute right-2 top-2 rounded p-0.5 text-muted-foreground hover:text-foreground" onClick={() => setDateTo("")}><X className="size-4" /></button>}</div></div>
-        <div><label className="mb-1 block text-xs font-medium">Status</label><DropdownMenu><DropdownMenuTrigger asChild><Button id="calc-status" variant="outline" className="w-full justify-between">{statuses.length === 0 ? "All statuses" : `${statuses.length} status dipilih`}</Button></DropdownMenuTrigger><DropdownMenuContent align="start" className="w-56">{STATUSES.filter((item): item is CalculatedStatus => item !== "all").map((item) => <DropdownMenuCheckboxItem key={item} checked={statuses.includes(item)} onCheckedChange={(checked) => setStatuses((current) => checked ? [...current, item] : current.filter((value) => value !== item))}>{statusLabel(item)}</DropdownMenuCheckboxItem>)}</DropdownMenuContent></DropdownMenu></div>
+        <div><label className="mb-1 block text-xs font-medium">Status</label><DropdownMenu><DropdownMenuTrigger asChild><Button id="calc-status" variant="outline" className="relative w-full justify-between pr-9">{statuses.length === 0 ? "All statuses" : `${statuses.length} status dipilih`}{statuses.length > 0 && <span role="button" tabIndex={0} aria-label="Clear status filter" title="Clear status filter" className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setStatuses([]); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); setStatuses([]); } }}><X className="size-4" /></span>}</Button></DropdownMenuTrigger><DropdownMenuContent align="start" className="w-56">{STATUSES.filter((item): item is CalculatedStatus => item !== "all").map((item) => <DropdownMenuCheckboxItem key={item} checked={statuses.includes(item)} onCheckedChange={(checked) => setStatuses((current) => checked ? [...current, item] : current.filter((value) => value !== item))}>{statusLabel(item)}</DropdownMenuCheckboxItem>)}</DropdownMenuContent></DropdownMenu></div>
+        <div className="md:col-span-2 flex items-end justify-end text-right text-sm font-medium">Total data MPP Attendance Calculation: {loading ? "—" : visibleRows.length}</div>
       </div>
 
       {summary && <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">Processed: <strong>{summary.processed}</strong> · Match: <strong>{summary.sesuai}</strong> · Mismatch: <strong>{summary.tidakSesuai}</strong> · Manual review: <strong>{summary.cekManual}</strong> · Manual corrections preserved: <strong>{summary.preservedManualCorrections}</strong></div>}
@@ -211,7 +251,7 @@ export function CalculationPanel() {
         <Table containerClassName="max-h-[65vh] overflow-auto">
           <TableHeader className="sticky top-0 z-10 bg-background [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background"><TableRow><TableHead>Date</TableHead><TableHead>NIK</TableHead><TableHead>Name</TableHead><TableHead>Department</TableHead><TableHead>InTime</TableHead><TableHead>OutTime</TableHead><TableHead>IT1</TableHead><TableHead>OT1</TableHead><TableHead>WHour</TableHead><TableHead>Description</TableHead><TableHead>System OTH</TableHead><TableHead>NK OTH</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
           <TableBody>
-            {loading ? <TableRow><TableCell colSpan={13} className="py-10 text-center"><Loader2 className="mx-auto animate-spin" /></TableCell></TableRow> : visibleRows.length === 0 ? <TableRow><TableCell colSpan={13} className="py-10 text-center text-sm text-muted-foreground">No calculation results.</TableCell></TableRow> : visibleRows.map((row) => <TableRow key={row.id} onClick={() => setSelected(row)} className="cursor-pointer hover:bg-muted/50" title="Click to edit IT1, OT1, and NK OTH"><TableCell>{row.tanggal}</TableCell><TableCell>{row.nik}</TableCell><TableCell className="font-medium">{row.nama}</TableCell><TableCell>{row.department}</TableCell><TableCell>{row.intime ?? "—"}</TableCell><TableCell>{row.outtime ?? "—"}</TableCell><TableCell>{row.it1 ?? "—"}</TableCell><TableCell>{row.ot1 ?? "—"}</TableCell><TableCell>{row.whour ?? "—"}</TableCell><TableCell>{row.kategori}</TableCell><TableCell>{row.systemCalculatedOth ?? "—"}</TableCell><TableCell className={row.status === "Dikoreksi Manual" ? "font-semibold text-warning" : undefined}>{row.finalOth ?? "—"}</TableCell><TableCell><Badge variant={statusVariant(row.status)}>{row.status}</Badge></TableCell></TableRow>)}
+            {loading ? <TableRow><TableCell colSpan={13} className="py-10 text-center"><Loader2 className="mx-auto animate-spin" /></TableCell></TableRow> : visibleRows.length === 0 ? <TableRow><TableCell colSpan={13} className="py-10 text-center text-sm text-muted-foreground">{dateFrom && dateTo ? "No calculation results." : "Select a date range and click Run."}</TableCell></TableRow> : visibleRows.map((row) => <TableRow key={row.id} onClick={() => setSelected(row)} className="cursor-pointer hover:bg-muted/50" title="Click to edit IT1, OT1, and NK OTH"><TableCell>{row.tanggal}</TableCell><TableCell>{row.nik}</TableCell><TableCell className="font-medium">{row.nama}</TableCell><TableCell>{row.department}</TableCell><TableCell>{row.intime ?? "—"}</TableCell><TableCell>{row.outtime ?? "—"}</TableCell><TableCell>{row.it1 ?? "—"}</TableCell><TableCell>{row.ot1 ?? "—"}</TableCell><TableCell>{row.whour ?? "—"}</TableCell><TableCell>{row.kategori}</TableCell><TableCell>{row.systemCalculatedOth ?? "—"}</TableCell><TableCell className={row.status === "Dikoreksi Manual" ? "font-semibold text-warning" : undefined}>{row.finalOth ?? "—"}</TableCell><TableCell><Badge variant={statusVariant(row.status)}>{row.status}</Badge></TableCell></TableRow>)}
           </TableBody>
         </Table>
       </div>

@@ -3,10 +3,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RoleAccessManager } from "@/components/settings/RoleAccessManager";
+import { getCurrentSessionUser } from "@/lib/auth/current-user";
+import { isDeveloperUser } from "@/lib/auth/developer-access";
 
 export const dynamic = "force-dynamic";
 
-export default function UserManagementPage() {
+export default async function UserManagementPage() {
+  const isDeveloper = isDeveloperUser(await getCurrentSessionUser());
   return (
     <div>
       <PageHeader
@@ -22,14 +25,12 @@ export default function UserManagementPage() {
           <Tabs defaultValue="users">
             <TabsList>
               <TabsTrigger value="users">User Management</TabsTrigger>
-              <TabsTrigger value="roles">Role Access</TabsTrigger>
+              {isDeveloper && <TabsTrigger value="roles">Role Access</TabsTrigger>}
             </TabsList>
             <TabsContent value="users">
               <UserManagement />
             </TabsContent>
-            <TabsContent value="roles">
-              <RoleAccessManager />
-            </TabsContent>
+            {isDeveloper && <TabsContent value="roles"><RoleAccessManager /></TabsContent>}
           </Tabs>
         </CardContent>
       </Card>

@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createLocalPostgresClient } from "@/lib/database/local-postgres-client";
 
 import { DatabaseNotConfiguredError, DatabaseConnectionError, RecordNotFoundError } from "@/lib/database/errors";
 
@@ -58,8 +59,16 @@ export function isSupabaseConfigured(): boolean {
   return readEnv() !== null;
 }
 
+/** Local development uses the same Postgres store modules through a small
+ * Supabase-shaped query facade backed by the native `pg` driver. Production
+ * remains on Supabase REST unless DATABASE_URL is explicitly provided. */
+export function isLocalPostgresConfigured(): boolean {
+  return Boolean(process.env.DATABASE_URL);
+}
+
 let cachedClient: SupabaseClient | null = null;
 let cachedUrl: string | null = null;
+let cachedLocalClient: ReturnType<typeof createLocalPostgresClient> | null = null;
 
 function getClient(env: SupabaseEnv): SupabaseClient {
   if (cachedClient && cachedUrl === env.url) return cachedClient;
@@ -96,7 +105,11 @@ async function guarded<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** Shared Supabase client for adapter modules (postgres-adapter.ts, postgres-users.ts, etc). Throws SupabaseConfigError if env vars are missing. */
-export function getSupabaseClient(): SupabaseClient {
+export function getSupabaseClient(): any {
+  if (isLocalPostgresConfigured()) {
+    if (!cachedLocalClient) cachedLocalClient = createLocalPostgresClient();
+    return cachedLocalClient;
+  }
   return getClient(requireEnv());
 }
 

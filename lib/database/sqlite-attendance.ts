@@ -94,6 +94,7 @@ function rowToRawAttendance(row: SqlRow): RawAttendanceRecord {
     importedAt: toStr(row.imported_at),
     importedBy: toStr(row.imported_by),
     sourceFilename: toStr(row.source_filename),
+    processStatus: row.process_status === "Done Process" ? "Done Process" : "Waiting Process",
   };
 }
 
@@ -119,7 +120,8 @@ function rowToCalculated(row: SqlRow): CalculatedAttendanceRecord {
   };
 }
 
-const EPSILON = 1e-6;
+// Match finite-precision bracket values to HH:mm-derived repeating fractions.
+const EPSILON = 1e-4;
 function approxEqual(a: number, b: number): boolean {
   return Math.abs(a - b) < EPSILON;
 }
@@ -232,8 +234,9 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const rows = db
       .prepare(
-        `SELECT source_filename, imported_at, imported_by, COUNT(*) as row_count
-         FROM raw_attendance ${where}
+        `SELECT ra.source_filename, ra.imported_at, ra.imported_by, COUNT(*) as row_count,
+                CASE WHEN COUNT(ca.raw_id) = COUNT(ra.id) THEN 'Done Process' ELSE 'Waiting Process' END AS process_status
+         FROM raw_attendance ra LEFT JOIN calculated_attendance ca ON ca.raw_id = ra.id ${where.replace(/\bimported_at\b/g, "ra.imported_at")}
          GROUP BY source_filename, imported_at, imported_by
          ORDER BY imported_at DESC`,
       ).all(...params) as SqlRow[];
@@ -242,6 +245,7 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
       importedAt: toStr(row.imported_at),
       importedBy: toStr(row.imported_by),
       rowCount: toNum(row.row_count),
+      processStatus: toStr(row.process_status) === "Done Process" ? "Done Process" : "Waiting Process",
     }));
   }
 
@@ -264,7 +268,7 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     if (filters.department) { conditions.push("department = ?"); params.push(filters.department); }
     if (filters.nik) { conditions.push("nik = ?"); params.push(filters.nik); }
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const rows = db.prepare(`SELECT * FROM raw_attendance ${where} ORDER BY tanggal, nik`).all(...params) as SqlRow[];
+    const rows = db.prepare(`SELECT ra.*, CASE WHEN ca.raw_id IS NULL THEN 'Waiting Process' ELSE 'Done Process' END AS process_status FROM raw_attendance ra LEFT JOIN calculated_attendance ca ON ca.raw_id = ra.id ${where.replace(/\btanggal\b/g, "ra.tanggal").replace(/\bdepartment\b/g, "ra.department").replace(/\bnik\b/g, "ra.nik")} ORDER BY ra.tanggal, ra.nik`).all(...params) as SqlRow[];
     return rows.map(rowToRawAttendance);
   }
 
@@ -389,9 +393,7 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
   async function runCrosscheck(rawIds?: number[], filters?: { dateFrom?: string; dateTo?: string }, onProgress?: (processed: number, total: number) => void, shouldCancel?: () => boolean): Promise<CalculationSummary> {
     let targets: SqlRow[] = rawIds && rawIds.length > 0
       ? (rawIds.map((id) => db.prepare("SELECT * FROM raw_attendance WHERE id = ?").get(id) as SqlRow | undefined).filter((r): r is SqlRow => !!r))
-      : (db.prepare(
-          "SELECT ra.* FROM raw_attendance ra WHERE NOT EXISTS (SELECT 1 FROM calculated_attendance ca WHERE ca.raw_id = ra.id)",
-        ).all() as SqlRow[]);
+      : (db.prepare("SELECT * FROM raw_attendance ORDER BY id ASC").all() as SqlRow[]);
 
     const summary: CalculationSummary = { processed: 0, sesuai: 0, tidakSesuai: 0, cekManual: 0, tidakBerlaku: 0, preservedManualCorrections: 0 };
     const lookupBracket = makeBracketLookup();

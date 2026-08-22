@@ -60,6 +60,7 @@ export interface RawAttendanceInput {
 export interface RawAttendanceRecord extends RawAttendanceInput {
   id: number;
   importedAt: string;
+  processStatus: "Done Process" | "Waiting Process";
 }
 
 export interface ExistingRecord {
@@ -98,6 +99,7 @@ export interface ImportHistoryEntry {
   importedAt: string;
   importedBy: string;
   rowCount: number;
+  processStatus: "Done Process" | "Waiting Process";
 }
 
 export interface ImportHistoryFilter {

@@ -90,10 +90,13 @@ function rowToRawAttendance(row: SqlRow): RawAttendanceRecord {
     importedAt: toStr(row.imported_at),
     importedBy: toStr(row.imported_by),
     sourceFilename: toStr(row.source_filename),
+    processStatus: Array.isArray(row.calculated_attendance) && row.calculated_attendance.length > 0 ? "Done Process" : "Waiting Process",
   };
 }
 
-const EPSILON = 1e-6;
+// Bracket values are stored with finite decimal precision (e.g. 1.01667),
+// while HH:mm arithmetic produces repeating fractions (e.g. 1.016666...).
+const EPSILON = 1e-4;
 function approxEqual(a: number, b: number): boolean {
   return Math.abs(a - b) < EPSILON;
 }
@@ -105,7 +108,7 @@ function makeBracketLookup(): BracketLookupFn {
   return async (selisihHours, dayType) => {
     return supabaseGuarded(async () => {
       const normalized = Math.round(selisihHours * 60) / 60;
-      const epsilon = 1e-6;
+      const epsilon = EPSILON;
       const { data, error } = await getSupabaseClient()
         .from("bracket_master")
         .select("ot_hours")
@@ -209,7 +212,7 @@ async function getImportHistory(filters: ImportHistoryFilter = {}): Promise<Impo
     if (countError) throw countError;
     const pageCount = Math.ceil((count ?? 0) / PAGE_SIZE);
     const pages = await Promise.all(Array.from({ length: pageCount }, async (_, page) => {
-      let query = getSupabaseClient().from("raw_attendance").select("source_filename, imported_at, imported_by");
+      let query = getSupabaseClient().from("raw_attendance").select("id, source_filename, imported_at, imported_by, calculated_attendance(id)");
       if (filters.dateFrom) query = query.gte("imported_at", `${filters.dateFrom}T00:00:00.000Z`);
       if (filters.dateTo) query = query.lte("imported_at", `${filters.dateTo}T23:59:59.999Z`);
       const { data, error } = await query.order("id", { ascending: true }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
@@ -221,8 +224,10 @@ async function getImportHistory(filters: ImportHistoryFilter = {}): Promise<Impo
     for (const row of allRows) {
       const key = `${toStr(row.source_filename)}::${toStr(row.imported_at)}::${toStr(row.imported_by)}`;
       const existing = grouped.get(key);
-      if (existing) existing.rowCount += 1;
-      else grouped.set(key, { sourceFilename: toStr(row.source_filename), importedAt: toStr(row.imported_at), importedBy: toStr(row.imported_by), rowCount: 1 });
+      if (existing) {
+        existing.rowCount += 1;
+        if (!(Array.isArray(row.calculated_attendance) && row.calculated_attendance.length > 0)) existing.processStatus = "Waiting Process";
+      } else grouped.set(key, { sourceFilename: toStr(row.source_filename), importedAt: toStr(row.imported_at), importedBy: toStr(row.imported_by), rowCount: 1, processStatus: Array.isArray(row.calculated_attendance) && row.calculated_attendance.length > 0 ? "Done Process" : "Waiting Process" });
     }
     return Array.from(grouped.values()).sort((a, b) => (a.importedAt < b.importedAt ? 1 : -1));
   });
@@ -242,7 +247,7 @@ async function deleteImport(sourceFilename: string, importedAt: string): Promise
         .order("id", { ascending: true })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
       if (error) throw error;
-      const pageIds = (data ?? []).map((row) => toNum(row.id));
+      const pageIds = (data ?? []).map((row: Record<string, unknown>) => toNum(row.id));
       ids.push(...pageIds);
       if (pageIds.length < PAGE_SIZE) break;
     }
@@ -261,7 +266,7 @@ async function deleteImport(sourceFilename: string, importedAt: string): Promise
 
 async function getRawAttendance(filters: RawAttendanceFilter): Promise<RawAttendanceRecord[]> {
   return supabaseGuarded(async () => {
-    let query = getSupabaseClient().from("raw_attendance").select("*");
+    let query = getSupabaseClient().from("raw_attendance").select("*, calculated_attendance(id)");
     if (filters.dateFrom) query = query.gte("tanggal", filters.dateFrom);
     if (filters.dateTo) query = query.lte("tanggal", filters.dateTo);
     if (filters.department) query = query.eq("department", filters.department);
@@ -376,13 +381,10 @@ async function runCrosscheckFast(rawIds?: number[], filters: { dateFrom?: string
         return (data ?? []) as SqlRow[];
       }));
 
-      const calculatedPages = await Promise.all(Array.from({ length: 100 }, async (_, page) => {
-        const { data, error } = await client.from("calculated_attendance").select("raw_id").order("id", { ascending: true }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-        if (error) throw error;
-        return (data ?? []) as SqlRow[];
-      }));
-      const calculatedIds = new Set(calculatedPages.flat().map((row) => toNum(row.raw_id)));
-      targets = rawPages.flat().filter((row) => !calculatedIds.has(toNum(row.id)));
+      // Calculate ulang seluruh raw attendance dalam rentang yang dipilih.
+      // Baris yang sudah pernah dihitung tetap dimuat agar hasil kalkulasi
+      // dapat diperbarui; koreksi manual dilindungi di loop di bawah.
+      targets = rawPages.flat();
     }
 
     if (filters.limit && filters.limit > 0) targets = targets.slice(0, filters.limit);

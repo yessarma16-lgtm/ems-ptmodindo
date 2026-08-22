@@ -457,6 +457,38 @@ async function getLatestContractEndDates(): Promise<Record<string, string>> {
   });
 }
 
+async function getContractEndDates(): Promise<Record<string, string[]>> {
+  return supabaseGuarded(async () => {
+    const client = getSupabaseClient();
+    const { count, error: countError } = await client
+      .from("contract_history")
+      .select("id", { count: "exact", head: true })
+      .neq("contract_end", "");
+    if (countError) throw countError;
+
+    const total = count ?? 0;
+    const pageCount = Math.ceil(total / SUPABASE_PAGE_SIZE);
+    const pages = await Promise.all(
+      Array.from({ length: pageCount }, (_, i) =>
+        client
+          .from("contract_history")
+          .select("employee_id, contract_end")
+          .neq("contract_end", "")
+          .order("contract_end", { ascending: true })
+          .range(i * SUPABASE_PAGE_SIZE, (i + 1) * SUPABASE_PAGE_SIZE - 1),
+      ),
+    );
+    const result: Record<string, string[]> = {};
+    for (const page of pages) {
+      if (page.error) throw page.error;
+      for (const row of (page.data ?? []) as unknown as { employee_id: string; contract_end: string }[]) {
+        (result[row.employee_id] ??= []).push(row.contract_end);
+      }
+    }
+    return result;
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Simple master data (Departments, Positions, Levels, Skills, Bank)          */
 /* -------------------------------------------------------------------------- */
@@ -722,6 +754,7 @@ export const postgresAdapter: DatabaseAdapter = {
   updateContractHistoryEntry,
   deleteContractHistoryEntry,
   getLatestContractEndDates,
+  getContractEndDates,
 
   getSimpleMasterData,
   createSimpleMasterDataItem,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type PointerEvent as ReactPointerEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -10,10 +10,13 @@ import { MAIN_NAV, FOOTER_NAV, type NavItem } from "@/config/navigation";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
+  isDeveloper: boolean;
   mobileOpen: boolean;
   onClose: () => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
+  width: number;
+  onWidthChange: (width: number) => void;
 }
 
 function NavLink({
@@ -150,7 +153,9 @@ function SidebarContent({
   onToggleCollapsed,
   showMobileClose,
   showCollapseToggle,
+  isDeveloper,
 }: {
+  isDeveloper: boolean;
   collapsed: boolean;
   onClose: () => void;
   onToggleCollapsed?: () => void;
@@ -201,7 +206,7 @@ function SidebarContent({
 
       <nav className={cn("flex-1 space-y-1 overflow-y-auto py-2", collapsed ? "px-2" : "px-3")}>
         {MAIN_NAV.map((item) => (
-          <NavGroup key={item.href} item={item} pathname={pathname} collapsed={collapsed} onNavigate={onClose} />
+          <NavGroup key={item.href} item={item.label === "Settings" && !isDeveloper ? { ...item, children: item.children?.filter((child) => child.label !== "Database") } : item} pathname={pathname} collapsed={collapsed} onNavigate={onClose} />
         ))}
       </nav>
 
@@ -226,7 +231,23 @@ function SidebarContent({
   );
 }
 
-export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapsed }: SidebarProps) {
+export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapsed, isDeveloper, width, onWidthChange }: SidebarProps) {
+  function startResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (collapsed) return;
+    event.preventDefault();
+    const handleMove = (moveEvent: PointerEvent) => onWidthChange(moveEvent.clientX);
+    const handleUp = () => {
+      document.removeEventListener("pointermove", handleMove);
+      document.removeEventListener("pointerup", handleUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("pointermove", handleMove);
+    document.addEventListener("pointerup", handleUp, { once: true });
+  }
+
   return (
     <>
       {/* Desktop / tablet persistent sidebar */}
@@ -236,14 +257,16 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapsed }: S
           collapsed ? "lg:w-20" : "lg:w-64",
         )}
       >
-        <div className="sticky top-0 h-screen">
+        <div className="relative sticky top-0 h-screen" style={{ width: collapsed ? 80 : width }}>
           <SidebarContent
             collapsed={collapsed}
             onClose={onClose}
             onToggleCollapsed={onToggleCollapsed}
             showMobileClose={false}
             showCollapseToggle
+            isDeveloper={isDeveloper}
           />
+          {!collapsed && <div role="separator" aria-label="Resize sidebar" aria-orientation="vertical" onPointerDown={startResize} className="absolute right-0 top-0 z-20 h-full w-1 cursor-col-resize bg-transparent transition-colors hover:bg-sidebar-primary/40" />}
         </div>
       </aside>
 
@@ -257,6 +280,7 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapsed }: S
               onClose={onClose}
               showMobileClose
               showCollapseToggle={false}
+              isDeveloper={isDeveloper}
             />
           </div>
         </div>

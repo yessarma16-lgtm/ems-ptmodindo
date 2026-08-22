@@ -59,6 +59,7 @@ export interface DatabaseAdapter {
   deleteContractHistoryEntry(id: string): Promise<void>;
   /** Every employee's most recent (latest end date) contract_history period — used by the Dashboard's "contract ending soon" cards. Keyed by employee record_id. */
   getLatestContractEndDates(): Promise<Record<string, string>>;
+  getContractEndDates(): Promise<Record<string, string[]>>;
 
   // Master data — simple categories (Departments, Positions, Levels, Skills, Bank)
   getSimpleMasterData(

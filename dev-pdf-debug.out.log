@@ -1,0 +1,14 @@
+
+> employee-management-system@0.1.0 dev
+> next dev -p 3001
+
+▲ Next.js 16.3.1 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://192.168.43.198:3001
+- Environments: .env.local
+✓ Ready in 1822ms
+✓ Running next.config.ts took 141ms
+
+ GET /reports/ot-planning 200 in 3.5s (next.js: 769ms, proxy.ts: 726ms, application-code: 1997ms)
+ GET /api/reports/ot-planning?date=2026-08-22&shed=SHED+A&shed=SHED+B&shed=SHED+C&shed=COMMON 200 in 1094ms (next.js: 491ms, proxy.ts: 18ms, application-code: 585ms)
+ GET /api/reports/ot-planning?date=2026-08-22&shed=SHED+A&shed=SHED+B&shed=SHED+C&shed=COMMON 200 in 88ms (next.js: 10ms, proxy.ts: 10ms, application-code: 67ms)

@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { employeeSchema } from "@/schemas/employee.schema";
 import { getEmployees, createEmployee, ensureEmployeesSheet } from "@/lib/employee-service";
 import { toApiErrorResponse } from "@/lib/api-error";
+import { requireModuleAccess } from "@/lib/module-permission";
+import { logActivity } from "@/lib/activity-log";
 
 export async function GET() {
   try {
@@ -15,6 +17,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const user = await requireModuleAccess("employeesActive", "edit");
     const body = await request.json();
     const parsed = employeeSchema.safeParse(body);
 
@@ -37,6 +40,7 @@ export async function POST(request: NextRequest) {
 
     await ensureEmployeesSheet();
     const employee = await createEmployee(parsed.data);
+    await logActivity(user.name, "Tambah employee");
     return NextResponse.json({ employee }, { status: 201 });
   } catch (err) {
     return toApiErrorResponse(err);

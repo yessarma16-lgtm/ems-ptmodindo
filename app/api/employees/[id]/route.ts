@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { employeeSchema } from "@/schemas/employee.schema";
 import { getEmployeeById, updateEmployee, deleteEmployee } from "@/lib/employee-service";
 import { toApiErrorResponse } from "@/lib/api-error";
+import { requireModuleAccess } from "@/lib/module-permission";
+import { logActivity } from "@/lib/activity-log";
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -19,6 +21,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const user = await requireModuleAccess("employeesActive", "edit");
     const { id } = await params;
     const body = await request.json();
     const parsed = employeeSchema.safeParse(body);
@@ -31,6 +34,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const employee = await updateEmployee(id, parsed.data);
+    await logActivity(user.name, "Edit employee");
     return NextResponse.json({ employee });
   } catch (err) {
     return toApiErrorResponse(err);
@@ -39,8 +43,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const user = await requireModuleAccess("employeesActive", "edit");
     const { id } = await params;
     await deleteEmployee(id);
+    await logActivity(user.name, "Hapus employee");
     return NextResponse.json({ success: true });
   } catch (err) {
     return toApiErrorResponse(err);

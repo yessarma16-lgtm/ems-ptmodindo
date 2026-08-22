@@ -508,6 +508,48 @@ export function ensureSchema(db: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_calculated_attendance_raw ON calculated_attendance(raw_id);
     CREATE INDEX IF NOT EXISTS idx_calculated_attendance_status ON calculated_attendance(status);
   `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ot_planning_estimates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tanggal TEXT NOT NULL,
+      shed TEXT NOT NULL,
+      division TEXT NOT NULL,
+      duration REAL NOT NULL,
+      person REAL NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      UNIQUE (tanggal, shed, division, duration)
+    );
+    CREATE TABLE IF NOT EXISTS ot_planning_config_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      effective_date TEXT NOT NULL,
+      umr REAL NOT NULL,
+      usd_rate REAL NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_ot_estimate_date ON ot_planning_estimates(tanggal);
+    CREATE INDEX IF NOT EXISTS idx_ot_config_date ON ot_planning_config_history(effective_date);
+    CREATE TABLE IF NOT EXISTS ot_planning_mappings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      attendance_department TEXT NOT NULL UNIQUE,
+      shed TEXT NOT NULL,
+      division TEXT NOT NULL,
+      display_order INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS ot_planning_divisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      shed TEXT NOT NULL,
+      division TEXT NOT NULL,
+      display_order INTEGER NOT NULL DEFAULT 0,
+      UNIQUE (shed, division)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ot_mapping_department ON ot_planning_mappings(attendance_department);
+    CREATE TABLE IF NOT EXISTS ot_planning_duration_multipliers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      duration REAL NOT NULL UNIQUE,
+      paid_hours REAL NOT NULL
+    );
+  `);
 }
 
 /**
@@ -546,6 +588,18 @@ export function seedMasterDataIfEmpty(db: DatabaseSync): Record<string, boolean>
   } else {
     seeded.Lookup = false;
   }
+
+  const mappingCount = db.prepare("SELECT COUNT(*) as c FROM ot_planning_mappings").get() as { c: number };
+  if (mappingCount.c === 0) {
+    const rows = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+    const insert = db.prepare("INSERT INTO ot_planning_mappings (attendance_department, shed, division, display_order) VALUES (?, 'SHED A', ?, ?)");
+    rows.forEach((line, idx) => insert.run(`SEWING LINE ${String(line).padStart(2, "0")} SHED A.`, `SEW L${line}`, idx));
+    seeded.OtPlanningMappings = true;
+  } else seeded.OtPlanningMappings = false;
+  const divisionCount = db.prepare("SELECT COUNT(*) as c FROM ot_planning_divisions").get() as { c: number };
+  if (divisionCount.c === 0) { const insert = db.prepare("INSERT INTO ot_planning_divisions (shed, division, display_order) VALUES (?, ?, ?)"); Object.entries({ "SHED A": ["CUTTING", ...Array.from({ length: 10 }, (_, i) => `SEW L${i + 1}`), "QC", "ADM PRODUKSI", "MEKANIK"], "SHED B": ["CUTTING", "FINISHING", ...Array.from({ length: 10 }, (_, i) => `SEW L${i + 13}`), "SEW L14B", "QC", "ADM PRODUKSI", "MEKANIK"], "SHED C": ["CUTTING", "FINISHING", ...Array.from({ length: 5 }, (_, i) => `SEW L${i + 23}`), "SEW L28-32", "CNC", "QC", "ADM PRODUKSI", "MEKANIK"], COMMON: ["HRD & GA & DRIVER & CS & ELEKTRIK & perawat", "IE", "SAMPLE JSS", "QC COMMON", "SAMPLE OP WORKER", "SEWING COMMON", "WAREHOUSE", "PPIC & MD & EXIM", "SAMPLE OP STAFF"] }).forEach(([shed, names]) => (names as string[]).forEach((division, idx) => insert.run(shed, division, idx))); seeded.OtPlanningDivisions = true; } else seeded.OtPlanningDivisions = false;
+  const multiplierCount = db.prepare("SELECT COUNT(*) as c FROM ot_planning_duration_multipliers").get() as { c: number };
+  if (multiplierCount.c === 0) { const insert = db.prepare("INSERT INTO ot_planning_duration_multipliers (duration, paid_hours) VALUES (?, ?)"); [[0.5,0.75],[1,1.5],[1.5,2.5],[2,3.5],[2.5,4.5],[3,5.5],[3.5,6.5],[4,7.5],[4.5,8.5],[5,9.5],[5.5,10.5],[6,11.5],[6.5,12.5],[7,13.5],[7.5,14.5],[8,15.5],[8.5,16.5],[9,17.5],[9.5,18.5],[10,19.5],[11,21.5],[12,22.5],[13,23.5]].forEach(([duration, paid]) => insert.run(duration, paid)); seeded.OtPlanningDurationMultipliers = true; } else seeded.OtPlanningDurationMultipliers = false;
 
   return seeded;
 }
