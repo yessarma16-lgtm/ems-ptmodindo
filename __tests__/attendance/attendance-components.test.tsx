@@ -89,7 +89,7 @@ describe("attendance components", () => {
       }
       if (url === "/api/attendance/crosscheck") return Promise.resolve(response({ summary: { processed: 1, sesuai: 0, tidakSesuai: 1, cekManual: 0, tidakBerlaku: 0, preservedManualCorrections: 0 } }));
       if (url === "/api/attendance/calculation/correct") {
-        expect(JSON.parse(String(init?.body))).toEqual({ id: 3, newValue: 2, note: "Persetujuan manager" });
+        expect(JSON.parse(String(init?.body))).toMatchObject({ id: 3, newValue: 2, note: "Persetujuan manager" });
         return Promise.resolve(response({ ok: true }));
       }
       throw new Error(`Unexpected request: ${url}`);
@@ -99,6 +99,9 @@ describe("attendance components", () => {
     render(<CalculationPanel />);
     await screen.findByText("Tidak Sesuai");
     fireEvent.click(screen.getByRole("button", { name: "Jalankan Crosscheck" }));
+    fireEvent.change(screen.getByLabelText("Calculate from"), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText("Calculate to"), { target: { value: "2026-08-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Process Calculation" }));
     await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === "/api/attendance/crosscheck")).toBe(true));
 
     const statusCell = screen.getByText("Tidak Sesuai");

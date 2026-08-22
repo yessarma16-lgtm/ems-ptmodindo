@@ -9,7 +9,7 @@ interface StatCardProps {
   icon: LucideIcon;
   tone?: "blue" | "emerald" | "rose" | "amber" | "violet";
   subtitle?: string;
-  details?: Array<{ label: string; href: string; endDate?: string }>;
+  details?: Array<{ label: string; href: string; endDate?: string; sublabel?: string }>;
 }
 
 const toneClasses: Record<NonNullable<StatCardProps["tone"]>, string> = {
@@ -40,9 +40,10 @@ export function StatCard({ label, value, icon: Icon, tone = "blue", subtitle, de
               <Link
                 key={`${detail.href}-${detail.endDate ?? ""}`}
                 href={detail.href}
-                className="flex items-center justify-between gap-2 rounded-md px-1 py-0.5 text-sm text-primary hover:bg-muted hover:underline"
+                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-1 py-0.5 text-sm text-primary hover:bg-muted hover:underline"
               >
-                <span className="truncate">{detail.label}</span>
+                <span className="min-w-0 truncate">{detail.label}</span>
+                <span className="min-w-0 truncate text-left text-xs text-muted-foreground">{detail.sublabel ?? ""}</span>
                 {detail.endDate && <span className="shrink-0 text-xs text-muted-foreground">{detail.endDate}</span>}
               </Link>
             ))}

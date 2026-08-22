@@ -32,7 +32,6 @@ function statusVariant(status: CalculatedStatus) {
 
 export function CalculationPanel() {
   const [rows, setRows] = useState<CalculatedAttendanceRecord[]>([]);
-  const [calculatedCount, setCalculatedCount] = useState(0);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [department, setDepartment] = useState("");
@@ -67,7 +66,6 @@ export function CalculationPanel() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to load calculation results.");
       setRows(data.rows ?? []);
-      setCalculatedCount(data.calculatedCount ?? 0);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load calculation results.");
     } finally {
@@ -85,13 +83,18 @@ export function CalculationPanel() {
       if (!saved) return;
       const job = JSON.parse(saved) as { from?: string; to?: string };
       if (job.from && job.to) {
-        setCalculateFrom(job.from);
-        setCalculateTo(job.to);
-        queueMicrotask(() => void runCrosscheck(job.from!, job.to!));
+        queueMicrotask(() => {
+          setCalculateFrom(job.from!);
+          setCalculateTo(job.to!);
+          void runCrosscheck(job.from!, job.to!);
+        });
       }
     } catch {
       localStorage.removeItem(CALCULATION_JOB_KEY);
     }
+  // Resume an interrupted job once on mount; the callback intentionally uses the
+  // persisted date range rather than the current filter state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function runCrosscheck(from: string, to: string) {
@@ -188,7 +191,7 @@ export function CalculationPanel() {
           <Button variant="outline" onClick={() => load()} disabled={loading || running}><RefreshCw className={loading ? "animate-spin" : ""} />Refresh</Button>
           <Button variant="outline" onClick={exportRows} disabled={loading || running}><Download />Export</Button>
           {running && <Button variant="destructive" onClick={() => { localStorage.removeItem(CALCULATION_JOB_KEY); calculateController?.abort(); }}>Cancel Calculate</Button>}
-          <Button aria-label="Calculate" onClick={() => setCalculateDialogOpen(true)} disabled={running}><Play />{running ? <Loader2 className="animate-spin" /> : null}{running && crosscheckProgress ? `${crosscheckProgress.processed}/${crosscheckProgress.total} data berhasil di-crosscheck` : "Calculate"}</Button>
+          <Button aria-label="Jalankan Crosscheck" onClick={() => setCalculateDialogOpen(true)} disabled={running}><Play />{running ? <Loader2 className="animate-spin" /> : null}{running && crosscheckProgress ? `${crosscheckProgress.processed}/${crosscheckProgress.total} data berhasil di-crosscheck` : "Jalankan Crosscheck"}</Button>
         </div>
       </div>
 

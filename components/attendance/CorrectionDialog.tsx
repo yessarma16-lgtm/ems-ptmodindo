@@ -25,7 +25,7 @@ export function CorrectionDialog({ row, open, onOpenChange, onSaved }: Correctio
   const [saving, setSaving] = useState(false);
 
   const parsedValue = Number(value);
-  const canSubmit = it1.trim() !== "" && ot1.trim() !== "" && value.trim() !== "" && Number.isFinite(parsedValue) && parsedValue >= 0 && note.trim() !== "" && !saving;
+  const canSubmit = value.trim() !== "" && Number.isFinite(parsedValue) && parsedValue >= 0 && note.trim() !== "" && !saving;
 
   async function submit() {
     if (!row || !canSubmit) return;
@@ -65,19 +65,19 @@ export function CorrectionDialog({ row, open, onOpenChange, onSaved }: Correctio
             <Input id="correction-ot1" type="time" value={ot1} onChange={(e) => setOt1(e.target.value)} />
           </div>
           <div>
-            <label htmlFor="correction-final-oth" className="mb-1 block text-sm font-medium">NK OTH</label>
+            <label htmlFor="correction-final-oth" className="mb-1 block text-sm font-medium">Final OTH baru</label>
             <Input id="correction-final-oth" type="number" min="0" step="0.5" value={value} onChange={(e) => setValue(e.target.value)} />
           </div>
           <div>
-            <label htmlFor="correction-note" className="mb-1 block text-sm font-medium">Correction note</label>
-            <Textarea id="correction-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Explain the reason for the change" />
+            <label htmlFor="correction-note" className="mb-1 block text-sm font-medium">Correction note wajib diisi</label>
+            <Textarea id="correction-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Jelaskan alasan perubahan" />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Batal</Button>
           <Button onClick={submit} disabled={!canSubmit}>
             {saving ? <Loader2 className="animate-spin" /> : <Save />}
-            Save Changes
+            Simpan Koreksi
           </Button>
         </DialogFooter>
       </DialogContent>

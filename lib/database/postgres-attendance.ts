@@ -464,9 +464,6 @@ async function runCrosscheck(rawIds?: number[], filters: { dateFrom?: string; da
       // sudah dihitung, lalu exclude di sisi aplikasi. Cukup untuk volume
       // attendance bulanan; kalau data membesar signifikan, pertimbangkan
       // fungsi Postgres khusus seperti update_bracket_master.
-      let rawQuery = client.from("raw_attendance").select("*");
-      if (filters.dateFrom) rawQuery = rawQuery.gte("tanggal", filters.dateFrom);
-      if (filters.dateTo) rawQuery = rawQuery.lte("tanggal", filters.dateTo);
       let rawCountQuery = client.from("raw_attendance").select("id", { count: "exact", head: true });
       if (filters.dateFrom) rawCountQuery = rawCountQuery.gte("tanggal", filters.dateFrom);
       if (filters.dateTo) rawCountQuery = rawCountQuery.lte("tanggal", filters.dateTo);
@@ -572,14 +569,6 @@ async function runCrosscheck(rawIds?: number[], filters: { dateFrom?: string; da
 
 async function getCalculatedAttendance(filters: CalculatedAttendanceFilter): Promise<CalculatedAttendanceRecord[]> {
   return supabaseGuarded(async () => {
-    // PostgREST embed: calculated_attendance.raw_id -> raw_attendance(*), butuh FK yang sudah ada di schema.
-    let query = getSupabaseClient()
-      .from("calculated_attendance")
-      .select("*, raw_attendance!inner(nik, nama, department, tanggal, intime, outtime, it1, ot1, whour, kategori)");
-    if (filters.status) query = query.eq("status", filters.status);
-    if (filters.dateFrom) query = query.gte("raw_attendance.tanggal", filters.dateFrom);
-    if (filters.dateTo) query = query.lte("raw_attendance.tanggal", filters.dateTo);
-    if (filters.department) query = query.eq("raw_attendance.department", filters.department);
     let countQuery = getSupabaseClient().from("calculated_attendance").select("id, raw_attendance!inner(tanggal, department)", { count: "exact", head: true });
     if (filters.status) countQuery = countQuery.eq("status", filters.status);
     if (filters.dateFrom) countQuery = countQuery.gte("raw_attendance.tanggal", filters.dateFrom);

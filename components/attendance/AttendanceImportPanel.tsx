@@ -210,9 +210,9 @@ export function AttendanceImportPanel() {
       {preview && (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-3 text-sm">
-            <Badge variant="success">{preview.validRows.length} valid rows</Badge>
-            {preview.conflicts.length > 0 && <Badge variant="warning">{preview.conflicts.length} conflicts</Badge>}
-            {preview.rejected.length > 0 && <Badge variant="destructive">{preview.rejected.length} rejected</Badge>}
+            <Badge variant="success">{preview.validRows.length} baris valid</Badge>
+            {preview.conflicts.length > 0 && <Badge variant="warning">{preview.conflicts.length} baris konflik</Badge>}
+            {preview.rejected.length > 0 && <Badge variant="destructive">{preview.rejected.length} baris ditolak</Badge>}
           </div>
 
           {preview.rejected.length > 0 && (
@@ -234,11 +234,11 @@ export function AttendanceImportPanel() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm font-medium text-warning">
                   <AlertTriangle className="size-4" />
-                  {preview.conflicts.length} rows (NIK + date) already exist in the database
+                  {preview.conflicts.length} baris konflik (NIK + tanggal) sudah ada di database
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setAllDecisions("overwrite")}>Overwrite All</Button>
-                  <Button size="sm" variant="outline" onClick={() => setAllDecisions("skip")}>Skip All</Button>
+                  <Button size="sm" variant="outline" onClick={() => setAllDecisions("overwrite")}>Timpa Semua</Button>
+                  <Button size="sm" variant="outline" onClick={() => setAllDecisions("skip")}>Lewati Semua</Button>
                 </div>
               </div>
               <div className="max-h-80 overflow-y-auto rounded-lg border border-border">
@@ -270,14 +270,14 @@ export function AttendanceImportPanel() {
                               variant={decisions[c.key] === "overwrite" ? "default" : "outline"}
                               onClick={() => setDecision(c.key, "overwrite")}
                             >
-                              Overwrite
+                              Timpa
                             </Button>
                             <Button
                               size="sm"
                               variant={decisions[c.key] === "skip" ? "default" : "outline"}
                               onClick={() => setDecision(c.key, "skip")}
                             >
-                              Skip
+                              Lewati
                             </Button>
                           </div>
                         </TableCell>
@@ -290,10 +290,10 @@ export function AttendanceImportPanel() {
           )}
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={reset} disabled={committing}>Cancel</Button>
+            <Button variant="outline" onClick={reset} disabled={committing}>Batal</Button>
             <Button onClick={handleCommit} disabled={committing || hasUnresolvedConflict}>
               {committing ? <Loader2 className="animate-spin" /> : <Upload />}
-              {committing && commitProgress ? `${commitProgress.processed}/${commitProgress.total} data berhasil terinput` : "Confirm Import"}
+              {committing && commitProgress ? `${commitProgress.processed}/${commitProgress.total} data berhasil terinput` : "Konfirmasi Import"}
             </Button>
           </div>
         </div>

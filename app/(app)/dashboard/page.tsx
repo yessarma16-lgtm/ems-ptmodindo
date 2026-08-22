@@ -20,6 +20,11 @@ interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
+function formatDisplayDate(date: string): string {
+  const [year, month, day] = date.split("-");
+  return year && month && day ? `${day}-${month}-${year}` : date;
+}
+
 export default async function DashboardPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const filter = parseDashboardFilter(sp);
@@ -83,7 +88,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               details={data.cards.endingThisMonthEmployees.map((employee) => ({
                 label: employee.name,
                 href: `/employees/${employee.recordId}`,
-                endDate: employee.endDate,
+                sublabel: employee.department,
+                endDate: formatDisplayDate(employee.endDate),
               }))}
             />
             <StatCard
@@ -95,7 +101,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               details={data.cards.endingNextMonthEmployees.map((employee) => ({
                 label: employee.name,
                 href: `/employees/${employee.recordId}`,
-                endDate: employee.endDate,
+                sublabel: employee.department,
+                endDate: formatDisplayDate(employee.endDate),
               }))}
             />
             <StatCard
@@ -107,7 +114,8 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               details={data.cards.endingNext2MonthsEmployees.map((employee) => ({
                 label: employee.name,
                 href: `/employees/${employee.recordId}`,
-                endDate: employee.endDate,
+                sublabel: employee.department,
+                endDate: formatDisplayDate(employee.endDate),
               }))}
             />
           </div>

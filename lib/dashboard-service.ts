@@ -28,6 +28,7 @@ export interface DashboardCards {
 export interface ContractEndingEmployee {
   recordId: string;
   name: string;
+  department: string;
   endDate: string;
 }
 
@@ -144,8 +145,8 @@ function computeCards(
   const thisMonthEnd = monthEnd(y, m);
   const nextMonthStart = monthStart(y, m + 1);
   const nextMonthEnd = monthEnd(y, m + 1);
+  const twoMonthsStart = monthStart(y, m + 2);
   const twoMonthsEnd = monthEnd(y, m + 2);
-  const today = now.toISOString().slice(0, 10);
 
   let active = 0;
   let newEmployees = 0;
@@ -167,7 +168,12 @@ function computeCards(
     if (!inactive) {
       const end = latestContractEnd[e.recordId];
       if (end) {
-        const employee = { recordId: e.recordId, name: e.name || e.nik || "Unnamed employee", endDate: end };
+        const employee = {
+          recordId: e.recordId,
+          name: e.name || e.nik || "Unnamed employee",
+          department: e.department || "No department",
+          endDate: end,
+        };
         if (end >= thisMonthStart && end <= thisMonthEnd) {
           endingThisMonth++;
           endingThisMonthEmployees.push(employee);
@@ -176,7 +182,7 @@ function computeCards(
           endingNextMonth++;
           endingNextMonthEmployees.push(employee);
         }
-        if (end >= today && end <= twoMonthsEnd) {
+        if (end >= twoMonthsStart && end <= twoMonthsEnd) {
           endingNext2Months++;
           endingNext2MonthsEmployees.push(employee);
         }
