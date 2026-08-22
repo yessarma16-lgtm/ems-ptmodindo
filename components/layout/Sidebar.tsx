@@ -45,7 +45,7 @@ function NavLink({
       )}
     >
       <Icon className="size-[18px] shrink-0" />
-      {!collapsed && <span>{label}</span>}
+      <span className={cn("overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200", collapsed ? "max-w-0 opacity-0" : "max-w-[180px] opacity-100")}>{label}</span>
     </Link>
   );
 }
@@ -53,14 +53,16 @@ function NavLink({
 function ChildLinks({
   items,
   pathname,
+  collapsed,
   onNavigate,
 }: {
   items: NonNullable<NavItem["children"]>;
   pathname: string;
+  collapsed: boolean;
   onNavigate: () => void;
 }) {
   return (
-    <div className="ml-[27px] mt-0.5 space-y-0.5 border-l border-sidebar-border pl-3">
+    <div className={cn("mt-0.5 space-y-0.5", collapsed ? "flex flex-col items-center" : "ml-[27px] border-l border-sidebar-border pl-3")}>
       {items.map((child) => {
         const childActive = pathname === child.href;
         return (
@@ -68,14 +70,17 @@ function ChildLinks({
             key={child.href}
             href={child.href}
             onClick={onNavigate}
+            title={collapsed ? child.label : undefined}
             className={cn(
-              "block rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
+              "flex items-center gap-2 rounded-md py-1.5 text-sm font-medium transition-colors",
+              collapsed ? "justify-center px-2" : "px-2.5",
               childActive
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
                 : "text-sidebar-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
             )}
           >
-            {child.label}
+            <child.icon className="size-4 shrink-0" />
+            <span className={cn("overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200", collapsed ? "max-w-0 opacity-0" : "max-w-[180px] opacity-100")}>{child.label}</span>
           </Link>
         );
       })}
@@ -114,14 +119,10 @@ function NavGroup({
           )}
         >
           <item.icon className="size-[18px] shrink-0" />
-          {!collapsed && (
-            <>
-              <span className="flex-1 text-left">{item.label}</span>
-              <ChevronDown className={cn("size-4 shrink-0 transition-transform", expanded && "rotate-180")} />
-            </>
-          )}
+          <span className={cn("flex-1 overflow-hidden whitespace-nowrap text-left transition-[max-width,opacity] duration-200", collapsed ? "max-w-0 opacity-0" : "max-w-[180px] opacity-100")}>{item.label}</span>
+          {!collapsed && <ChevronDown className={cn("size-4 shrink-0 transition-transform", expanded && "rotate-180")} />}
         </button>
-        {showChildren && <ChildLinks items={item.children} pathname={pathname} onNavigate={onNavigate} />}
+        {(showChildren || (collapsed && active)) && <ChildLinks items={item.children} pathname={pathname} collapsed={collapsed} onNavigate={onNavigate} />}
       </div>
     );
   }
@@ -137,7 +138,7 @@ function NavGroup({
         onNavigate={onNavigate}
       />
       {item.children && !collapsed && (
-        <ChildLinks items={item.children} pathname={pathname} onNavigate={onNavigate} />
+        <ChildLinks items={item.children} pathname={pathname} collapsed={false} onNavigate={onNavigate} />
       )}
     </div>
   );
@@ -173,7 +174,7 @@ function SidebarContent({
             <Image src="/logo-mod.jpg" alt="PT MOD INDO" width={28} height={28} className="rounded" />
           </div>
           {/* text-lg, not text-base — kept at the original (pre-reduction) size deliberately, per explicit request. */}
-          {!collapsed && <p className="text-lg font-bold text-white">PT MOD INDO</p>}
+          <p className={cn("overflow-hidden whitespace-nowrap text-lg font-bold text-white transition-[max-width,opacity] duration-200", collapsed ? "max-w-0 opacity-0" : "max-w-[180px] opacity-100")}>PT MOD INDO</p>
         </div>
         <div className="flex items-center gap-1">
           {showCollapseToggle && onToggleCollapsed && (

@@ -5,8 +5,6 @@ import { getTemplateById, type ExportTemplateDetail } from "@/lib/export-templat
 import { isValidEmployeeFieldKey } from "@/schemas/export-template.schema";
 import { buildExportData, type ExportMatrix } from "@/lib/export-data-builder";
 import { generateWorkbookBuffer, buildExportFilename } from "@/lib/excel-generator";
-import { writeAuditLog } from "@/lib/database/audit-log";
-import { getDatabaseProvider } from "@/lib/database/database";
 import type { ExportFilters, ExportRequestInput } from "@/schemas/export.schema";
 
 /**
@@ -63,7 +61,7 @@ function validateTemplateForExport(template: ExportTemplateDetail | null): asser
 }
 
 /** Loads a template by ID — no validation, callers decide what to require. */
-export function getExportTemplate(templateId: string): ExportTemplateDetail | null {
+export async function getExportTemplate(templateId: string): Promise<ExportTemplateDetail | null> {
   return getTemplateById(templateId);
 }
 
@@ -110,18 +108,11 @@ export interface ExportPreviewResult {
 
 /** Preview never throws for "no employees" — it returns an empty-but-valid matrix so the UI can show a friendly message. */
 export async function buildExportPreview(input: ExportRequestInput): Promise<ExportPreviewResult> {
-  const template = getExportTemplate(input.templateId);
+  const template = await getExportTemplate(input.templateId);
   validateTemplateForExport(template);
 
   const employees = await getExportEmployees(input);
   const matrix = buildExportData(template, employees);
-
-  if (getDatabaseProvider() === "sqlite") {
-    writeAuditLog("EXPORT_PREVIEW", "ExportTemplate", template.id, {
-      template_name: template.name,
-      employee_count: employees.length,
-    });
-  }
 
   return { matrix };
 }
@@ -133,7 +124,7 @@ export interface GeneratedExport {
 
 /** Generate always uses the full selected data set (never truncated) and hard-fails on zero matching employees. */
 export async function generateExcel(input: ExportRequestInput): Promise<GeneratedExport> {
-  const template = getExportTemplate(input.templateId);
+  const template = await getExportTemplate(input.templateId);
   validateTemplateForExport(template);
 
   const employees = await getExportEmployees(input);
@@ -144,14 +135,6 @@ export async function generateExcel(input: ExportRequestInput): Promise<Generate
   const matrix = buildExportData(template, employees);
   const buffer = await generateWorkbookBuffer(matrix);
   const filename = buildExportFilename(template.name);
-
-  if (getDatabaseProvider() === "sqlite") {
-    writeAuditLog("EXPORT_GENERATED", "ExportTemplate", template.id, {
-      template_name: template.name,
-      employee_count: employees.length,
-      filename,
-    });
-  }
 
   return { buffer, filename };
 }

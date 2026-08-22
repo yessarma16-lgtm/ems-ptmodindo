@@ -197,19 +197,6 @@ export async function ensureSchema(client: Client): Promise<void> {
   `);
   await ensurePublicApplyToken(client);
 
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id BIGSERIAL PRIMARY KEY,
-      record_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
-      action TEXT NOT NULL,
-      entity TEXT NOT NULL,
-      entity_id TEXT NOT NULL DEFAULT '',
-      detail TEXT NOT NULL DEFAULT '',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "user" TEXT NOT NULL DEFAULT 'SYSTEM'
-    );
-  `);
-
   // Online Register — candidate drafts, shaped like `employees` (see
   // ensureOnlineRegistrationsEmployeeShaped) so the same EmployeeForm UI can
   // edit a registration exactly like editing a real employee.

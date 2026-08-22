@@ -137,7 +137,7 @@ async function initSupportingSheet(name: string, headers: string[]): Promise<She
  *   - `Lookup` (enumerated dropdowns, seeded ONLY if empty)
  *   - `Users` (seeded with one default admin account ONLY if empty)
  *   - `Role_Permissions` (seeded with one row per role ONLY if empty)
- *   - `Contract_History`, `Family`, `BPJS`, `Settings`, `Audit_Log`,
+ *   - `Contract_History`, `Family`, `BPJS`, `Settings`,
  *     `Online_Registrations` (structure only — Settings and
  *     Online_Registrations have real read/write code, see
  *     lib/database/google-sheets-settings.ts and

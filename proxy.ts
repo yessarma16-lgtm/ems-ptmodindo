@@ -8,7 +8,7 @@ import { verifySessionToken, SESSION_COOKIE } from "@/lib/auth/session";
  * lib/auth/session.ts (Web Crypto, no Node-only APIs) — never the SQLite
  * user lookup.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;

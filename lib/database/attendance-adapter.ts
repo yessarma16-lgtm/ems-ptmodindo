@@ -2,11 +2,7 @@ import "server-only";
 
 import type { DayType } from "@/lib/attendance/day-type";
 import type { BracketLookupFn } from "@/lib/attendance/bracket-table";
-import { getDatabaseProvider } from "@/lib/database/database";
-import { getSqliteAttendanceAdapter } from "@/lib/database/sqlite-attendance";
 import { getPostgresAttendanceAdapter } from "@/lib/database/postgres-attendance";
-import { AttendanceProviderNotSupportedError } from "@/lib/database/attendance-errors";
-
 export { AttendanceProviderNotSupportedError, AttendanceValidationError } from "@/lib/database/attendance-errors";
 import type {
   BracketMasterRow,
@@ -47,9 +43,11 @@ export interface AttendanceDatabaseAdapter {
    * ImportSummary — sesuai spec Page 1 ("tanya user: Timpa atau Lewati").
    * "skip"/"overwrite" dipakai saat user sudah menjawab pertanyaan itu.
    */
-  importRawAttendance(rows: RawAttendanceInput[], onConflict?: "ask" | "skip" | "overwrite"): Promise<ImportSummary>;
+  importRawAttendance(rows: RawAttendanceInput[], onConflict?: "ask" | "skip" | "overwrite", onProgress?: (processed: number) => void): Promise<ImportSummary>;
   findExistingByNikDate(pairs: NikDatePair[]): Promise<ExistingRecord[]>;
   getRawAttendance(filters: RawAttendanceFilter): Promise<RawAttendanceRecord[]>;
+  countRawAttendance(filters: { dateFrom?: string; dateTo?: string; department?: string; search?: string }): Promise<number>;
+  countCalculatedAttendance(filters: CalculatedAttendanceFilter): Promise<number>;
   updateRawAttendanceTimes(rawId: number, it1: string | null, ot1: string | null): Promise<void>;
   /** Diturunkan dari raw_attendance (GROUP BY), bukan tabel terpisah — lihat ImportHistoryEntry. */
   getImportHistory(filters?: ImportHistoryFilter): Promise<ImportHistoryEntry[]>;
@@ -68,17 +66,11 @@ export interface AttendanceDatabaseAdapter {
 
   // calculated_attendance
   /** rawIds diisi -> paksa hitung ulang baris itu (dipakai juga utk refresh setelah bracket_master berubah). rawIds kosong/undefined -> hanya proses raw_attendance yang belum punya calculated_attendance sama sekali. */
-  runCrosscheck(rawIds?: number[]): Promise<CalculationSummary>;
+  runCrosscheck(rawIds?: number[], filters?: { dateFrom?: string; dateTo?: string; limit?: number }, onProgress?: (processed: number, total: number) => void, shouldCancel?: () => boolean): Promise<CalculationSummary>;
   getCalculatedAttendance(filters: CalculatedAttendanceFilter): Promise<CalculatedAttendanceRecord[]>;
   correctFinalOth(id: number, newValue: number, note: string, correctedBy: string): Promise<void>;
 }
 
 export function getAttendanceAdapter(): AttendanceDatabaseAdapter {
-  const provider = getDatabaseProvider(); // reuse selector yang sama dari database.ts
-  if (provider === "google") {
-    throw new AttendanceProviderNotSupportedError(
-      "Modul Attendance/Overtime hanya tersedia di provider SQLite atau Postgres.",
-    );
-  }
-  return provider === "postgres" ? getPostgresAttendanceAdapter() : getSqliteAttendanceAdapter();
+  return getPostgresAttendanceAdapter();
 }

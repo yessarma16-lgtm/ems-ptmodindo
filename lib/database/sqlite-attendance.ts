@@ -151,6 +151,7 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
   async function importRawAttendance(
     rows: RawAttendanceInput[],
     onConflict: "ask" | "skip" | "overwrite" = "ask",
+    onProgress?: (processed: number) => void,
   ): Promise<ImportSummary> {
     if (rows.length === 0) {
       return { inserted: 0, skipped: 0, rejected: 0, conflicts: [] };
@@ -199,6 +200,7 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
         inserted += 1;
       }
       db.exec("COMMIT");
+      onProgress?.(inserted);
     } catch (err) {
       db.exec("ROLLBACK");
       throw err;
@@ -264,6 +266,29 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const rows = db.prepare(`SELECT * FROM raw_attendance ${where} ORDER BY tanggal, nik`).all(...params) as SqlRow[];
     return rows.map(rowToRawAttendance);
+  }
+
+  async function countRawAttendance(filters: { dateFrom?: string; dateTo?: string; department?: string; search?: string }): Promise<number> {
+    const conditions: string[] = [];
+    const params: string[] = [];
+    if (filters.dateFrom) { conditions.push("tanggal >= ?"); params.push(filters.dateFrom); }
+    if (filters.dateTo) { conditions.push("tanggal <= ?"); params.push(filters.dateTo); }
+    if (filters.department) { conditions.push("department = ?"); params.push(filters.department); }
+    if (filters.search?.trim()) { conditions.push("(nik LIKE ? OR nama LIKE ?)"); params.push(`%${filters.search.trim()}%`, `%${filters.search.trim()}%`); }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    return Number((db.prepare(`SELECT COUNT(*) AS count FROM raw_attendance ${where}`).get(...params) as SqlRow).count);
+  }
+
+  async function countCalculatedAttendance(filters: CalculatedAttendanceFilter): Promise<number> {
+    const conditions: string[] = [];
+    const params: string[] = [];
+    if (filters.dateFrom) { conditions.push("ra.tanggal >= ?"); params.push(filters.dateFrom); }
+    if (filters.dateTo) { conditions.push("ra.tanggal <= ?"); params.push(filters.dateTo); }
+    if (filters.department) { conditions.push("ra.department = ?"); params.push(filters.department); }
+    if (filters.status) { conditions.push("ca.status = ?"); params.push(filters.status); }
+    if (filters.search?.trim()) { conditions.push("(ra.nik LIKE ? OR ra.nama LIKE ?)"); params.push(`%${filters.search.trim()}%`, `%${filters.search.trim()}%`); }
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    return Number((db.prepare(`SELECT COUNT(*) AS count FROM calculated_attendance ca JOIN raw_attendance ra ON ra.id = ca.raw_id ${where}`).get(...params) as SqlRow).count);
   }
 
   async function updateRawAttendanceTimes(rawId: number, it1: string | null, ot1: string | null): Promise<void> {
@@ -361,8 +386,8 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     return rows.map(rowToHistory);
   }
 
-  async function runCrosscheck(rawIds?: number[]): Promise<CalculationSummary> {
-    const targets: SqlRow[] = rawIds && rawIds.length > 0
+  async function runCrosscheck(rawIds?: number[], filters?: { dateFrom?: string; dateTo?: string }, onProgress?: (processed: number, total: number) => void, shouldCancel?: () => boolean): Promise<CalculationSummary> {
+    let targets: SqlRow[] = rawIds && rawIds.length > 0
       ? (rawIds.map((id) => db.prepare("SELECT * FROM raw_attendance WHERE id = ?").get(id) as SqlRow | undefined).filter((r): r is SqlRow => !!r))
       : (db.prepare(
           "SELECT ra.* FROM raw_attendance ra WHERE NOT EXISTS (SELECT 1 FROM calculated_attendance ca WHERE ca.raw_id = ra.id)",
@@ -374,7 +399,15 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
 
     db.exec("BEGIN");
     try {
-      for (const targetRow of targets) {
+    if (filters?.dateFrom || filters?.dateTo) {
+      targets = targets.filter((row) => {
+        const date = toStr(row.tanggal);
+        return (!filters.dateFrom || date >= filters.dateFrom) && (!filters.dateTo || date <= filters.dateTo);
+      });
+    }
+    const totalTargets = targets.length;
+    for (const [targetIndex, targetRow] of targets.entries()) {
+        if (shouldCancel?.()) throw new Error("Crosscheck dibatalkan.");
         const raw = rowToRawAttendance(targetRow);
         const dayType = getDayType(raw.tanggal);
         const existingRow = db.prepare("SELECT * FROM calculated_attendance WHERE raw_id = ?").get(raw.id) as SqlRow | undefined;
@@ -394,7 +427,8 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
           db.prepare("UPDATE calculated_attendance SET system_calculated_oth=?, day_type=?, bracket_used=?, calculated_at=? WHERE id=?")
             .run(systemOth, dayType, bracketUsed, now, toNum(existingRow.id));
           summary.preservedManualCorrections += 1;
-          summary.processed += 1;
+      summary.processed += 1;
+      onProgress?.(targetIndex + 1, totalTargets);
           continue;
         }
 
@@ -470,6 +504,7 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     importRawAttendance,
     findExistingByNikDate,
     getRawAttendance,
+    countRawAttendance,
     updateRawAttendanceTimes,
     getImportHistory,
     deleteImport,
@@ -478,6 +513,7 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     getBracketMasterHistory,
     runCrosscheck,
     getCalculatedAttendance,
+    countCalculatedAttendance,
     correctFinalOth,
   };
 }

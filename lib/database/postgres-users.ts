@@ -56,6 +56,9 @@ export async function getUserByUsernameWithCredentials(username: string): Promis
       .from("users")
       .select("*")
       .ilike("username", username)
+      .eq("status", "Active")
+      .order("id", { ascending: true })
+      .limit(1)
       .maybeSingle();
     if (error) throw error;
     if (!data) return null;
@@ -164,5 +167,13 @@ export async function toggleUserStatus(id: string): Promise<User> {
       .single();
     if (updateError) throw updateError;
     return rowToUser(data as SqlRow);
+  });
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  return supabaseGuarded(async () => {
+    const { data, error } = await getSupabaseClient().from("users").delete().eq("id", id).select("id");
+    if (error) throw error;
+    if (!data || data.length === 0) throw new RecordNotFoundError("User", id);
   });
 }

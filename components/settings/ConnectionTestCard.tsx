@@ -9,17 +9,12 @@ import { Badge } from "@/components/ui/badge";
 
 interface HealthResponse {
   status: "ok" | "error";
-  database: { provider: "sqlite" | "google" | "postgres"; connected: boolean };
+  database: { provider: "postgres"; connected: boolean };
   environment: "Development" | "Production";
-  spreadsheet?: { title: string; sheets: string[] };
   error?: string;
 }
 
-const PROVIDER_LABEL: Record<HealthResponse["database"]["provider"], string> = {
-  sqlite: "SQLite",
-  google: "Google Sheets",
-  postgres: "Postgres (Supabase)",
-};
+const PROVIDER_LABEL = "Postgres (Supabase)";
 
 export function ConnectionTestCard() {
   const [loading, setLoading] = useState(false);
@@ -35,8 +30,8 @@ export function ConnectionTestCard() {
     } catch {
       setResult({
         status: "error",
-        database: { provider: "sqlite", connected: false },
-        environment: "Development",
+        database: { provider: "postgres", connected: false },
+        environment: "Production",
         error: "Unable to connect to Employee Database.",
       });
     } finally {
@@ -62,7 +57,7 @@ export function ConnectionTestCard() {
         {result && (
           <div className="rounded-lg border border-border p-4 text-sm">
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <Badge variant="outline">Provider: {PROVIDER_LABEL[result.database.provider]}</Badge>
+              <Badge variant="outline">Provider: {PROVIDER_LABEL}</Badge>
               <Badge variant="outline">Environment: {result.environment}</Badge>
             </div>
 
@@ -71,20 +66,6 @@ export function ConnectionTestCard() {
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
                 <div>
                   <p className="font-medium">Connected successfully</p>
-                  {result.spreadsheet && (
-                    <>
-                      <p className="mt-1 text-muted-foreground">
-                        Spreadsheet: <span className="text-foreground">{result.spreadsheet.title}</span>
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {result.spreadsheet.sheets.map((s) => (
-                          <Badge key={s} variant="secondary">
-                            {s}
-                          </Badge>
-                        ))}
-                      </div>
-                    </>
-                  )}
                 </div>
               </div>
             ) : (

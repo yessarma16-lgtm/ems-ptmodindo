@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { Loader2, Pencil, Plus, Power, RotateCw } from "lucide-react";
+import { Loader2, Pencil, Plus, Power, RotateCw, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +48,7 @@ export function UserManagement() {
   const [form, setForm] = useState<FormValues>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -131,6 +132,24 @@ export function UserManagement() {
     }
   }
 
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setPendingId(deleteTarget.id);
+    try {
+      const res = await fetch(`/api/users/${deleteTarget.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to delete user.");
+        return;
+      }
+      toast.success(`${deleteTarget.name} deleted.`);
+      setDeleteTarget(null);
+      await load();
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -205,6 +224,9 @@ export function UserManagement() {
                           className={active ? "text-destructive hover:text-destructive" : "text-success hover:text-success"}
                         >
                           <Power className="size-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" title="Delete" disabled={pendingId === user.id} onClick={() => setDeleteTarget(user)} className="text-destructive hover:text-destructive">
+                          <Trash2 className="size-4" />
                         </Button>
                       </div>
                     </TableCell>
@@ -304,6 +326,24 @@ export function UserManagement() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open && pendingId === null) setDeleteTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>
+              Delete <strong>{deleteTarget?.name}</strong> ({deleteTarget?.username}) permanently? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDeleteTarget(null)} disabled={pendingId !== null}>Cancel</Button>
+            <Button type="button" variant="destructive" onClick={handleDelete} disabled={pendingId !== null}>
+              {pendingId === deleteTarget?.id && <Loader2 className="animate-spin" />}
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

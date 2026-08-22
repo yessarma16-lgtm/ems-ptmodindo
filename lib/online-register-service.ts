@@ -1,13 +1,10 @@
 import "server-only";
 
-import { getDatabaseProvider } from "@/lib/database/database";
-import * as sqliteStore from "@/lib/database/sqlite-online-registrations";
-import * as sheetsStore from "@/lib/database/google-sheets-online-registrations";
 import * as postgresStore from "@/lib/database/postgres-online-registrations";
 import type { EmployeeInput } from "@/lib/database/types";
-import type { InviteRegistrationInput } from "@/lib/database/sqlite-online-registrations";
+import type { InviteRegistrationInput } from "@/lib/database/postgres-online-registrations";
 
-export type { OnlineRegistration, InviteRegistrationInput } from "@/lib/database/sqlite-online-registrations";
+export type { OnlineRegistration, InviteRegistrationInput } from "@/lib/database/postgres-online-registrations";
 export {
   RegistrationIncompleteError,
   RegistrationAlreadyDecidedError,
@@ -22,12 +19,7 @@ export {
  * reads/writes the `online_registrations` table via Supabase.
  */
 
-function store() {
-  const provider = getDatabaseProvider();
-  if (provider === "google") return sheetsStore;
-  if (provider === "postgres") return postgresStore;
-  return sqliteStore;
-}
+const store = () => postgresStore;
 
 export async function getOnlineRegistrations() {
   return store().getOnlineRegistrations();

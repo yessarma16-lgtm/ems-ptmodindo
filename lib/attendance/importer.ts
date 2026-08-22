@@ -195,9 +195,11 @@ export async function parseAttendanceImportWorkbook(buffer: Buffer): Promise<Par
   const rows: RawAttendanceParsedRow[] = [];
   const rejected: RawAttendanceRejectedRow[] = [];
 
-  for (let rowNumber = headerRowNumber + 1; rowNumber <= sheet.rowCount; rowNumber++) {
-    const row = sheet.getRow(rowNumber);
-    if (row.cellCount === 0 || row.values == null) continue;
+  // `rowCount` can be inflated by Excel formatting/trailing empty rows up to
+  // Excel's worksheet limit. `eachRow({ includeEmpty: false })` visits only
+  // rows that actually contain values, avoiding an O(1M) scan for small files.
+  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber <= headerRowNumber || row.values == null) return;
 
     const raw: Partial<Record<WhitelistHeader, unknown>> = {};
     columnKeyByIndex.forEach((key, colNumber) => {
@@ -205,7 +207,7 @@ export async function parseAttendanceImportWorkbook(buffer: Buffer): Promise<Par
     });
 
     const hasAnyValue = Object.values(raw).some((v) => v !== null && v !== undefined && String(v).trim() !== "");
-    if (!hasAnyValue) continue; // baris kosong sepenuhnya (umum di baris trailing spreadsheet) — dilewati, bukan reject
+    if (!hasAnyValue) return;
 
     const nik = cellToString(raw.NIK);
     const nama = cellToString(raw.Nama);
@@ -214,7 +216,7 @@ export async function parseAttendanceImportWorkbook(buffer: Buffer): Promise<Par
     if (!nik || !nama || !tanggal) {
       const missing = [!nik && "NIK", !nama && "Nama", !tanggal && "Date"].filter(Boolean).join(", ");
       rejected.push({ rowNumber, reason: `Kolom wajib kosong/tidak valid: ${missing}` });
-      continue;
+      return;
     }
 
     rows.push({
@@ -235,7 +237,7 @@ export async function parseAttendanceImportWorkbook(buffer: Buffer): Promise<Par
       kategori: cellToString(raw.Description),
       quitDate: cellToString(raw.QuitDate),
     });
-  }
+  });
 
   return { headerRowNumber, rows, rejected };
 }

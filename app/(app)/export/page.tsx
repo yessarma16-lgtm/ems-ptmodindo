@@ -20,7 +20,7 @@ export default async function ExportPage({
   searchParams: Promise<{ templateId?: string }>;
 }) {
   const { templateId } = await searchParams;
-  const activeTemplates = getTemplates().filter((t) => t.status.toLowerCase() === "active");
+  const activeTemplates = (await getTemplates()).filter((t) => t.status.toLowerCase() === "active");
 
   const configured = isDatabaseConfigured();
   let employees: EmployeeRecord[] = [];

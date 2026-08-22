@@ -13,7 +13,7 @@ export default async function EditExportTemplatePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const template = getTemplateById(id);
+  const template = await getTemplateById(id);
   if (!template) notFound();
 
   const employees = await getEmployees();

@@ -11,6 +11,7 @@
     "db:init": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/init-database.ts",
     "db:init:sqlite": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/init-sqlite.ts",
     "db:init:postgres": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/init-postgres.ts",
+    "db:migrate:sqlite-to-postgres": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/migrate-sqlite-to-postgres.ts",
     "db:migrate:sheets-to-postgres": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/migrate-sheets-to-postgres.ts",
     "db:backfill:probation-contracts": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/backfill-probation-contracts.ts",
     "db:repair:contract-dates": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/repair-contract-dates.ts",

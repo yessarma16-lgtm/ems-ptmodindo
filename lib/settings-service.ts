@@ -1,18 +1,10 @@
 import "server-only";
 
-import { getDatabaseProvider } from "@/lib/database/database";
-import * as sqliteStore from "@/lib/database/sqlite-settings";
-import * as sheetsStore from "@/lib/database/google-sheets-settings";
 import * as postgresStore from "@/lib/database/postgres-settings";
 
 /** App-wide key/value settings — available on all three providers (data/employee.db, the `Settings` sheet, or the Postgres `settings` table). */
 
-function store() {
-  const provider = getDatabaseProvider();
-  if (provider === "google") return sheetsStore;
-  if (provider === "postgres") return postgresStore;
-  return sqliteStore;
-}
+const store = () => postgresStore;
 
 export async function getPublicApplyToken(): Promise<string> {
   return store().getPublicApplyToken();

@@ -18,13 +18,29 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await getCurrentSessionUser();
-    const summary = await commitAttendanceImport(
-      parsed.data.rows,
-      parsed.data.decisions,
-      user?.name ?? "SYSTEM",
-      parsed.data.sourceFilename,
-    );
-    return NextResponse.json({ summary });
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (value: unknown) => controller.enqueue(encoder.encode(`${JSON.stringify(value)}\n`));
+        try {
+          const summary = await commitAttendanceImport(
+            parsed.data.rows,
+            parsed.data.decisions,
+            user?.name ?? "SYSTEM",
+            parsed.data.sourceFilename,
+            undefined,
+            (processed, total) => send({ type: "progress", processed, total }),
+          );
+          send({ type: "done", summary });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Failed to save imported data.";
+          send({ type: "error", message });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+    return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-cache" } });
   } catch (err) {
     return toApiErrorResponse(err);
   }

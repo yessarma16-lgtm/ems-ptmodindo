@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
     const parsed = attendanceCalculationFilterSchema.safeParse(params);
     if (!parsed.success) return NextResponse.json({ error: "Filter tidak valid.", issues: parsed.error.flatten().fieldErrors }, { status: 400 });
     const rows = await getAttendanceAdapter().getCalculatedAttendance(parsed.data);
-    return NextResponse.json({ rows });
+    const calculatedCount = await getAttendanceAdapter().countCalculatedAttendance(parsed.data);
+    return NextResponse.json({ rows, calculatedCount });
   } catch (err) {
     return toApiErrorResponse(err);
   }

@@ -80,6 +80,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               icon={Clock3}
               tone="rose"
               subtitle="Contract & Probation"
+              details={data.cards.endingThisMonthEmployees.map((employee) => ({
+                label: employee.name,
+                href: `/employees/${employee.recordId}`,
+                endDate: employee.endDate,
+              }))}
             />
             <StatCard
               label="Contract Ending Next Month"
@@ -87,6 +92,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               icon={FileClock}
               tone="amber"
               subtitle="Contract & Probation"
+              details={data.cards.endingNextMonthEmployees.map((employee) => ({
+                label: employee.name,
+                href: `/employees/${employee.recordId}`,
+                endDate: employee.endDate,
+              }))}
             />
             <StatCard
               label="Contract Ending Next 2 Months"
@@ -94,6 +104,11 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               icon={CalendarClock}
               tone="violet"
               subtitle="Contract & Probation"
+              details={data.cards.endingNext2MonthsEmployees.map((employee) => ({
+                label: employee.name,
+                href: `/employees/${employee.recordId}`,
+                endDate: employee.endDate,
+              }))}
             />
           </div>
 

@@ -1,6 +1,8 @@
 import "server-only";
 
+import { getDatabaseProvider } from "@/lib/database/database";
 import * as store from "@/lib/database/sqlite-export-templates";
+import * as postgresStore from "@/lib/database/postgres-export-templates";
 import { RecordNotFoundError } from "@/lib/database/errors";
 
 export type {
@@ -21,7 +23,7 @@ export { DuplicateSheetNameError } from "@/lib/database/sqlite-export-templates"
  * Export Template Builder service — the only module API routes should call
  * for template/sheet/column data. Delegates to `lib/database/sqlite-export-templates.ts`.
  *
- *   UI -> API Route -> Export Template Service (this file) -> SQLite
+ *   UI -> API Route -> Export Template Service -> active database adapter
  *
  * STEP 3 scope: configuration only. No Excel is generated here.
  */
@@ -33,58 +35,62 @@ export class ExportTemplateNotFoundError extends RecordNotFoundError {
   }
 }
 
+function activeStore() {
+  return getDatabaseProvider() === "postgres" ? postgresStore : store;
+}
+
 export function getTemplates() {
-  return store.getTemplates();
+  return activeStore().getTemplates();
 }
 
 export function getTemplateById(id: string) {
-  return store.getTemplateById(id);
+  return activeStore().getTemplateById(id);
 }
 
 export function createTemplate(input: store.TemplateInput) {
-  return store.createTemplate(input);
+  return activeStore().createTemplate(input);
 }
 
 export function updateTemplate(id: string, input: Partial<store.TemplateInput>) {
-  return store.updateTemplate(id, input);
+  return activeStore().updateTemplate(id, input);
 }
 
 export function toggleTemplateStatus(id: string) {
-  return store.toggleTemplateStatus(id);
+  return activeStore().toggleTemplateStatus(id);
 }
 
 export function duplicateTemplate(id: string) {
-  return store.duplicateTemplate(id);
+  return activeStore().duplicateTemplate(id);
 }
 
 export function createTemplateSheet(templateId: string, name: string) {
-  return store.createSheet(templateId, name);
+  return activeStore().createSheet(templateId, name);
 }
 
 export function updateTemplateSheet(sheetId: string, name: string) {
-  return store.updateSheetName(sheetId, name);
+  return activeStore().updateSheetName(sheetId, name);
 }
 
 export function deleteTemplateSheet(sheetId: string) {
-  return store.deleteSheet(sheetId);
+  return activeStore().deleteSheet(sheetId);
 }
 
 export function reorderTemplateSheets(templateId: string, orderedSheetIds: string[]) {
-  return store.reorderSheets(templateId, orderedSheetIds);
+  return activeStore().reorderSheets(templateId, orderedSheetIds);
 }
 
 export function createTemplateColumn(sheetId: string, input: store.ColumnInput) {
-  return store.createColumn(sheetId, input);
+  return activeStore().createColumn(sheetId, input);
 }
 
 export function updateTemplateColumn(columnId: string, input: Partial<store.ColumnInput>) {
-  return store.updateColumn(columnId, input);
+  return activeStore().updateColumn(columnId, input);
 }
 
 export function deleteTemplateColumn(columnId: string) {
-  return store.deleteColumn(columnId);
+  return activeStore().deleteColumn(columnId);
 }
 
 export function reorderTemplateColumns(sheetId: string, orderedColumnIds: string[]) {
-  return store.reorderColumns(sheetId, orderedColumnIds);
+  return activeStore().reorderColumns(sheetId, orderedColumnIds);
 }

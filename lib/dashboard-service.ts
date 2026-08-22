@@ -20,6 +20,15 @@ export interface DashboardCards {
   endingThisMonth: number;
   endingNextMonth: number;
   endingNext2Months: number;
+  endingThisMonthEmployees: ContractEndingEmployee[];
+  endingNextMonthEmployees: ContractEndingEmployee[];
+  endingNext2MonthsEmployees: ContractEndingEmployee[];
+}
+
+export interface ContractEndingEmployee {
+  recordId: string;
+  name: string;
+  endDate: string;
 }
 
 export interface MonthPoint {
@@ -144,6 +153,9 @@ function computeCards(
   let endingThisMonth = 0;
   let endingNextMonth = 0;
   let endingNext2Months = 0;
+  const endingThisMonthEmployees: ContractEndingEmployee[] = [];
+  const endingNextMonthEmployees: ContractEndingEmployee[] = [];
+  const endingNext2MonthsEmployees: ContractEndingEmployee[] = [];
 
   for (const e of items) {
     const inactive = isInactive(e.status);
@@ -155,9 +167,19 @@ function computeCards(
     if (!inactive) {
       const end = latestContractEnd[e.recordId];
       if (end) {
-        if (end >= thisMonthStart && end <= thisMonthEnd) endingThisMonth++;
-        if (end >= nextMonthStart && end <= nextMonthEnd) endingNextMonth++;
-        if (end >= today && end <= twoMonthsEnd) endingNext2Months++;
+        const employee = { recordId: e.recordId, name: e.name || e.nik || "Unnamed employee", endDate: end };
+        if (end >= thisMonthStart && end <= thisMonthEnd) {
+          endingThisMonth++;
+          endingThisMonthEmployees.push(employee);
+        }
+        if (end >= nextMonthStart && end <= nextMonthEnd) {
+          endingNextMonth++;
+          endingNextMonthEmployees.push(employee);
+        }
+        if (end >= today && end <= twoMonthsEnd) {
+          endingNext2Months++;
+          endingNext2MonthsEmployees.push(employee);
+        }
       }
     }
   }
@@ -169,6 +191,9 @@ function computeCards(
     endingThisMonth,
     endingNextMonth,
     endingNext2Months,
+    endingThisMonthEmployees,
+    endingNextMonthEmployees,
+    endingNext2MonthsEmployees,
   };
 }
 

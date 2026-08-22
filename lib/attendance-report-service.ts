@@ -3,18 +3,12 @@ import "server-only";
 import ExcelJS from "exceljs";
 
 import { getAttendanceAdapter } from "@/lib/database/attendance-adapter";
-import { getDatabaseProvider } from "@/lib/database/database";
-import { writeAuditLog } from "@/lib/database/audit-log";
 import type { CalculatedAttendanceRecord, CalculatedAttendanceFilter } from "@/lib/database/attendance-types";
 
 export type AttendanceReportKind = "employee" | "department" | "exceptions";
 
 function safePeriod(filters: CalculatedAttendanceFilter): string {
   return `${filters.dateFrom ?? "all"}_${filters.dateTo ?? "all"}`;
-}
-
-function total(rows: CalculatedAttendanceRecord[]): number {
-  return rows.reduce((sum, row) => sum + (row.finalOth ?? 0), 0);
 }
 
 function styleWorksheet(sheet: ExcelJS.Worksheet) {
@@ -56,9 +50,9 @@ export async function buildAttendanceReportBuffer(kind: AttendanceReportKind, ro
 }
 
 export async function generateAttendanceReport(kind: AttendanceReportKind, filters: CalculatedAttendanceFilter, exportedBy: string) {
+  void exportedBy;
   const rows = await getAttendanceAdapter().getCalculatedAttendance(filters);
   const buffer = await buildAttendanceReportBuffer(kind, rows);
   const filename = `attendance-${kind}-${safePeriod(filters)}.xlsx`;
-  if (getDatabaseProvider() === "sqlite") writeAuditLog("ATTENDANCE_REPORT_EXPORT", "AttendanceReport", filename, { kind, exported_by: exportedBy, row_count: rows.length, total_final_oth: total(rows), date_from: filters.dateFrom ?? null, date_to: filters.dateTo ?? null, department: filters.department ?? null });
   return { buffer, filename };
 }

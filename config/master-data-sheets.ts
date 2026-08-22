@@ -11,7 +11,7 @@ import { EMPLOYEES_SHEET_HEADERS } from "@/config/employee-fields";
  * marital status, ...) in one sheet, disambiguated by a TYPE column:
  * ID | TYPE | CODE | NAME | STATUS | SORT_ORDER.
  *
- * `Contract_History`, `Family`, `BPJS`, `Settings`, `Audit_Log` are prepared
+ * `Contract_History`, `Family`, `BPJS`, and `Settings` are prepared
  * with their header row only in STEP 2 — no CRUD UI is built for them yet,
  * they are structural groundwork for future phases.
  */
@@ -118,6 +118,5 @@ export const SUPPORTING_SHEET_HEADERS: Record<string, string[]> = {
   Family: ["RECORD_ID", "EMPLOYEE_ID", "RELATIONSHIP", "NAME", "STATUS", "CREATED_AT", "UPDATED_AT"],
   BPJS: ["RECORD_ID", "EMPLOYEE_ID", "TYPE", "NUMBER", "STATUS", "CREATED_AT", "UPDATED_AT"],
   [SETTINGS_SHEET_NAME]: ["KEY", "VALUE", "DESCRIPTION", "UPDATED_AT"],
-  Audit_Log: ["RECORD_ID", "ACTION", "ENTITY", "ENTITY_ID", "DETAIL", "CREATED_AT", "USER"],
   [ONLINE_REGISTRATIONS_SHEET_NAME]: ONLINE_REGISTRATIONS_SHEET_HEADERS,
 };

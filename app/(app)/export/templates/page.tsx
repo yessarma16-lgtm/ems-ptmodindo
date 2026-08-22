@@ -8,8 +8,8 @@ import { getTemplates } from "@/lib/export-template-service";
 
 export const dynamic = "force-dynamic";
 
-export default function ExportTemplatesPage() {
-  const templates = getTemplates();
+export default async function ExportTemplatesPage() {
+  const templates = await getTemplates();
 
   return (
     <div>

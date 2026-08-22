@@ -6,12 +6,23 @@ import {
   FileSpreadsheet,
   Settings2,
   ClipboardCheck,
+  UserCheck,
+  UserX,
+  Globe2,
+  FileClock,
+  Calculator,
+  TimerReset,
+  Database,
+  UserRound,
+  ListTree,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
 export interface NavChild {
   label: string;
   href: string;
+  icon: LucideIcon;
 }
 
 export interface NavItem {
@@ -36,9 +47,9 @@ export const MAIN_NAV: NavItem[] = [
     icon: UsersRound,
     collapsible: true,
     children: [
-      { label: "Active Employees", href: "/employees" },
-      { label: "Inactive Employees", href: "/employees/inactive" },
-      { label: "Expatriate", href: "/employees/expatriate" },
+      { label: "Active Employees", href: "/employees", icon: UserCheck },
+      { label: "Inactive Employees", href: "/employees/inactive", icon: UserX },
+      { label: "Expatriate", href: "/employees/expatriate", icon: Globe2 },
     ],
   },
   { label: "Recruitment", href: "/recruitment", icon: UserPlus },
@@ -48,9 +59,9 @@ export const MAIN_NAV: NavItem[] = [
     icon: ClipboardCheck,
     collapsible: true,
     children: [
-      { label: "NK Attendance Data", href: "/attendance/import" },
-      { label: "MPP Calculation", href: "/attendance/calculation" },
-      { label: "Overtime Report", href: "/attendance/report" },
+      { label: "NK Attendance Data", href: "/attendance/import", icon: FileClock },
+      { label: "MPP Calculation", href: "/attendance/calculation", icon: Calculator },
+      { label: "Overtime Report", href: "/attendance/report", icon: TimerReset },
     ],
   },
   {
@@ -58,7 +69,7 @@ export const MAIN_NAV: NavItem[] = [
     href: "/reports/employee",
     icon: FileBarChart2,
     collapsible: true,
-    children: [{ label: "Employee Report", href: "/reports/employee" }],
+    children: [{ label: "Employee Report", href: "/reports/employee", icon: FileBarChart2 }],
   },
   { label: "Export", href: "/export", icon: FileSpreadsheet },
   {
@@ -67,10 +78,10 @@ export const MAIN_NAV: NavItem[] = [
     icon: Settings2,
     collapsible: true,
     children: [
-      { label: "Database", href: "/settings" },
-      { label: "My Profile", href: "/settings/profile" },
-      { label: "Master Data", href: "/settings/master-data" },
-      { label: "User Management", href: "/settings/users" },
+      { label: "Database", href: "/settings", icon: Database },
+      { label: "My Profile", href: "/settings/profile", icon: UserRound },
+      { label: "Master Data", href: "/settings/master-data", icon: ListTree },
+      { label: "User Management", href: "/settings/users", icon: Users },
     ],
   },
 ];

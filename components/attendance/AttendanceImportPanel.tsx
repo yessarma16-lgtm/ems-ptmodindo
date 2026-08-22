@@ -39,6 +39,7 @@ export function AttendanceImportPanel() {
   const [dragOver, setDragOver] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [committing, setCommitting] = useState(false);
+  const [commitProgress, setCommitProgress] = useState<{ processed: number; total: number } | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [summary, setSummary] = useState<FinalSummary | null>(null);
@@ -50,6 +51,7 @@ export function AttendanceImportPanel() {
     setPreview(null);
     setDecisions({});
     setSummary(null);
+    setCommitProgress(null);
     setDragOver(false);
   }
 
@@ -104,6 +106,7 @@ export function AttendanceImportPanel() {
   async function handleCommit() {
     if (!preview) return;
     setCommitting(true);
+    setCommitProgress(null);
     try {
       const rows = [...preview.validRows.map((v) => v.input), ...preview.conflicts.map((c) => c.incoming)];
       const res = await fetch("/api/attendance/import/commit", {
@@ -111,9 +114,35 @@ export function AttendanceImportPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sourceFilename: preview.sourceFilename, rows, decisions }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? "Failed to save imported data.");
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => null);
+        toast.error(data?.error ?? "Failed to save imported data.");
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffered = "";
+      let finalSummary: FinalSummary | null = null;
+      let streamError: string | null = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffered += decoder.decode(value, { stream: true });
+        let newline = buffered.indexOf("\n");
+        while (newline >= 0) {
+          const line = buffered.slice(0, newline).trim();
+          buffered = buffered.slice(newline + 1);
+          newline = buffered.indexOf("\n");
+          if (!line) continue;
+          const event = JSON.parse(line);
+          if (event.type === "progress") setCommitProgress({ processed: event.processed, total: event.total });
+          else if (event.type === "done") finalSummary = event.summary as FinalSummary;
+          else if (event.type === "error") streamError = event.message;
+        }
+      }
+      if (streamError) { toast.error(streamError); return; }
+      if (!finalSummary) {
+        toast.error("Import tidak mengembalikan hasil.");
         return;
       }
       const overwrittenCount = preview.conflicts.filter((c) => decisions[c.key] === "overwrite").length;
@@ -161,7 +190,7 @@ export function AttendanceImportPanel() {
         {parsing ? (
           <>
             <Loader2 className="size-6 animate-spin text-primary" />
-            <p className="text-sm font-medium">Reading file...</p>
+            <p className="text-sm font-medium">Memuat dan mendeteksi data terinput...</p>
           </>
         ) : file ? (
           <>
@@ -264,7 +293,7 @@ export function AttendanceImportPanel() {
             <Button variant="outline" onClick={reset} disabled={committing}>Cancel</Button>
             <Button onClick={handleCommit} disabled={committing || hasUnresolvedConflict}>
               {committing ? <Loader2 className="animate-spin" /> : <Upload />}
-              Confirm Import
+              {committing && commitProgress ? `${commitProgress.processed}/${commitProgress.total} data berhasil terinput` : "Confirm Import"}
             </Button>
           </div>
         </div>

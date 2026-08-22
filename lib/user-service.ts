@@ -1,12 +1,9 @@
 import "server-only";
 
-import { getDatabaseProvider } from "@/lib/database/database";
-import * as sqliteStore from "@/lib/database/sqlite-users";
-import * as sheetsStore from "@/lib/database/google-sheets-users";
 import * as postgresStore from "@/lib/database/postgres-users";
 import { RecordNotFoundError } from "@/lib/database/errors";
 
-export type { User, UserInput, UserWithCredentials } from "@/lib/database/sqlite-users";
+export type { User, UserInput, UserWithCredentials } from "@/lib/database/postgres-users";
 
 /**
  * User Management service — the only module API routes / pages should call
@@ -16,12 +13,7 @@ export type { User, UserInput, UserWithCredentials } from "@/lib/database/sqlite
  * (production, once migrated) reads/writes the `users` table via Supabase.
  */
 
-function store() {
-  const provider = getDatabaseProvider();
-  if (provider === "google") return sheetsStore;
-  if (provider === "postgres") return postgresStore;
-  return sqliteStore;
-}
+const store = () => postgresStore;
 
 export class UserNotFoundError extends RecordNotFoundError {
   constructor(id: string) {
@@ -54,14 +46,18 @@ export async function setUserPassword(id: string, hash: string, salt: string) {
   return store().setUserPassword(id, hash, salt);
 }
 
-export async function createUser(input: sqliteStore.UserInput) {
+export async function createUser(input: postgresStore.UserInput) {
   return store().createUser(input);
 }
 
-export async function updateUser(id: string, input: Partial<sqliteStore.UserInput>) {
+export async function updateUser(id: string, input: Partial<postgresStore.UserInput>) {
   return store().updateUser(id, input);
 }
 
 export async function toggleUserStatus(id: string) {
   return store().toggleUserStatus(id);
+}
+
+export async function deleteUser(id: string) {
+  return store().deleteUser(id);
 }

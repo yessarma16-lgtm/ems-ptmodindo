@@ -112,6 +112,7 @@ export async function commitAttendanceImport(
   importedBy: string,
   sourceFilename: string,
   adapter: AttendanceDatabaseAdapter = getAttendanceAdapter(),
+  onProgress?: (processed: number, total: number) => void,
 ): Promise<ImportSummary> {
   const toWrite: RawAttendanceInput[] = [];
   let skipped = 0;
@@ -128,6 +129,7 @@ export async function commitAttendanceImport(
     return { inserted: 0, skipped, rejected: 0, conflicts: [] };
   }
 
-  const result = await adapter.importRawAttendance(toWrite, "overwrite");
+  onProgress?.(0, toWrite.length);
+  const result = await adapter.importRawAttendance(toWrite, "overwrite", (processed) => onProgress?.(processed, toWrite.length));
   return { inserted: result.inserted, skipped, rejected: 0, conflicts: [] };
 }

@@ -14,7 +14,7 @@ import { hashPassword, DEFAULT_PASSWORD } from "@/lib/auth/password";
  * (`DATABASE_PROVIDER=sqlite`). Mirrors the Google Spreadsheet structure
  * from STEP 2 exactly:
  *   employees, departments, positions, levels, skills, banks, lookup,
- *   contract_history, family, bpjs, settings, audit_log
+ *   contract_history, family, bpjs, settings
  *
  * Every statement is `CREATE TABLE IF NOT EXISTS` / a guarded INSERT — safe
  * to run on every app start and from `npm run db:init:sqlite` repeatedly.
@@ -316,19 +316,6 @@ export function ensureSchema(db: DatabaseSync): void {
     );
   `);
   ensurePublicApplyToken(db);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      record_id TEXT UNIQUE NOT NULL,
-      action TEXT NOT NULL,
-      entity TEXT NOT NULL,
-      entity_id TEXT NOT NULL DEFAULT '',
-      detail TEXT NOT NULL DEFAULT '',
-      created_at TEXT NOT NULL,
-      user TEXT NOT NULL DEFAULT 'SYSTEM'
-    );
-  `);
 
   // Online Register — candidate drafts. Shaped like `employees` (see
   // ensureOnlineRegistrationsEmployeeShaped below) so the same EmployeeForm
