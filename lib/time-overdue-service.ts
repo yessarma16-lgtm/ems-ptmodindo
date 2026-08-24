@@ -7,11 +7,12 @@ import { getOtReferences } from "@/lib/ot-planning-service";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 /**
- * "Report Time Overdue" — a clock-out discipline report ("Cluster Tertib"),
+ * "Report Time Overdue" — a clock-in discipline report ("Cluster Tertib"),
  * distinct from the OT Planning report even though it shares the same
  * department -> Unit mapping. Measures how many minutes the fingerprint
- * machine's actual OT1 clock-out lags the scheduled OutTime, bucketed into
- * three tiers, per Unit.
+ * machine's actual IT1 clock-in lags the scheduled InTime, bucketed into
+ * three tiers, per Unit. IT1 <= InTime (arrived on time or early) counts as
+ * Normal, same as the 0:00 - 0:15 bucket.
  */
 
 export type TimeOverdueBucket = "0:00 - 0:15" | "0:16 - 0:20" | "> 0:21 Minute";
@@ -62,8 +63,8 @@ export async function getTimeOverdueReport(date: string, dateTo?: string): Promi
     const endDate = dateTo || date;
     const dateFilter = (query: any) => (dateTo ? query.gte("tanggal", date).lte("tanggal", endDate) : query.eq("tanggal", date));
 
-    const raw = await fetchAllPages<{ id: number; nik: string; nama: string; department: string; tanggal: string; ot1: string | null; outtime: string | null }>(
-      client, "raw_attendance", "id,nik,nama,department,tanggal,ot1,outtime", dateFilter,
+    const raw = await fetchAllPages<{ id: number; nik: string; nama: string; department: string; tanggal: string; it1: string | null; intime: string | null }>(
+      client, "raw_attendance", "id,nik,nama,department,tanggal,it1,intime", dateFilter,
     );
     const rawIds = raw.map((x) => Number(x.id));
     const validRawIds = new Set<number>();
@@ -89,11 +90,12 @@ export async function getTimeOverdueReport(date: string, dateTo?: string): Promi
       if (!validRawIds.has(Number(row.id))) continue;
       const unit = mapByDepartment.get(String(row.department).trim().toUpperCase());
       if (!unit) continue;
-      const outMinutes = timeToMinutes(row.outtime);
-      const ot1Minutes = timeToMinutes(row.ot1);
-      if (outMinutes === null || ot1Minutes === null) continue;
+      const inMinutes = timeToMinutes(row.intime);
+      const it1Minutes = timeToMinutes(row.it1);
+      if (inMinutes === null || it1Minutes === null) continue;
 
-      const selisihMinutes = ot1Minutes - outMinutes;
+      // IT1 < InTime (arrived before the scheduled time) is Normal — falls into the same bucket as a 0-minute lag.
+      const selisihMinutes = Math.max(0, it1Minutes - inMinutes);
       const bucket = bucketOf(selisihMinutes);
       const key = `${unit.shed}|${unit.division}`;
       const current = counts.get(key) ?? { "0:00 - 0:15": 0, "0:16 - 0:20": 0, "> 0:21 Minute": 0 };

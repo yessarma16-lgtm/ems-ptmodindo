@@ -70,7 +70,7 @@ export function buildTimeOverdueWorkbook(date: string, report: TimeOverdueReport
   for (const bucket of TIME_OVERDUE_BUCKETS) {
     const sheet = workbook.addWorksheet(DETAIL_SHEET_NAMES[bucket]);
     sheet.columns = [{ width: 6 }, { width: 16 }, { width: 26 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 16 }];
-    const headerRow = sheet.addRow(["NO", "NIK", "NAME", "SHED", "UNIT", "DATE", "OT1 - OUTTIME (MIN)"]);
+    const headerRow = sheet.addRow(["NO", "NIK", "NAME", "SHED", "UNIT", "DATE", "IT1 - INTIME (MIN)"]);
     styleHeaderRow(headerRow, navy);
     report.detail[bucket].forEach((item, index) => {
       const dataRow = sheet.addRow([index + 1, item.nik, item.name, item.shed, item.division, item.tanggal, item.selisihMinutes]);

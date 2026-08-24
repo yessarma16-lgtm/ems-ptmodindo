@@ -99,7 +99,7 @@ function TimeOverdueReportTab() {
           <FileSpreadsheet className="size-[18px]" />
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground"><CalendarCheck className="mr-1 inline size-3" />Green ring indicates a date with completed MPP Calculation. Counts OT1 (actual clock-out) minus scheduled OutTime, per attendance record.</p>
+      <p className="text-xs text-muted-foreground"><CalendarCheck className="mr-1 inline size-3" />Green ring indicates a date with completed MPP Calculation. Counts IT1 (actual clock-in) minus scheduled InTime, per attendance record. IT1 at or before InTime counts as Normal.</p>
 
       {loading ? <p className="text-sm text-muted-foreground">Loading...</p> : !report || groups.length === 0 ? <p className="text-sm text-muted-foreground">No data for the selected filters.</p> : (
         <div className="grid gap-5">
