@@ -9,27 +9,16 @@ import { isDeveloperUser } from "@/lib/auth/developer-access";
 import { CalculationSessionProvider } from "@/components/attendance/CalculationSession";
 
 const COLLAPSE_STORAGE_KEY = "sidebar-collapsed";
-const SIDEBAR_WIDTH_STORAGE_KEY = "sidebar-width";
-const DEFAULT_SIDEBAR_WIDTH = 256;
 
 export function AppShell({ children, currentUser }: { children: React.ReactNode; currentUser: User | null }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
 
   useEffect(() => {
     if (localStorage.getItem(COLLAPSE_STORAGE_KEY) === "1") {
       queueMicrotask(() => setCollapsed(true));
     }
-    const savedWidth = Number(localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY));
-    if (Number.isFinite(savedWidth) && savedWidth >= 220 && savedWidth <= 420) setSidebarWidth(savedWidth);
   }, []);
-
-  function changeSidebarWidth(width: number) {
-    const next = Math.min(420, Math.max(220, width));
-    setSidebarWidth(next);
-    localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(next));
-  }
 
   function toggleCollapsed() {
     setCollapsed((prev) => {
@@ -47,8 +36,6 @@ export function AppShell({ children, currentUser }: { children: React.ReactNode;
         onClose={() => setMobileOpen(false)}
         collapsed={collapsed}
         onToggleCollapsed={toggleCollapsed}
-        width={sidebarWidth}
-        onWidthChange={changeSidebarWidth}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header onMenuClick={() => setMobileOpen(true)} currentUser={currentUser} />

@@ -2,6 +2,9 @@ import "server-only";
 
 import { getSupabaseClient, supabaseGuarded } from "@/lib/supabase";
 
+/* Supabase's dynamic table facade is intentionally untyped at this boundary. */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 export const DEFAULT_UMR = 2954114;
 export const DEFAULT_USD_RATE = 16000;
 export const DIVISIONS: Record<string, string[]> = {
@@ -19,14 +22,16 @@ const seedMappings: OtMapping[] = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((line
 function paidHours(duration: number) { return 1.5 * Math.min(duration, 1) + 2 * Math.max(duration - 1, 0); }
 function num(value: unknown) { return value == null ? 0 : Number(value) || 0; }
 
-export async function getOtPlanning(date: string, sheds: string[] = Object.keys(DIVISIONS)) {
+export async function getOtPlanning(date: string, sheds: string[] = Object.keys(DIVISIONS), dateTo?: string) {
   return supabaseGuarded(async () => {
     const client = getSupabaseClient();
+    const endDate = dateTo || date;
+    const dateFilter = (query: any) => dateTo ? query.gte("tanggal", date).lte("tanggal", endDate) : query.eq("tanggal", date);
     const [{ data: raw, error: rawError }, { data: calculated, error: calculatedError }, { data: estimates, error: estimateError }, { data: configs, error: configError }, { data: mappings, error: mappingError }, { data: divisions, error: divisionError }, { data: multipliers, error: multiplierError }] = await Promise.all([
-      client.from("raw_attendance").select("id,department").eq("tanggal", date),
+      dateFilter(client.from("raw_attendance").select("id,department,tanggal")),
       client.from("calculated_attendance").select("raw_id,system_calculated_oth,status"),
-      client.from("ot_planning_estimates").select("shed,division,duration,person").eq("tanggal", date),
-      client.from("ot_planning_config_history").select("umr,usd_rate").lte("effective_date", date).order("effective_date", { ascending: false }).limit(1),
+      dateFilter(client.from("ot_planning_estimates").select("shed,division,duration,person,tanggal")),
+      client.from("ot_planning_config_history").select("umr,usd_rate").lte("effective_date", endDate).order("effective_date", { ascending: false }).limit(1),
       client.from("ot_planning_mappings").select("id,attendance_department,shed,division,display_order").order("display_order"),
       client.from("ot_planning_divisions").select("id,shed,division,display_order").order("display_order"),
       client.from("ot_planning_duration_multipliers").select("duration,paid_hours").order("duration"),
@@ -40,8 +45,8 @@ export async function getOtPlanning(date: string, sheds: string[] = Object.keys(
     const mapByDepartment = new Map(mappingRows.map((x) => [x.attendanceDepartment.trim().toUpperCase(), x]));
     const actual = new Map<string, number>();
     for (const row of calculated ?? []) { if (String((row as any).status) !== "Sesuai") continue; const mapped = mapByDepartment.get((rawById.get(Number((row as any).raw_id)) ?? "").trim().toUpperCase()); const duration = num((row as any).system_calculated_oth); if (mapped && duration > 0) actual.set(`${mapped.shed}|${mapped.division}|${duration}`, (actual.get(`${mapped.shed}|${mapped.division}|${duration}`) ?? 0) + 1); }
-    const estimateRows = (estimates ?? []) as Array<{ shed: string; division: string; duration: number; person: number }>;
-    const estimate = new Map<string, number>(estimateRows.map((x) => [`${x.shed}|${x.division}|${num(x.duration)}`, num(x.person)]));
+    const estimate = new Map<string, number>();
+    for (const x of (estimates ?? []) as Array<{ shed: string; division: string; duration: number; person: number }>) { const key = `${x.shed}|${x.division}|${num(x.duration)}`; estimate.set(key, (estimate.get(key) ?? 0) + num(x.person)); }
     const divisionsByShed = new Map<string, OtDivision[]>(); for (const row of divisionRows) { const list = divisionsByShed.get(row.shed) ?? []; list.push(row); divisionsByShed.set(row.shed, list); }
     return sheds.filter((x) => divisionsByShed.has(x)).map((shed) => {
       const rows = (divisionsByShed.get(shed) ?? []).sort((a, b) => a.displayOrder - b.displayOrder).map(({ division }) => {

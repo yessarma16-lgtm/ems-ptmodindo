@@ -1,14 +1,16 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AttendanceImportPanel } from "@/components/attendance/AttendanceImportPanel";
 import { BracketMasterManager } from "@/components/attendance/BracketMasterManager";
 import { CalculationPanel } from "@/components/attendance/CalculationPanel";
+import { CalculationSessionProvider } from "@/components/attendance/CalculationSession";
 import { AttendanceReportPanel } from "@/components/attendance/AttendanceReportPanel";
 
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
+  cleanup();
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
 });
@@ -83,10 +85,11 @@ describe("attendance components", () => {
     const after = [{ ...before[0], finalOth: 2, status: "Dikoreksi Manual", correctedBy: "tester", correctionNote: "Persetujuan manager" }];
     let calculationReads = 0;
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
-      if (url === "/api/attendance/calculation") {
+      if (url.startsWith("/api/attendance/calculation?") || url === "/api/attendance/calculation") {
         calculationReads += 1;
         return Promise.resolve(response({ rows: calculationReads >= 3 ? after : before }));
       }
+      if (url === "/api/attendance/status") return Promise.resolve(response({ processedDates: [] }));
       if (url === "/api/attendance/crosscheck") return Promise.resolve(response({ summary: { processed: 1, sesuai: 0, tidakSesuai: 1, cekManual: 0, tidakBerlaku: 0, preservedManualCorrections: 0 } }));
       if (url === "/api/attendance/calculation/correct") {
         expect(JSON.parse(String(init?.body))).toMatchObject({ id: 3, newValue: 2, note: "Persetujuan manager" });
@@ -96,9 +99,9 @@ describe("attendance components", () => {
     });
     globalThis.fetch = fetchMock;
 
-    render(<CalculationPanel />);
+    render(<CalculationSessionProvider><CalculationPanel /></CalculationSessionProvider>);
     await screen.findByText("Tidak Sesuai");
-    fireEvent.click(screen.getByRole("button", { name: "Jalankan Crosscheck" }));
+    fireEvent.click(screen.getByRole("button", { name: "Calculate" }));
     fireEvent.change(screen.getByLabelText("Calculate from"), { target: { value: "2026-08-01" } });
     fireEvent.change(screen.getByLabelText("Calculate to"), { target: { value: "2026-08-31" } });
     fireEvent.click(screen.getByRole("button", { name: "Process Calculation" }));
