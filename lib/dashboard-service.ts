@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getContractEndDates, getEmployeeListItems, getLatestContractEndDates } from "@/lib/employee-service";
+import { getOnlineRegistrations, type OnlineRegistration } from "@/lib/online-register-service";
 import type { EmployeeListItem } from "@/lib/database/types";
 
 /** Company data starts in 2017 — years before that are excluded from both the year filter and the per-year charts. */
@@ -55,11 +56,27 @@ export interface CountPoint {
   count: number;
 }
 
+/**
+ * Walk-in applicants (Applicant Pool QR), bucketed by the month they applied
+ * (submittedAt) and split by their CURRENT stage — not by whichever pool they
+ * originally landed in, since a candidate can advance from Applicant Pool to
+ * New Hiring (see promoteRegistrationToNewHiring) or all the way to Approved
+ * without ever losing their `sourcePlatform: "walkin"` origin tag.
+ */
+export interface WalkinApplicantsMonthPoint {
+  month: string;
+  applicantPool: number;
+  newHiring: number;
+  approved: number;
+  rejected: number;
+}
+
 export interface DashboardData {
   cards: DashboardCards;
   newVsResignByMonth: MonthPoint[];
   monthlyHeadcount: MonthlyHeadcountPoint[];
   contractTypeByMonth: ContractTypeMonthPoint[];
+  walkinApplicantsByMonth: WalkinApplicantsMonthPoint[];
   topDepartments: CountPoint[];
   employeeTypes: CountPoint[];
   availableYears: string[];
@@ -101,10 +118,11 @@ export function parseDashboardFilter(searchParams: Record<string, string | strin
 }
 
 export async function loadDashboardData(filter: DashboardFilter): Promise<DashboardData> {
-  const [items, latestContractEnd, contractEnds] = await Promise.all([
+  const [items, latestContractEnd, contractEnds, registrations] = await Promise.all([
     getEmployeeListItems(),
     getLatestContractEndDates(),
     getContractEndDates(),
+    getOnlineRegistrations(),
   ]);
 
   const activeYear = Number(filter.year) || new Date().getFullYear();
@@ -113,6 +131,7 @@ export async function loadDashboardData(filter: DashboardFilter): Promise<Dashbo
   const newVsResignByMonth = computeNewVsResignByMonth(items, activeYear);
   const monthlyHeadcount = computeMonthlyHeadcount(items, activeYear);
   const contractTypeByMonth = computeContractTypeByMonth(items, activeYear);
+  const walkinApplicantsByMonth = computeWalkinApplicantsByMonth(registrations, activeYear);
   const topDepartments = computeTopDepartments(items, filter);
   const employeeTypes = computeEmployeeTypes(items);
 
@@ -124,7 +143,7 @@ export async function loadDashboardData(filter: DashboardFilter): Promise<Dashbo
   yearsFromData.add(String(new Date().getFullYear()));
   const availableYears = Array.from(yearsFromData).sort((a, b) => Number(b) - Number(a));
 
-  return { cards, newVsResignByMonth, monthlyHeadcount, contractTypeByMonth, topDepartments, employeeTypes, availableYears };
+  return { cards, newVsResignByMonth, monthlyHeadcount, contractTypeByMonth, walkinApplicantsByMonth, topDepartments, employeeTypes, availableYears };
 }
 
 /** True if dateStr falls within the filter's year (when set) and month (when set) — "" for either means "any". */
@@ -253,6 +272,31 @@ function computeContractTypeByMonth(items: EmployeeListItem[], year: number): Co
     else if (status === "contract") contract[m]++;
   }
   return MONTH_NAMES_SHORT.map((month, i) => ({ month, permanentProbation: permanentProbation[i], contract: contract[i] }));
+}
+
+function computeWalkinApplicantsByMonth(registrations: OnlineRegistration[], year: number): WalkinApplicantsMonthPoint[] {
+  const applicantPool = new Array(12).fill(0);
+  const newHiring = new Array(12).fill(0);
+  const approved = new Array(12).fill(0);
+  const rejected = new Array(12).fill(0);
+  for (const r of registrations) {
+    if (r.sourcePlatform !== "walkin") continue;
+    if (yearOf(r.submittedAt) !== String(year)) continue;
+    const m = Number(r.submittedAt.slice(5, 7)) - 1;
+    if (m < 0 || m > 11) continue;
+    const status = r.registrationStatus.trim().toLowerCase();
+    if (status === "approved") approved[m]++;
+    else if (status === "rejected") rejected[m]++;
+    else if (status === "applicant_pool") applicantPool[m]++;
+    else newHiring[m]++; // promoted forward (pending) or any other post-Applicant-Pool status
+  }
+  return MONTH_NAMES_SHORT.map((month, i) => ({
+    month,
+    applicantPool: applicantPool[i],
+    newHiring: newHiring[i],
+    approved: approved[i],
+    rejected: rejected[i],
+  }));
 }
 
 /** Department headcount as of the end of the filtered period (month+year, or year-end, or today if no filter) — not just "right now". */

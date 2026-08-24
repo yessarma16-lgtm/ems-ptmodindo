@@ -13,9 +13,9 @@ export function EmployeeTypeChart({ data }: { data: CountPoint[] }) {
   return (
     <ChartCard title="Employee Type" subtitle="Active employees, by Type">
       <div className="flex flex-col items-center gap-4 sm:flex-row">
-        <ResponsiveContainer width="100%" height={260} className="sm:max-w-[220px]">
+        <ResponsiveContainer width="100%" height={320} className="sm:max-w-[260px]">
           <PieChart>
-            <Pie data={data} dataKey="count" nameKey="label" innerRadius={60} outerRadius={95} paddingAngle={2}>
+            <Pie data={data} dataKey="count" nameKey="label" innerRadius={75} outerRadius={120} paddingAngle={2}>
               {data.map((_, i) => (
                 <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="var(--card)" strokeWidth={2} />
               ))}

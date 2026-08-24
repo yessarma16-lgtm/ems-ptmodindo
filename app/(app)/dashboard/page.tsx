@@ -6,6 +6,7 @@ import { DashboardFilterBar } from "@/components/dashboard/DashboardFilterBar";
 import { NewVsResignChart } from "@/components/dashboard/charts/NewVsResignChart";
 import { MonthlyHeadcountChart } from "@/components/dashboard/charts/MonthlyHeadcountChart";
 import { ContractTypeChart } from "@/components/dashboard/charts/ContractTypeChart";
+import { WalkinApplicantsChart } from "@/components/dashboard/charts/WalkinApplicantsChart";
 import { TopDepartmentsChart } from "@/components/dashboard/charts/TopDepartmentsChart";
 import { EmployeeTypeChart } from "@/components/dashboard/charts/EmployeeTypeChart";
 import { NotConfiguredNotice, ConnectionErrorNotice } from "@/components/layout/ConnectionNotice";
@@ -123,11 +124,10 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2">
             <NewVsResignChart data={data.newVsResignByMonth} year={monthlyHeadcountYear} />
             <MonthlyHeadcountChart data={data.monthlyHeadcount} year={monthlyHeadcountYear} />
+            <WalkinApplicantsChart data={data.walkinApplicantsByMonth} year={monthlyHeadcountYear} />
             <ContractTypeChart data={data.contractTypeByMonth} year={monthlyHeadcountYear} />
             <TopDepartmentsChart data={data.topDepartments} periodLabel={departmentAsOfLabel} />
-            <div className="xl:col-span-2">
-              <EmployeeTypeChart data={data.employeeTypes} />
-            </div>
+            <EmployeeTypeChart data={data.employeeTypes} />
           </div>
         </>
       )}
