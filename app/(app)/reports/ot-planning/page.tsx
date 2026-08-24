@@ -5,7 +5,10 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { CalendarCheck, FileSpreadsheet, FileText, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { CalendarCheck, FileSpreadsheet, FileText, GripVertical, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,7 +45,17 @@ export default function OtPlanningPage() {
   const update = (shed: string, division: string, duration: number, person: number) => setData((old) => old.map((g) => g.shed !== shed ? g : { ...g, rows: g.rows.map((r) => r.division !== division ? r : { ...r, cells: r.cells.map((c) => c.duration === duration ? { ...c, estimated: person } : c) }) }));
   const post = async (body: unknown) => { try { const r = await fetch("/api/reports/ot-planning", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!r.ok) { const err = await r.json().catch(() => null); toast.error(err?.error || "Failed to save reference."); return; } await loadReferences(); toast.success("Reference saved."); } catch { toast.error("Failed to save reference."); } };
   const del = async (body: unknown) => { const r = await fetch("/api/reports/ot-planning", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!r.ok) { toast.error("Failed to delete reference."); return; } await loadReferences(); toast.success("Reference deleted."); };
-  return <div className="space-y-5"><PageHeader title="OT Planning" description="Overtime planning and budget realization by department." breadcrumb={[{ label: "Dashboard", href: "/dashboard" }, { label: "Reports" }, { label: "OT Planning" }]} /><div className="flex gap-2"><Button variant={tab === "report" ? "default" : "outline"} onClick={() => setTab("report")}>OT Planning Report</Button><Button variant={tab === "reference" ? "default" : "outline"} onClick={() => setTab("reference")}>Reference</Button></div>{tab === "reference" ? <References mappings={mappings} divisions={divisions} multipliers={multipliers} umr={umr} usdRate={usdRate} setUmr={setUmr} setUsdRate={setUsdRate} date={dateFrom} post={post} del={del} /> : <><Card><CardContent className="pt-6"><h2 className="mb-4 text-lg font-semibold">Selected Report</h2><div className="flex flex-wrap items-end gap-5"><div><label className="mb-1 block text-xs font-medium">From</label><AttendanceDatePicker value={dateFrom} onChange={setDateFrom} processedDates={processedDates} /></div><div><label className="mb-1 block text-xs font-medium">To</label><AttendanceDatePicker value={dateTo} onChange={setDateTo} processedDates={processedDates} /></div><div className="flex flex-wrap gap-4 pb-2"><label className="flex items-center gap-2 text-sm"><Checkbox checked={allSelected} onCheckedChange={(checked) => { setAllSelected(checked === true); setSheds(checked ? DEPARTMENTS : []); }} />All Departments</label>{DEPARTMENTS.map((shed) => <label className="flex items-center gap-2 text-sm" key={shed}><Checkbox checked={sheds.includes(shed)} onCheckedChange={(checked) => toggleShed(shed, checked === true)} />{shed}</label>)}</div><div className="ml-auto flex flex-wrap gap-2 rounded-2xl border border-border bg-muted/30 p-1.5 shadow-sm"><Button size="icon" className="rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md transition-all hover:shadow-lg hover:from-emerald-600 hover:to-emerald-700" title="Save estimates" aria-label="Save estimates" onClick={() => void save()} disabled={loading}><Save className="size-[18px]" /></Button><Button size="icon" className="rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 text-white shadow-md transition-all hover:shadow-lg hover:from-sky-600 hover:to-sky-700" title="Export Excel" aria-label="Export Excel" onClick={() => window.open(`/api/reports/ot-planning/export?${exportQuery()}`, "_blank")}><FileSpreadsheet className="size-[18px]" /></Button><Button size="icon" className="rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-md transition-all hover:shadow-lg hover:from-rose-600 hover:to-rose-700" title="Export PDF" aria-label="Export PDF" onClick={() => window.open(`/api/reports/ot-planning/pdf?${exportQuery()}`, "_blank")}><FileText className="size-[18px]" /></Button></div></div><p className="mt-3 text-xs text-muted-foreground"><CalendarCheck className="mr-1 inline size-3" />Green ring indicates a date with completed MPP Calculation.</p></CardContent></Card><div><h2 className="mb-3 text-lg font-semibold">Report Preview</h2>{loading ? <p>Loading...</p> : data.length ? data.map((g) => <ReportTable key={g.shed} group={g} update={update} />) : <p className="text-sm text-muted-foreground">No report data for the selected filters.</p>}</div></>}</div>;
+  /** Drag-reorder within one shed — this display_order is what drives row order in the OT Planning report and its Excel/PDF export. Persists silently per unit, then one reload + one toast (not one per row). */
+  const reorderDivisions = async (orderedRows: Division[]) => {
+    try {
+      await Promise.all(orderedRows.map((row, index) => fetch("/api/reports/ot-planning", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "division", value: { id: row.id, shed: row.shed, division: row.division, displayOrder: index } }) })));
+      await loadReferences();
+      toast.success("Unit order updated.");
+    } catch {
+      toast.error("Failed to update unit order.");
+    }
+  };
+  return <div className="space-y-5"><PageHeader title="OT Planning" description="Overtime planning and budget realization by department." breadcrumb={[{ label: "Dashboard", href: "/dashboard" }, { label: "Reports" }, { label: "OT Planning" }]} /><div className="flex gap-2"><Button variant={tab === "report" ? "default" : "outline"} onClick={() => setTab("report")}>OT Planning Report</Button><Button variant={tab === "reference" ? "default" : "outline"} onClick={() => setTab("reference")}>Reference</Button></div>{tab === "reference" ? <References mappings={mappings} divisions={divisions} multipliers={multipliers} umr={umr} usdRate={usdRate} setUmr={setUmr} setUsdRate={setUsdRate} date={dateFrom} post={post} del={del} reorderDivisions={reorderDivisions} /> : <><Card><CardContent className="pt-6"><h2 className="mb-4 text-lg font-semibold">Selected Report</h2><div className="flex flex-wrap items-end gap-5"><div><label className="mb-1 block text-xs font-medium">From</label><AttendanceDatePicker value={dateFrom} onChange={setDateFrom} processedDates={processedDates} /></div><div><label className="mb-1 block text-xs font-medium">To</label><AttendanceDatePicker value={dateTo} onChange={setDateTo} processedDates={processedDates} /></div><div className="flex flex-wrap gap-4 pb-2"><label className="flex items-center gap-2 text-sm"><Checkbox checked={allSelected} onCheckedChange={(checked) => { setAllSelected(checked === true); setSheds(checked ? DEPARTMENTS : []); }} />All Departments</label>{DEPARTMENTS.map((shed) => <label className="flex items-center gap-2 text-sm" key={shed}><Checkbox checked={sheds.includes(shed)} onCheckedChange={(checked) => toggleShed(shed, checked === true)} />{shed}</label>)}</div><div className="ml-auto flex flex-wrap gap-2 rounded-2xl border border-border bg-muted/30 p-1.5 shadow-sm"><Button size="icon" className="rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md transition-all hover:shadow-lg hover:from-emerald-600 hover:to-emerald-700" title="Save estimates" aria-label="Save estimates" onClick={() => void save()} disabled={loading}><Save className="size-[18px]" /></Button><Button size="icon" className="rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 text-white shadow-md transition-all hover:shadow-lg hover:from-sky-600 hover:to-sky-700" title="Export Excel" aria-label="Export Excel" onClick={() => window.open(`/api/reports/ot-planning/export?${exportQuery()}`, "_blank")}><FileSpreadsheet className="size-[18px]" /></Button><Button size="icon" className="rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-md transition-all hover:shadow-lg hover:from-rose-600 hover:to-rose-700" title="Export PDF" aria-label="Export PDF" onClick={() => window.open(`/api/reports/ot-planning/pdf?${exportQuery()}`, "_blank")}><FileText className="size-[18px]" /></Button></div></div><p className="mt-3 text-xs text-muted-foreground"><CalendarCheck className="mr-1 inline size-3" />Green ring indicates a date with completed MPP Calculation.</p></CardContent></Card><div><h2 className="mb-3 text-lg font-semibold">Report Preview</h2>{loading ? <p>Loading...</p> : data.length ? data.map((g) => <ReportTable key={g.shed} group={g} update={update} />) : <p className="text-sm text-muted-foreground">No report data for the selected filters.</p>}</div></>}</div>;
 }
 
 function ReportTable({ group, update }: { group: Report; update: (shed: string, division: string, duration: number, person: number) => void }) {
@@ -68,7 +81,7 @@ const SHED_ORDER = ["SHED A", "SHED B", "SHED C", "COMMON"];
 const EMPTY_MAPPING = { attendanceDepartment: "", shed: "SHED A", division: "", displayOrder: 0 };
 const EMPTY_DIVISION = { shed: "SHED A", division: "", displayOrder: 0 };
 
-function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, setUsdRate, date, post, del }: any) {
+function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, setUsdRate, date, post, del, reorderDivisions }: any) {
   const [m, setM] = useState<any>(EMPTY_MAPPING);
   const [d, setD] = useState<any>(EMPTY_DIVISION);
   const mappingGroups = useMemo(() => groupByShed(mappings as Mapping[]), [mappings]);
@@ -97,13 +110,7 @@ function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, se
         {d.id ? <Button variant="outline" onClick={() => setD(EMPTY_DIVISION)}><X className="size-4" />Cancel</Button> : null}
       </div>
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        {divisionGroups.map(([shed, rows]) => <div key={shed}>
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{shed}</h3>
-          <table className="w-full border-collapse text-sm">
-            <thead><tr className="bg-muted"><th className="border p-2 text-left">Unit</th><th className="border p-2 text-right">Actions</th></tr></thead>
-            <tbody>{rows.map((x) => <tr key={x.id}><td className="border p-2">{x.division}</td><td className="border p-1 text-right"><div className="flex justify-end gap-1"><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted" title="Edit" onClick={() => editDivision(x)}><Pencil className="size-3.5" /></button><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-destructive/10" title="Delete" onClick={() => deleteDivision(x)}><Trash2 className="size-3.5 text-destructive" /></button></div></td></tr>)}</tbody>
-          </table>
-        </div>)}
+        {divisionGroups.map(([shed, rows]) => <SortableUnitsTable key={shed} shed={shed} rows={rows} onEdit={editDivision} onDelete={deleteDivision} onReorder={reorderDivisions} />)}
       </div>
     </CardContent></Card>
 
@@ -135,4 +142,57 @@ function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, se
       </div>
     </CardContent></Card>
   </div>;
+}
+
+/** Drag order here IS the row order in the OT Planning report and its Excel/PDF export — reordering is scoped to this one shed's own SortableContext, so a drag can't move a unit into a different shed's list. */
+function SortableUnitsTable({ shed, rows, onEdit, onDelete, onReorder }: { shed: string; rows: Division[]; onEdit: (x: Division) => void; onDelete: (x: Division) => void; onReorder: (orderedRows: Division[]) => void }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = rows.findIndex((x) => x.id === active.id);
+    const newIndex = rows.findIndex((x) => x.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    onReorder(arrayMove(rows, oldIndex, newIndex));
+  }
+
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{shed}</h3>
+      <table className="w-full border-collapse text-sm">
+        <thead><tr className="bg-muted"><th className="border p-2" /><th className="border p-2 text-left">Unit</th><th className="border p-2 text-right">Actions</th></tr></thead>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={rows.map((x) => x.id!)} strategy={verticalListSortingStrategy}>
+            <tbody>{rows.map((x) => <SortableUnitRow key={x.id} row={x} onEdit={() => onEdit(x)} onDelete={() => onDelete(x)} />)}</tbody>
+          </SortableContext>
+        </DndContext>
+      </table>
+    </div>
+  );
+}
+
+function SortableUnitRow({ row, onEdit, onDelete }: { row: Division; onEdit: () => void; onDelete: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: row.id! });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+
+  return (
+    <tr ref={setNodeRef} style={style}>
+      <td className="border p-1 text-center">
+        <button type="button" className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing" {...attributes} {...listeners} aria-label="Drag to reorder">
+          <GripVertical className="mx-auto size-3.5" />
+        </button>
+      </td>
+      <td className="border p-2">{row.division}</td>
+      <td className="border p-1 text-right">
+        <div className="flex justify-end gap-1">
+          <button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted" title="Edit" onClick={onEdit}><Pencil className="size-3.5" /></button>
+          <button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-destructive/10" title="Delete" onClick={onDelete}><Trash2 className="size-3.5 text-destructive" /></button>
+        </div>
+      </td>
+    </tr>
+  );
 }
