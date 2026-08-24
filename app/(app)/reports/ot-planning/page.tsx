@@ -5,12 +5,13 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { CalendarCheck, FileSpreadsheet, FileText, Save } from "lucide-react";
+import { CalendarCheck, FileSpreadsheet, FileText, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AttendanceDatePicker } from "@/components/attendance/AttendanceDatePicker";
 import { toast } from "sonner";
 
@@ -40,7 +41,8 @@ export default function OtPlanningPage() {
   const save = async () => { const values = data.flatMap((g) => g.rows.flatMap((r) => r.cells.map((c) => ({ shed: g.shed, division: r.division, duration: c.duration, person: c.estimated })))); const res = await fetch("/api/reports/ot-planning", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: dateFrom, values }) }); if (!res.ok) { toast.error("Failed to save estimates."); return; } toast.success("Estimates saved."); };
   const update = (shed: string, division: string, duration: number, person: number) => setData((old) => old.map((g) => g.shed !== shed ? g : { ...g, rows: g.rows.map((r) => r.division !== division ? r : { ...r, cells: r.cells.map((c) => c.duration === duration ? { ...c, estimated: person } : c) }) }));
   const post = async (body: unknown) => { const r = await fetch("/api/reports/ot-planning", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!r.ok) throw new Error("Failed to save reference."); await loadReferences(); toast.success("Reference saved."); };
-  return <div className="space-y-5"><PageHeader title="OT Planning" description="Overtime planning and budget realization by department." breadcrumb={[{ label: "Dashboard", href: "/dashboard" }, { label: "Reports" }, { label: "OT Planning" }]} /><div className="flex gap-2"><Button variant={tab === "report" ? "default" : "outline"} onClick={() => setTab("report")}>OT Planning Report</Button><Button variant={tab === "reference" ? "default" : "outline"} onClick={() => setTab("reference")}>Reference</Button></div>{tab === "reference" ? <References mappings={mappings} divisions={divisions} multipliers={multipliers} umr={umr} usdRate={usdRate} setUmr={setUmr} setUsdRate={setUsdRate} date={dateFrom} post={post} /> : <><Card><CardContent className="pt-6"><h2 className="mb-4 text-lg font-semibold">Selected Report</h2><div className="flex flex-wrap items-end gap-5"><div><label className="mb-1 block text-xs font-medium">From</label><AttendanceDatePicker value={dateFrom} onChange={setDateFrom} processedDates={processedDates} /></div><div><label className="mb-1 block text-xs font-medium">To</label><AttendanceDatePicker value={dateTo} onChange={setDateTo} processedDates={processedDates} /></div><div className="flex flex-wrap gap-4 pb-2"><label className="flex items-center gap-2 text-sm"><Checkbox checked={allSelected} onCheckedChange={(checked) => setSheds(checked ? DEPARTMENTS : [])} />All Departments</label>{DEPARTMENTS.map((shed) => <label className="flex items-center gap-2 text-sm" key={shed}><Checkbox checked={sheds.includes(shed)} onCheckedChange={(checked) => toggleShed(shed, checked === true)} />{shed}</label>)}</div><div className="ml-auto flex flex-wrap gap-2 rounded-xl border border-border bg-muted/30 p-1.5 shadow-sm"><Button className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-700" size="sm" title="Save estimates" aria-label="Save estimates" onClick={() => void save()} disabled={loading}><Save className="size-4" /><span className="hidden sm:inline">Save</span></Button><Button className="bg-sky-600 text-white shadow-sm hover:bg-sky-700" size="sm" title="Export Excel" aria-label="Export Excel" onClick={() => window.open(`/api/reports/ot-planning/export?${exportQuery()}`, "_blank")}><FileSpreadsheet className="size-4" /><span className="hidden sm:inline">Excel</span></Button><Button className="bg-rose-600 text-white shadow-sm hover:bg-rose-700" size="sm" title="Export PDF" aria-label="Export PDF" onClick={() => window.open(`/api/reports/ot-planning/pdf?${exportQuery()}`, "_blank")}><FileText className="size-4" /><span className="hidden sm:inline">PDF</span></Button></div></div><p className="mt-3 text-xs text-muted-foreground"><CalendarCheck className="mr-1 inline size-3" />Green ring indicates a date with completed MPP Calculation.</p></CardContent></Card><div><h2 className="mb-3 text-lg font-semibold">Report Preview</h2>{loading ? <p>Loading...</p> : data.length ? data.map((g) => <ReportTable key={g.shed} group={g} update={update} />) : <p className="text-sm text-muted-foreground">No report data for the selected filters.</p>}</div></>}</div>;
+  const del = async (body: unknown) => { const r = await fetch("/api/reports/ot-planning", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); if (!r.ok) { toast.error("Failed to delete reference."); return; } await loadReferences(); toast.success("Reference deleted."); };
+  return <div className="space-y-5"><PageHeader title="OT Planning" description="Overtime planning and budget realization by department." breadcrumb={[{ label: "Dashboard", href: "/dashboard" }, { label: "Reports" }, { label: "OT Planning" }]} /><div className="flex gap-2"><Button variant={tab === "report" ? "default" : "outline"} onClick={() => setTab("report")}>OT Planning Report</Button><Button variant={tab === "reference" ? "default" : "outline"} onClick={() => setTab("reference")}>Reference</Button></div>{tab === "reference" ? <References mappings={mappings} divisions={divisions} multipliers={multipliers} umr={umr} usdRate={usdRate} setUmr={setUmr} setUsdRate={setUsdRate} date={dateFrom} post={post} del={del} /> : <><Card><CardContent className="pt-6"><h2 className="mb-4 text-lg font-semibold">Selected Report</h2><div className="flex flex-wrap items-end gap-5"><div><label className="mb-1 block text-xs font-medium">From</label><AttendanceDatePicker value={dateFrom} onChange={setDateFrom} processedDates={processedDates} /></div><div><label className="mb-1 block text-xs font-medium">To</label><AttendanceDatePicker value={dateTo} onChange={setDateTo} processedDates={processedDates} /></div><div className="flex flex-wrap gap-4 pb-2"><label className="flex items-center gap-2 text-sm"><Checkbox checked={allSelected} onCheckedChange={(checked) => setSheds(checked ? DEPARTMENTS : [])} />All Departments</label>{DEPARTMENTS.map((shed) => <label className="flex items-center gap-2 text-sm" key={shed}><Checkbox checked={sheds.includes(shed)} onCheckedChange={(checked) => toggleShed(shed, checked === true)} />{shed}</label>)}</div><div className="ml-auto flex flex-wrap gap-2 rounded-xl border border-border bg-muted/30 p-1.5 shadow-sm"><Button className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-700" size="sm" title="Save estimates" aria-label="Save estimates" onClick={() => void save()} disabled={loading}><Save className="size-4" /><span className="hidden sm:inline">Save</span></Button><Button className="bg-sky-600 text-white shadow-sm hover:bg-sky-700" size="sm" title="Export Excel" aria-label="Export Excel" onClick={() => window.open(`/api/reports/ot-planning/export?${exportQuery()}`, "_blank")}><FileSpreadsheet className="size-4" /><span className="hidden sm:inline">Excel</span></Button><Button className="bg-rose-600 text-white shadow-sm hover:bg-rose-700" size="sm" title="Export PDF" aria-label="Export PDF" onClick={() => window.open(`/api/reports/ot-planning/pdf?${exportQuery()}`, "_blank")}><FileText className="size-4" /><span className="hidden sm:inline">PDF</span></Button></div></div><p className="mt-3 text-xs text-muted-foreground"><CalendarCheck className="mr-1 inline size-3" />Green ring indicates a date with completed MPP Calculation.</p></CardContent></Card><div><h2 className="mb-3 text-lg font-semibold">Report Preview</h2>{loading ? <p>Loading...</p> : data.length ? data.map((g) => <ReportTable key={g.shed} group={g} update={update} />) : <p className="text-sm text-muted-foreground">No report data for the selected filters.</p>}</div></>}</div>;
 }
 
 function ReportTable({ group, update }: { group: Report; update: (shed: string, division: string, duration: number, person: number) => void }) {
@@ -63,36 +65,61 @@ function groupByShed<T extends { shed: string }>(rows: T[]): [string, T[]][] {
 }
 const SHED_ORDER = ["SHED A", "SHED B", "SHED C", "COMMON"];
 
-function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, setUsdRate, date, post }: any) {
-  const [m, setM] = useState({ attendanceDepartment: "", shed: "SHED A", division: "", displayOrder: 0 });
-  const [d, setD] = useState({ shed: "SHED A", division: "", displayOrder: 0 });
+const EMPTY_MAPPING = { attendanceDepartment: "", shed: "SHED A", division: "", displayOrder: 0 };
+const EMPTY_DIVISION = { shed: "SHED A", division: "", displayOrder: 0 };
+
+function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, setUsdRate, date, post, del }: any) {
+  const [m, setM] = useState<any>(EMPTY_MAPPING);
+  const [d, setD] = useState<any>(EMPTY_DIVISION);
   const mappingGroups = useMemo(() => groupByShed(mappings as Mapping[]), [mappings]);
   const divisionGroups = useMemo(() => groupByShed(divisions as Division[]), [divisions]);
+  const divisionOptionsForShed = useMemo(() => (divisions as Division[]).filter((x) => x.shed === m.shed), [divisions, m.shed]);
+
+  const saveMapping = async () => { if (!m.attendanceDepartment || !m.division) return; await post({ kind: "mapping", value: m }); setM(EMPTY_MAPPING); };
+  const saveDivision = async () => { if (!d.division) return; await post({ kind: "division", value: d }); setD(EMPTY_DIVISION); };
+  const editDivision = (x: Division) => setD({ id: x.id, shed: x.shed, division: x.division, displayOrder: x.display_order });
+  const deleteDivision = (x: Division) => void del({ kind: "division", id: x.id });
+
   return <div className="grid gap-5">
     <Card><CardContent className="grid max-w-xl gap-4 pt-6"><label>UMR (IDR)<Input type="number" value={umr} onChange={(e) => setUmr(Number(e.target.value))} /></label><label>USD Rate (IDR)<Input type="number" value={usdRate} onChange={(e) => setUsdRate(Number(e.target.value))} /></label><p className="text-xs text-muted-foreground">Effective snapshot for {date}. Divisor is fixed at 173.</p><Button onClick={() => void post({ kind: "config", effectiveDate: date, umr, usdRate })}>Save Reference</Button></CardContent></Card>
     <Card><CardContent className="pt-6"><h2 className="mb-3 font-semibold">Duration & Paid Hours</h2><div className="grid grid-cols-2 gap-2 text-sm">{multipliers.map((x: any) => <div className="border-b p-1" key={x.duration}>{x.duration} hours → {x.paid_hours} paid hours</div>)}</div></CardContent></Card>
+
+    <Card><CardContent className="pt-6">
+      <h2 className="mb-3 font-semibold">Divisions by Shed</h2>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Select value={d.shed} onValueChange={(v) => setD({ ...d, shed: v })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
+        <Input className="w-56" placeholder="Division" value={d.division} onChange={(e) => setD({ ...d, division: e.target.value })} />
+        <Button onClick={() => void saveDivision()}>{d.id ? <><Pencil className="size-4" />Update</> : <><Plus className="size-4" />Add</>}</Button>
+        {d.id ? <Button variant="outline" onClick={() => setD(EMPTY_DIVISION)}><X className="size-4" />Cancel</Button> : null}
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        {divisionGroups.map(([shed, rows]) => <div key={shed}>
+          <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{shed}</h3>
+          <table className="w-full border-collapse text-sm">
+            <thead><tr className="bg-muted"><th className="border p-2 text-left">Division</th><th className="border p-2 text-right">Actions</th></tr></thead>
+            <tbody>{rows.map((x) => <tr key={x.id}><td className="border p-2">{x.division}</td><td className="border p-1 text-right"><div className="flex justify-end gap-1"><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted" title="Edit" onClick={() => editDivision(x)}><Pencil className="size-3.5" /></button><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-destructive/10" title="Delete" onClick={() => deleteDivision(x)}><Trash2 className="size-3.5 text-destructive" /></button></div></td></tr>)}</tbody>
+          </table>
+        </div>)}
+      </div>
+    </CardContent></Card>
+
     <Card><CardContent className="pt-6">
       <h2 className="mb-3 font-semibold">Department Mapping</h2>
-      <div className="mb-4 flex gap-2"><Input placeholder="Attendance department" value={m.attendanceDepartment} onChange={(e) => setM({ ...m, attendanceDepartment: e.target.value })} /><Input placeholder="Shed" value={m.shed} onChange={(e) => setM({ ...m, shed: e.target.value })} /><Input placeholder="Division" value={m.division} onChange={(e) => setM({ ...m, division: e.target.value })} /><Button onClick={() => void post({ kind: "mapping", value: m })}>Add</Button></div>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Input className="w-64" placeholder="Attendance department" value={m.attendanceDepartment} onChange={(e) => setM({ ...m, attendanceDepartment: e.target.value })} />
+        <Select value={m.shed} onValueChange={(v) => setM({ ...m, shed: v, division: "" })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
+        <Select value={m.division} onValueChange={(v) => setM({ ...m, division: v })}>
+          <SelectTrigger className="w-56"><SelectValue placeholder="Division" /></SelectTrigger>
+          <SelectContent>{divisionOptionsForShed.map((x) => <SelectItem key={x.id} value={x.division}>{x.division}</SelectItem>)}</SelectContent>
+        </Select>
+        <Button onClick={() => void saveMapping()}><Plus className="size-4" />Add</Button>
+      </div>
       <div className="grid gap-5">
         {mappingGroups.map(([shed, rows]) => <div key={shed}>
           <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{shed}</h3>
           <table className="w-full border-collapse text-sm">
             <thead><tr className="bg-muted"><th className="border p-2 text-left">Attendance Department</th><th className="border p-2 text-left">Division</th></tr></thead>
             <tbody>{rows.map((x) => <tr key={x.id}><td className="border p-2">{x.attendance_department}</td><td className="border p-2">{x.division}</td></tr>)}</tbody>
-          </table>
-        </div>)}
-      </div>
-    </CardContent></Card>
-    <Card><CardContent className="pt-6">
-      <h2 className="mb-3 font-semibold">Divisions by Shed</h2>
-      <div className="mb-4 flex gap-2"><Input placeholder="Shed" value={d.shed} onChange={(e) => setD({ ...d, shed: e.target.value })} /><Input placeholder="Division" value={d.division} onChange={(e) => setD({ ...d, division: e.target.value })} /><Button onClick={() => void post({ kind: "division", value: d })}>Add</Button></div>
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        {divisionGroups.map(([shed, rows]) => <div key={shed}>
-          <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{shed}</h3>
-          <table className="w-full border-collapse text-sm">
-            <thead><tr className="bg-muted"><th className="border p-2 text-left">Division</th></tr></thead>
-            <tbody>{rows.map((x) => <tr key={x.id}><td className="border p-2">{x.division}</td></tr>)}</tbody>
           </table>
         </div>)}
       </div>
