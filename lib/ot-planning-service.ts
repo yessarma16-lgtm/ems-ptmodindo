@@ -44,9 +44,9 @@ export async function getOtPlanning(date: string, sheds: string[] = Object.keys(
 
     const raw = await fetchAllPages<{ id: number; department: string; tanggal: string }>(client, "raw_attendance", "id,department,tanggal", dateFilter);
     const rawIds = raw.map((x) => Number(x.id));
-    const calculated: { raw_id: number; system_calculated_oth: number; status: string }[] = [];
+    const calculated: { raw_id: number; final_oth: number; status: string }[] = [];
     for (const idBatch of chunk(rawIds, 500)) {
-      const { data, error } = await client.from("calculated_attendance").select("raw_id,system_calculated_oth,status").in("raw_id", idBatch);
+      const { data, error } = await client.from("calculated_attendance").select("raw_id,final_oth,status").in("raw_id", idBatch);
       if (error) throw error;
       calculated.push(...(data ?? []));
     }
@@ -65,8 +65,12 @@ export async function getOtPlanning(date: string, sheds: string[] = Object.keys(
     const divisionRows = divisions?.length ? divisions.map((x: any) => ({ shed: String(x.shed), division: String(x.division), displayOrder: Number(x.display_order ?? 0) })) : Object.entries(DIVISIONS).flatMap(([shed, names]) => names.map((division, displayOrder) => ({ shed, division, displayOrder })));
     const rawById = new Map<number, string>((raw ?? []).map((x: any) => [Number(x.id), String(x.department ?? "")] as [number, string]));
     const mapByDepartment = new Map(mappingRows.map((x) => [x.attendanceDepartment.trim().toUpperCase(), x]));
+    // Sesuai (clean auto-match) and Dikoreksi Manual (HR-reviewed and corrected) both count as trustworthy —
+    // Tidak Sesuai/Cek Manual/Tidak Berlaku are excluded until HR resolves them. final_oth is used (not
+    // system_calculated_oth) because for Dikoreksi Manual that's the corrected value HR actually approved.
+    const INCLUDED_STATUSES = new Set(["Sesuai", "Dikoreksi Manual"]);
     const actual = new Map<string, number>();
-    for (const row of calculated ?? []) { if (String((row as any).status) !== "Sesuai") continue; const mapped = mapByDepartment.get((rawById.get(Number((row as any).raw_id)) ?? "").trim().toUpperCase()); const duration = num((row as any).system_calculated_oth); if (mapped && duration > 0) actual.set(`${mapped.shed}|${mapped.division}|${duration}`, (actual.get(`${mapped.shed}|${mapped.division}|${duration}`) ?? 0) + 1); }
+    for (const row of calculated ?? []) { if (!INCLUDED_STATUSES.has(String((row as any).status))) continue; const mapped = mapByDepartment.get((rawById.get(Number((row as any).raw_id)) ?? "").trim().toUpperCase()); const duration = num((row as any).final_oth); if (mapped && duration > 0) actual.set(`${mapped.shed}|${mapped.division}|${duration}`, (actual.get(`${mapped.shed}|${mapped.division}|${duration}`) ?? 0) + 1); }
     const estimate = new Map<string, number>();
     for (const x of (estimates ?? []) as Array<{ shed: string; division: string; duration: number; person: number }>) { const key = `${x.shed}|${x.division}|${num(x.duration)}`; estimate.set(key, (estimate.get(key) ?? 0) + num(x.person)); }
     const divisionsByShed = new Map<string, OtDivision[]>(); for (const row of divisionRows) { const list = divisionsByShed.get(row.shed) ?? []; list.push(row); divisionsByShed.set(row.shed, list); }

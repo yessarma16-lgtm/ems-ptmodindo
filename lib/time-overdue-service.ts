@@ -70,8 +70,10 @@ export async function getTimeOverdueReport(date: string, dateTo?: string): Promi
     for (const idBatch of chunk(rawIds, 500)) {
       const { data, error } = await client.from("calculated_attendance").select("raw_id,status").in("raw_id", idBatch);
       if (error) throw error;
+      // Sesuai (clean auto-match) and Dikoreksi Manual (HR-reviewed and corrected) both count — Tidak
+      // Sesuai/Cek Manual/Tidak Berlaku are excluded until HR resolves them (same rule as getOtPlanning).
       for (const row of (data ?? []) as { raw_id: number; status: string }[]) {
-        if (String(row.status) === "Sesuai") validRawIds.add(Number(row.raw_id));
+        if (row.status === "Sesuai" || row.status === "Dikoreksi Manual") validRawIds.add(Number(row.raw_id));
       }
     }
 
