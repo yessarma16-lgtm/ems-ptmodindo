@@ -58,6 +58,7 @@ export interface EmployeeListItem {
   exitDate: string;
   contractStatus: string;
   status: string;
+  interviewEvaluation: string;
 }
 
 /** Which employee list a query is for — maps to the STATUS/CATEGORY filters isActiveEmployee/isInactiveEmployee/isExpatriateEmployee used to apply client-side. */
@@ -168,5 +169,6 @@ export interface AllMasterData {
   levels: MasterDataItem[];
   skills: MasterDataItem[];
   banks: MasterDataItem[];
+  vacantPositions: MasterDataItem[];
   lookup: Record<string, LookupItem[]>;
 }

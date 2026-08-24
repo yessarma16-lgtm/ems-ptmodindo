@@ -16,6 +16,7 @@ import {
   UserRound,
   ListTree,
   Users,
+  Briefcase,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,6 +58,7 @@ export const MAIN_NAV: NavItem[] = [
     children: [
       { label: "New Hiring", href: "/recruitment/new-hiring", icon: UserPlus },
       { label: "Applicant Pool", href: "/recruitment/applicant-pool", icon: UsersRound },
+      { label: "Vacant Position", href: "/recruitment/vacant-position", icon: Briefcase },
     ],
   },
   {

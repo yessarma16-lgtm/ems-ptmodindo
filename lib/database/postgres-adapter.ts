@@ -131,7 +131,7 @@ async function getEmployees(): Promise<EmployeeRecord[]> {
 }
 
 const LIST_ITEM_COLUMNS =
-  "record_id, nik, name, department, position, level, type, category, join_date, exit_date, contract_status, status";
+  "record_id, nik, name, department, position, level, type, category, join_date, exit_date, contract_status, status, interview_evaluation";
 
 function rowToListItem(row: SqlRow): EmployeeListItem {
   return {
@@ -147,6 +147,7 @@ function rowToListItem(row: SqlRow): EmployeeListItem {
     exitDate: str(row.exit_date),
     contractStatus: str(row.contract_status),
     status: str(row.status),
+    interviewEvaluation: str(row.interview_evaluation),
   };
 }
 
@@ -706,15 +707,16 @@ async function toggleLookupStatus(id: string): Promise<LookupItem> {
 /* -------------------------------------------------------------------------- */
 
 async function getAllMasterData(): Promise<AllMasterData> {
-  const [departments, positions, levels, skills, banks, lookup] = await Promise.all([
+  const [departments, positions, levels, skills, banks, vacantPositions, lookup] = await Promise.all([
     getSimpleMasterData("departments"),
     getSimpleMasterData("positions"),
     getSimpleMasterData("levels"),
     getSimpleMasterData("skills"),
     getSimpleMasterData("banks"),
+    getSimpleMasterData("vacantPositions"),
     getAllLookup(),
   ]);
-  return { departments, positions, levels, skills, banks, lookup };
+  return { departments, positions, levels, skills, banks, vacantPositions, lookup };
 }
 
 async function ensureReady(): Promise<void> {

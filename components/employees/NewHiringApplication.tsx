@@ -9,7 +9,7 @@ import type { EmployeeFormMasterData } from "@/lib/master-data-options";
 // hidden from this self-service form. It's still optional in publicApplySchema
 // (see PUBLIC_APPLY_OPTIONAL_OVERRIDES), so submitting without it is fine —
 // HR fills it in later, same as the other excluded internal-only fields below.
-const EXCLUDED = ["nik", "fingerCode", "category", "department", "level", "skill", "type", "shed", "joinDate", "status", "exitDate", "reason", "masaKerja", "contractStatus", "permanenDate", "contractCriteria", "bpjsKtk", "bpjsKes", "sn", "mutasiI", "mutasiII", "detailDisabilitas"];
+const EXCLUDED = ["nik", "fingerCode", "category", "department", "level", "skill", "type", "shed", "joinDate", "status", "exitDate", "reason", "masaKerja", "contractStatus", "permanenDate", "contractCriteria", "bpjsKtk", "bpjsKes", "sn", "mutasiI", "mutasiII", "detailDisabilitas", "interviewEvaluation", "positionApplied"];
 
 export function NewHiringApplication({ token, masterData, masterDataError, initialNewForm = false }: { token: string; masterData: EmployeeFormMasterData | null; masterDataError: string | null; initialNewForm?: boolean }) {
   const [identifier, setIdentifier] = useState("");

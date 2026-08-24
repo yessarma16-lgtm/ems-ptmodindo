@@ -12,12 +12,22 @@ import { ALL_EMPLOYEE_FORM_FIELDS } from "@/config/employee-fields";
  * already independently requires them again before a registration can be
  * approved into a real employee record, so nothing slips through blank.
  *
- * POSITION is deliberately NOT in this set — unlike NIK/DEPARTMENT/JOIN DATE
- * it's never hidden on any public form (the candidate always picks it
- * themselves on walk-in/new-hiring, or it arrives pre-filled and locked on
- * the invite-link flow), so it must stay required everywhere.
+ * POSITION is included here too — it's now hidden specifically on the
+ * Applicant Pool walk-in form (see the merged excludeFields in
+ * app/apply/walkin/[token]/page.tsx), superseded there by POSITION APPLIED
+ * (sourced from the Vacant Position master data). It stays visible and
+ * effectively required on New Hiring / the invite-link flow, which don't
+ * exclude it — this override only relaxes the schema-level requirement so
+ * the walk-in submission isn't blocked by a field it never shows.
+ *
+ * POSITION APPLIED is also here for the mirror-image reason: it's required
+ * ON the Applicant Pool walk-in form, but excluded (hidden) on New Hiring and
+ * the invite-link flow — since a single schema is shared by all public
+ * forms, it can't be "required" only where shown, so it's relaxed here and
+ * enforced instead as a targeted client-side check in EmployeeForm.tsx
+ * (only when the field isn't in `excludeFields` — i.e. walk-in only).
  */
-const PUBLIC_APPLY_OPTIONAL_OVERRIDES = new Set(["nik", "department", "joinDate"]);
+const PUBLIC_APPLY_OPTIONAL_OVERRIDES = new Set(["nik", "department", "joinDate", "position", "positionApplied"]);
 
 /**
  * Zod schema built dynamically from `config/employee-fields.ts`, the single

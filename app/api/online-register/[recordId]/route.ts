@@ -8,14 +8,27 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const { recordId } = await params;
     const body = await request.json();
-    const parsed = employeeSchema.safeParse(body);
+    // HR Review save (EmployeeForm's "HR Review" button, /recruitment/[id]
+    // only) — saves whatever HR has filled in so far without enforcing
+    // mandatory fields. Approve/Promote independently re-checks the required
+    // set (see REQUIRED_FOR_APPROVAL in postgres-online-registrations.ts)
+    // before a registration can advance, so nothing incomplete slips through
+    // into a real Employee record via this bypass.
+    const isHrReview = request.headers.get("x-hr-review") === "1";
+    const parsed = (isHrReview ? employeeSchema.partial() : employeeSchema).safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Validation failed.", issues: parsed.error.flatten().fieldErrors },
         { status: 400 },
       );
     }
-    const registration = await updateOnlineRegistration(recordId, parsed.data);
+    // .partial() types every field as possibly-undefined, but the client
+    // always sends every field key (blank string for untouched ones) — this
+    // just satisfies updateOnlineRegistration's Record<string, string> shape.
+    const data: Record<string, string> = Object.fromEntries(
+      Object.entries(parsed.data).map(([key, value]) => [key, value ?? ""]),
+    );
+    const registration = await updateOnlineRegistration(recordId, data);
     return NextResponse.json({ registration });
   } catch (err) {
     return toApiErrorResponse(err);

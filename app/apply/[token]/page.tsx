@@ -16,6 +16,9 @@ import { PUBLIC_APPLY_EXCLUDED_FIELDS, PUBLIC_APPLY_SECTION_ORDER } from "@/conf
 
 export const dynamic = "force-dynamic";
 
+/** POSITION APPLIED (Vacant Position master data) is specific to the Applicant Pool walk-in form — not shown here, where POSITION itself already arrives pre-filled and locked. */
+const INVITE_LINK_EXCLUDED_FIELDS = [...PUBLIC_APPLY_EXCLUDED_FIELDS, "positionApplied"];
+
 function StatusScreen({
   icon,
   title,
@@ -123,7 +126,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ token: s
           redirectTo={`/apply/${token}`}
           successMessage="Application submitted. Thank you!"
           lockedFields={["name", "hpNumber", "position"]}
-          excludeFields={PUBLIC_APPLY_EXCLUDED_FIELDS}
+          excludeFields={INVITE_LINK_EXCLUDED_FIELDS}
           sectionOrder={PUBLIC_APPLY_SECTION_ORDER}
         />
       </div>

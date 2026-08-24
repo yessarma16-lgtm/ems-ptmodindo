@@ -12,6 +12,7 @@ export type MasterDataSource =
 export const FIELD_MASTER_DATA_SOURCE: Record<string, MasterDataSource> = {
   department: { kind: "sheet", sheet: "departments" },
   position: { kind: "sheet", sheet: "positions" },
+  positionApplied: { kind: "sheet", sheet: "vacantPositions" },
   level: { kind: "sheet", sheet: "levels" },
   skill: { kind: "sheet", sheet: "skills" },
   bankName: { kind: "sheet", sheet: "banks" },

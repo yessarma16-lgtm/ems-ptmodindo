@@ -13,6 +13,14 @@ import { PUBLIC_APPLY_EXCLUDED_FIELDS, PUBLIC_APPLY_SECTION_ORDER } from "@/conf
 export const dynamic = "force-dynamic";
 
 /**
+ * POSITION ("Potition") is superseded on this specific form by POSITION
+ * APPLIED (sourced from Vacant Position master data, see
+ * config/employee-fields.ts) — hidden here only, not on New Hiring or the
+ * invite-link flow, which still use the plain PUBLIC_APPLY_EXCLUDED_FIELDS.
+ */
+const WALKIN_EXCLUDED_FIELDS = [...PUBLIC_APPLY_EXCLUDED_FIELDS, "position"];
+
+/**
  * Public, unauthenticated — landing page for the fixed walk-in QR code
  * printed on posters/flyers. Unlike /apply/[token] (one link per candidate,
  * pre-filled and locked), this is fully open: anyone who scans it fills in
@@ -92,7 +100,7 @@ export default async function WalkInApplyPage({ params, searchParams }: { params
           submitUrl={`/api/apply/walkin/${token}`}
           redirectTo="/apply/walkin/thanks"
           successMessage="Application submitted. Thank you!"
-          excludeFields={PUBLIC_APPLY_EXCLUDED_FIELDS}
+          excludeFields={WALKIN_EXCLUDED_FIELDS}
           sectionOrder={PUBLIC_APPLY_SECTION_ORDER}
         />
       </div>

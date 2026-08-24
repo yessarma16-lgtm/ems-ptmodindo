@@ -21,6 +21,7 @@ export interface EmployeeFormMasterData {
   levels: SelectOption[];
   skills: SelectOption[];
   banks: SelectOption[];
+  vacantPositions: SelectOption[];
   lookup: Record<string, SelectOption[]>;
 }
 
@@ -47,6 +48,7 @@ export function toEmployeeFormMasterData(data: AllMasterData): EmployeeFormMaste
     levels: toOptions(data.levels),
     skills: toOptions(data.skills),
     banks: toOptions(data.banks),
+    vacantPositions: toOptions(data.vacantPositions),
     lookup,
   };
 }

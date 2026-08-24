@@ -67,6 +67,7 @@ export default async function EditOnlineRegistrationPage({
             successMessage="Registration updated."
             showContractPeriods
             stayOnPage
+            hrReview
           />
         </>
       )}

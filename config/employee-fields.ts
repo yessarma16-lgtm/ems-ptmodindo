@@ -150,6 +150,8 @@ export const EXTRA_EMPLOYEE_FIELDS: EmployeeField[] = [
   { key: "blood", label: "BLOOD TYPE", type: "select", required: false, tabOrder: 56, section: "Personal Information", spreadsheetColumn: "BG", optionsKey: "blood" },
   { key: "email", label: "EMAIL", type: "text", required: false, tabOrder: 57, section: "Personal Information", spreadsheetColumn: "BH" },
   { key: "branch", label: "BRANCH", type: "text", required: false, tabOrder: 58, section: "Bank Information", spreadsheetColumn: "BI" },
+  { key: "positionApplied", label: "POSITION APPLIED", type: "select", required: true, tabOrder: 59, section: "Employment Information", spreadsheetColumn: "BJ", optionsKey: "positionApplied" },
+  { key: "interviewEvaluation", label: "INTERVIEW EVALUATION", type: "textarea", required: false, tabOrder: 60, section: "Employment Information", spreadsheetColumn: "BK" },
 ];
 
 /** Every field that appears on the Employee Form: the 55 db_mod.xlsx fields + the extra fields above. */
@@ -213,6 +215,7 @@ export const PUBLIC_APPLY_EXCLUDED_FIELDS = [
   "mutasiI",
   "mutasiII",
   "detailDisabilitas",
+  "interviewEvaluation",
 ];
 
 /**

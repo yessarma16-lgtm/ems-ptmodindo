@@ -226,13 +226,14 @@ export function EmployeeTable({
               </TableHead>
               <TableHead>Contract Status</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Interview Evaluation</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={11} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={12} className="py-10 text-center text-muted-foreground">
                   No employees found.
                 </TableCell>
               </TableRow>
@@ -260,6 +261,9 @@ export function EmployeeTable({
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
+                </TableCell>
+                <TableCell className="max-w-[220px] truncate" title={employee.interviewEvaluation || undefined}>
+                  {employee.interviewEvaluation || <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center justify-end gap-1">

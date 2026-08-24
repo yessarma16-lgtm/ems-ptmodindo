@@ -22,6 +22,7 @@ export const SIMPLE_MASTER_SHEETS = {
   levels: "Levels",
   skills: "Skills",
   banks: "Bank",
+  vacantPositions: "Vacant_Position",
 } as const;
 
 export type SimpleMasterCategory = keyof typeof SIMPLE_MASTER_SHEETS;
@@ -101,7 +102,7 @@ export const ROLE_PERMISSIONS_LAST_COLUMN = "C";
 export const ONLINE_REGISTRATIONS_SHEET_NAME = "Online_Registrations";
 export const ONLINE_REGISTRATIONS_EXTRA_HEADERS = ["REGISTRATION_STATUS", "SOURCE_PLATFORM", "SUBMITTED_AT"];
 export const ONLINE_REGISTRATIONS_SHEET_HEADERS = [...EMPLOYEES_SHEET_HEADERS, ...ONLINE_REGISTRATIONS_EXTRA_HEADERS];
-export const ONLINE_REGISTRATIONS_LAST_COLUMN = "BL";
+export const ONLINE_REGISTRATIONS_LAST_COLUMN = "BN";
 
 /** Sheets prepared with a header row only — no CRUD service/UI in STEP 2 (Settings and Online_Registrations gained real read/write later — see lib/database/google-sheets-settings.ts and google-sheets-online-registrations.ts). */
 export const SUPPORTING_SHEET_HEADERS: Record<string, string[]> = {

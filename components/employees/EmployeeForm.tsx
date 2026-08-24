@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Loader2, Save, Trash2, Plus } from "lucide-react";
+import { AlertTriangle, ClipboardCheck, Loader2, Save, Trash2, Plus } from "lucide-react";
 
 import {
   ALL_EMPLOYEE_FORM_FIELDS,
@@ -67,6 +67,15 @@ interface EmployeeFormProps {
   /** Skips the post-save redirect entirely — stays on this same page (just refreshes the data) instead of navigating away. Ignores `redirectTo` when set. */
   stayOnPage?: boolean;
   /**
+   * Shows an "HR Review" button next to Save (Recruitment edit page only) —
+   * saves whatever has been filled in so far without enforcing mandatory
+   * fields, for HR reviewing a registration mid-process. The server route
+   * must separately honor the `x-hr-review` header this sends (see
+   * PUT /api/online-register/[recordId]) — Approve/Promote still requires
+   * the full mandatory set regardless, this only relaxes the Save step.
+   */
+  hrReview?: boolean;
+  /**
    * Shows the Contract Information period editor (with the same
    * Probation/Contract auto-date-calc preview as the "New Employee" form)
    * even though this isn't the internal admin form — e.g. the recruitment
@@ -127,8 +136,10 @@ export function EmployeeForm({
   deleteConfig,
   showContractPeriods,
   stayOnPage = false,
+  hrReview = false,
 }: EmployeeFormProps) {
   const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [values, setValues] = useState<Record<string, string>>(() =>
     buildInitialState(initialValues),
   );
@@ -385,47 +396,70 @@ export function EmployeeForm({
   function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (readOnly) return;
+    submitForm(e.currentTarget, {});
+  }
 
+  /** HR Review button — bypasses the validation gate below entirely, saving whatever's filled in so far. See the `hrReview` prop doc for why. */
+  function handleHrReviewClick() {
+    if (readOnly || !formRef.current) return;
+    submitForm(formRef.current, { bypass: true });
+  }
+
+  function submitForm(formElement: HTMLFormElement, opts: { bypass?: boolean }) {
     // Read the current DOM values as well as React state. This keeps mobile
     // browser input/autofill values from being lost when the form is saved.
     const submittedValues = { ...values };
-    const formData = new FormData(e.currentTarget);
+    const formData = new FormData(formElement);
     for (const field of ALL_EMPLOYEE_FORM_FIELDS) {
       const value = formData.get(field.key);
       if (typeof value === "string") submittedValues[field.key] = value;
     }
 
     const parsed = (isInternalAdminForm ? employeeSchema : publicApplySchema).safeParse(submittedValues);
-    const flat: Record<string, string> = {};
-    if (!parsed.success) {
-      const fieldErrors = parsed.error.flatten().fieldErrors;
-      Object.entries(fieldErrors).forEach(([k, v]) => {
-        if (v && v[0]) flat[k] = v[0];
-      });
-    }
+    const bodyData = parsed.success ? parsed.data : submittedValues;
 
-    // FINGER CODE is only required on the internal Add Employee admin
-    // form — the shared schema always treats it as optional so public
-    // apply/walk-in submissions (which never show this field) aren't blocked.
-    if (mode === "create" && !excludeFields?.includes("fingerCode") && !values.fingerCode?.trim()) {
-      flat.fingerCode = "FINGER CODE wajib diisi";
-    }
-
-    if (!parsed.success || Object.keys(flat).length > 0) {
-      setErrors(flat);
-      toast.error("Please fix the highlighted fields before saving.");
-      const firstErrorKey = Object.keys(flat)[0];
-      if (firstErrorKey) {
-        document
-          .getElementById(`field-${firstErrorKey}`)
-          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!opts.bypass) {
+      const flat: Record<string, string> = {};
+      if (!parsed.success) {
+        const fieldErrors = parsed.error.flatten().fieldErrors;
+        Object.entries(fieldErrors).forEach(([k, v]) => {
+          if (v && v[0]) flat[k] = v[0];
+        });
       }
-      return;
-    }
 
-    if (isInternalAdminForm && contractEntries.some((e) => !e.startDate || !e.endDate)) {
-      toast.error("Lengkapi Start Date dan End Date di setiap periode kontrak, atau hapus baris yang kosong.");
-      return;
+      // FINGER CODE is only required on the internal Add Employee admin
+      // form — the shared schema always treats it as optional so public
+      // apply/walk-in submissions (which never show this field) aren't blocked.
+      if (mode === "create" && !excludeFields?.includes("fingerCode") && !values.fingerCode?.trim()) {
+        flat.fingerCode = "FINGER CODE wajib diisi";
+      }
+
+      // POSITION APPLIED is relaxed to optional in publicApplySchema (it's
+      // hidden on New Hiring/invite-link, which would otherwise be blocked by
+      // a field they never render) — so it's enforced here instead, only on
+      // forms where it's actually shown (walk-in), same pattern as FINGER CODE above.
+      if (!excludeFields?.includes("positionApplied") && !values.positionApplied?.trim()) {
+        flat.positionApplied = "POSITION APPLIED wajib diisi";
+      }
+
+      if (!parsed.success || Object.keys(flat).length > 0) {
+        setErrors(flat);
+        toast.error("Please fix the highlighted fields before saving.");
+        const firstErrorKey = Object.keys(flat)[0];
+        if (firstErrorKey) {
+          document
+            .getElementById(`field-${firstErrorKey}`)
+            ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        return;
+      }
+
+      if (isInternalAdminForm && contractEntries.some((e) => !e.startDate || !e.endDate)) {
+        toast.error("Lengkapi Start Date dan End Date di setiap periode kontrak, atau hapus baris yang kosong.");
+        return;
+      }
+    } else {
+      setErrors({});
     }
 
     startTransition(async () => {
@@ -434,8 +468,8 @@ export function EmployeeForm({
         const method = mode === "create" ? "POST" : "PUT";
         const res = await fetch(url, {
           method,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(parsed.data),
+          headers: { "Content-Type": "application/json", ...(opts.bypass ? { "x-hr-review": "1" } : {}) },
+          body: JSON.stringify(bodyData),
         });
         const data = await res.json();
 
@@ -484,7 +518,7 @@ export function EmployeeForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate>
+    <form ref={formRef} onSubmit={handleSubmit} noValidate>
       {!readOnly && masterDataError && (
         <Alert variant="destructive" className="mb-6">
           <AlertTriangle className="mt-0.5" />
@@ -522,7 +556,6 @@ export function EmployeeForm({
                       options={locked ? [] : getOptionsForField(field, masterData)}
                       onChange={(v) => setField(field.key, v)}
                       mode={mode}
-                      label={submitUrl && field.key === "position" ? "POSITION APPLIED" : field.label}
                     />
                   );
                 })}
@@ -586,6 +619,12 @@ export function EmployeeForm({
             >
               <Trash2 />
               Delete
+            </Button>
+          )}
+          {hrReview && (
+            <Button type="button" variant="secondary" title="Save without requiring the mandatory fields to be filled in" onClick={handleHrReviewClick} disabled={isPending}>
+              {isPending ? <Loader2 className="animate-spin" /> : <ClipboardCheck />}
+              HR Review
             </Button>
           )}
           <Button type="submit" disabled={isPending}>

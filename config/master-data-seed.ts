@@ -313,6 +313,8 @@ export const SIMPLE_MASTER_SEED: Record<SimpleMasterCategory, SeedRow[]> = {
     { code: "C_PLUS", name: "C+" },
   ],
   banks: [{ code: "MANDIRI", name: "Mandiri Bank" }],
+  /** Starts empty — HR populates currently-open positions manually via /recruitment/vacant-position. */
+  vacantPositions: [],
 };
 
 export const LOOKUP_SEED: Record<LookupType, SeedRow[]> = {

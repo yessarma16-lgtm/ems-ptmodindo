@@ -131,6 +131,7 @@ async function getEmployeeListItems(): Promise<EmployeeListItem[]> {
     exitDate: r.exitDate ?? "",
     contractStatus: r.contractStatus ?? "",
     status: r.status ?? "",
+    interviewEvaluation: r.interviewEvaluation ?? "",
   }));
 }
 
@@ -494,15 +495,16 @@ async function toggleLookupStatus(id: string): Promise<LookupItem> {
 /* -------------------------------------------------------------------------- */
 
 async function getAllMasterData(): Promise<AllMasterData> {
-  const [departments, positions, levels, skills, banks, lookup] = await Promise.all([
+  const [departments, positions, levels, skills, banks, vacantPositions, lookup] = await Promise.all([
     getSimpleMasterData("departments"),
     getSimpleMasterData("positions"),
     getSimpleMasterData("levels"),
     getSimpleMasterData("skills"),
     getSimpleMasterData("banks"),
+    getSimpleMasterData("vacantPositions"),
     getAllLookup(),
   ]);
-  return { departments, positions, levels, skills, banks, lookup };
+  return { departments, positions, levels, skills, banks, vacantPositions, lookup };
 }
 
 async function ensureReady(): Promise<void> {
