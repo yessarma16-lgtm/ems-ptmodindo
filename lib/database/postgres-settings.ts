@@ -22,6 +22,26 @@ export async function regeneratePublicApplyToken(): Promise<string> {
   return token;
 }
 
+const NEW_HIRING_APPLY_TOKEN_KEY = "new_hiring_apply_token";
+
+/**
+ * New Hiring's self-service token — unlike PUBLIC_APPLY_TOKEN_KEY (seeded
+ * once at db:init time), this one is lazily created on first read since it
+ * shipped after initial setup: no existing deployment has this row yet.
+ */
+export async function getNewHiringApplyToken(): Promise<string> {
+  const existing = await getSettingValue(NEW_HIRING_APPLY_TOKEN_KEY);
+  if (existing) return existing;
+  return regenerateNewHiringApplyToken();
+}
+
+/** Rotates the New Hiring application token — any previously printed/shared QR code or link stops working immediately. */
+export async function regenerateNewHiringApplyToken(): Promise<string> {
+  const token = crypto.randomUUID();
+  await setSettingValue(NEW_HIRING_APPLY_TOKEN_KEY, token, "New Hiring self-service application link token.");
+  return token;
+}
+
 /** Generic key/value read — returns "" if the key has never been set. Used for admin-uploaded background images. */
 export async function getSettingValue(key: string): Promise<string> {
   return supabaseGuarded(async () => {

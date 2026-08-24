@@ -49,7 +49,6 @@ export default async function EditOnlineRegistrationPage({
         breadcrumb={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Recruitment", href: "/recruitment" },
-          { label: "Online Register", href: "/recruitment" },
           { label: "Edit" },
         ]}
       />
@@ -65,8 +64,9 @@ export default async function EditOnlineRegistrationPage({
             masterData={masterData}
             masterDataError={masterDataError}
             submitUrl={`/api/online-register/${registration.recordId}`}
-            redirectTo="/recruitment"
             successMessage="Registration updated."
+            showContractPeriods
+            stayOnPage
           />
         </>
       )}

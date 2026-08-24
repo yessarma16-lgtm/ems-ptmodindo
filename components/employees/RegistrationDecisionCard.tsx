@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { ArrowRightCircle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,9 +26,10 @@ function statusVariant(status: string): "default" | "success" | "warning" | "des
 /** Approve converts this draft into a real Employee (Active list); Reject just marks it Rejected. Both are final. */
 export function RegistrationDecisionCard({ recordId, registrationStatus }: RegistrationDecisionCardProps) {
   const router = useRouter();
-  const [pending, setPending] = useState<"approve" | "reject" | null>(null);
+  const [pending, setPending] = useState<"approve" | "reject" | "promote" | null>(null);
   const status = registrationStatus.toLowerCase();
   const isPending = status === "pending";
+  const isApplicantPool = status === "applicant_pool";
   const isSent = status === "sent";
 
   async function handleApprove() {
@@ -48,6 +49,24 @@ export function RegistrationDecisionCard({ recordId, registrationStatus }: Regis
     }
   }
 
+  /** Applicant Pool's own "Approve" — advances the candidate to New Hiring (document review), not straight to Active Employees (that still needs NIK/Department/Join Date, which Applicant Pool candidates never have yet). */
+  async function handlePromote() {
+    setPending("promote");
+    try {
+      const res = await fetch(`/api/online-register/${recordId}/promote`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to move this candidate to New Hiring.");
+        return;
+      }
+      toast.success("Moved to New Hiring.");
+      router.push("/recruitment/new-hiring");
+      router.refresh();
+    } finally {
+      setPending(null);
+    }
+  }
+
   async function handleReject() {
     setPending("reject");
     try {
@@ -58,7 +77,7 @@ export function RegistrationDecisionCard({ recordId, registrationStatus }: Regis
         return;
       }
       toast.success("Registration rejected.");
-      router.push("/recruitment");
+      router.push(isApplicantPool ? "/recruitment/applicant-pool" : "/recruitment");
       router.refresh();
     } finally {
       setPending(null);
@@ -82,6 +101,17 @@ export function RegistrationDecisionCard({ recordId, registrationStatus }: Regis
             >
               {pending === "approve" ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
               Approve — Move to Active Employees
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleReject} disabled={pending !== null}>
+              {pending === "reject" ? <Loader2 className="animate-spin" /> : <XCircle />}
+              Reject
+            </Button>
+          </div>
+        ) : isApplicantPool ? (
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button type="button" onClick={handlePromote} disabled={pending !== null}>
+              {pending === "promote" ? <Loader2 className="animate-spin" /> : <ArrowRightCircle />}
+              Approve — Move to New Hiring
             </Button>
             <Button type="button" variant="destructive" onClick={handleReject} disabled={pending !== null}>
               {pending === "reject" ? <Loader2 className="animate-spin" /> : <XCircle />}

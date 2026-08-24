@@ -82,6 +82,7 @@ export default async function ApplyPage({ params }: { params: Promise<{ token: s
           applicationDate={formatDateLong(registration.submittedAt)}
           applicationId={buildApplicationId(registration.recordId, registration.submittedAt)}
           positionApplied={registration.position}
+          candidateNumber={registration.candidateNumber}
         />
       </ApplyBackground>
     );

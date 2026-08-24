@@ -39,6 +39,8 @@ export default async function WalkInThanksPage({ searchParams }: PageProps) {
         applicationDate={formatDateLong(registration.submittedAt)}
         applicationId={buildApplicationId(registration.recordId, registration.submittedAt)}
         positionApplied={registration.position}
+        candidateNumber={registration.candidateNumber}
+        showApplicationId={false}
       />
     </ApplyBackground>
   );

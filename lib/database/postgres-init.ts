@@ -88,6 +88,109 @@ async function ensureOnlineRegistrationsEmployeeShaped(client: Client): Promise<
   }
 }
 
+/** Applicant Pool/New Hiring additions. Additive and safe for existing databases. */
+async function ensureApplicantPoolSchema(client: Client): Promise<void> {
+  await client.query(`
+    ALTER TABLE online_registrations
+      ADD COLUMN IF NOT EXISTS candidate_number TEXT,
+      ADD COLUMN IF NOT EXISTS access_channel TEXT,
+      ADD COLUMN IF NOT EXISTS duplicate_check_result JSONB,
+      ADD COLUMN IF NOT EXISTS ocr_source_document_id UUID,
+      ADD COLUMN IF NOT EXISTS new_hiring_link_token UUID,
+      ADD COLUMN IF NOT EXISTS new_hiring_link_expiry TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS new_hiring_link_status TEXT,
+      ADD COLUMN IF NOT EXISTS approved_by TEXT,
+      ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS migrated_employee_record_id UUID,
+      ADD COLUMN IF NOT EXISTS new_hiring_link_created_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS new_hiring_link_accessed_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS new_hiring_link_used_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS new_hiring_link_revoked_at TIMESTAMPTZ;
+
+    CREATE TABLE IF NOT EXISTS candidate_number_sequences (
+      sequence_key TEXT PRIMARY KEY,
+      last_value INTEGER NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS applicant_previous_jobs (
+      id BIGSERIAL PRIMARY KEY,
+      applicant_id UUID NOT NULL REFERENCES online_registrations(record_id) ON DELETE CASCADE,
+      company_name TEXT NOT NULL,
+      start_year INTEGER NOT NULL,
+      end_year INTEGER,
+      last_position TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      CONSTRAINT applicant_previous_jobs_year_chk CHECK (end_year IS NULL OR end_year >= start_year)
+    );
+    CREATE INDEX IF NOT EXISTS idx_previous_jobs_applicant ON applicant_previous_jobs(applicant_id);
+    CREATE TABLE IF NOT EXISTS ocr_documents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      applicant_id UUID REFERENCES online_registrations(record_id) ON DELETE SET NULL,
+      original_filename TEXT NOT NULL DEFAULT '',
+      storage_path TEXT NOT NULL DEFAULT '',
+      mime_type TEXT NOT NULL DEFAULT '',
+      file_size_bytes INTEGER NOT NULL DEFAULT 0,
+      page_count INTEGER,
+      provider TEXT NOT NULL DEFAULT 'azure-document-intelligence',
+      model TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'uploaded',
+      raw_result JSONB,
+      parsed_result JSONB,
+      warning TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_online_candidate_number
+      ON online_registrations(candidate_number)
+      WHERE candidate_number IS NOT NULL AND btrim(candidate_number) <> '';
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_online_new_hiring_link_token
+      ON online_registrations(new_hiring_link_token)
+      WHERE new_hiring_link_token IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_online_registration_status ON online_registrations(registration_status);
+    CREATE INDEX IF NOT EXISTS idx_online_registration_nik ON online_registrations(nik);
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'online_registrations_ocr_document_fk'
+      ) THEN
+        ALTER TABLE online_registrations
+          ADD CONSTRAINT online_registrations_ocr_document_fk
+          FOREIGN KEY (ocr_source_document_id) REFERENCES ocr_documents(id) ON DELETE SET NULL;
+      END IF;
+    END $$;
+  `);
+
+  const duplicate = await client.query(
+    "SELECT 1 FROM employees WHERE btrim(nik) <> '' GROUP BY nik HAVING COUNT(*) > 1 LIMIT 1",
+  );
+  if (duplicate.rowCount === 0) {
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_employees_nik_nonempty
+      ON employees(nik) WHERE nik IS NOT NULL AND btrim(nik) <> ''`);
+  }
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION next_applicant_candidate_number()
+    RETURNS TEXT AS $$
+    DECLARE
+      v_key TEXT := to_char(now(), 'MMHH');
+      v_value INTEGER;
+    BEGIN
+      INSERT INTO candidate_number_sequences(sequence_key, last_value)
+      VALUES (v_key, 1)
+      ON CONFLICT (sequence_key) DO UPDATE
+        SET last_value = candidate_number_sequences.last_value + 1,
+            updated_at = now()
+      RETURNING last_value INTO v_value;
+      IF v_value > 999 THEN RAISE EXCEPTION 'Candidate number capacity exhausted for %', v_key; END IF;
+      RETURN 'MOD' || v_key || lpad(v_value::text, 3, '0');
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+}
+
 /** Seeds one default admin account so login isn't empty on first use. Never runs if any user already exists. */
 async function seedDefaultUserIfEmpty(client: Client): Promise<void> {
   const { rows } = await client.query<{ c: string }>("SELECT COUNT(*)::int as c FROM users");
@@ -232,6 +335,7 @@ export async function ensureSchema(client: Client): Promise<void> {
     );
   `);
   await ensureOnlineRegistrationsEmployeeShaped(client);
+  await ensureApplicantPoolSchema(client);
 
   // User Management + login.
   await client.query(`
@@ -515,7 +619,7 @@ export async function ensureSchema(client: Client): Promise<void> {
   const writableColumnList = WRITABLE_EMPLOYEE_COLUMNS.map((c) => c.column).join(", ");
   const writableColumnDefs = WRITABLE_EMPLOYEE_COLUMNS.map((c) => `${c.column} TEXT`).join(", ");
   await client.query(`
-    CREATE OR REPLACE FUNCTION approve_online_registration(p_record_id UUID, p_employee_fields JSONB)
+    CREATE OR REPLACE FUNCTION approve_online_registration(p_record_id UUID, p_employee_fields JSONB, p_approved_by TEXT DEFAULT NULL)
     RETURNS UUID AS $$
     DECLARE
       v_employee_record_id UUID;
@@ -524,7 +628,16 @@ export async function ensureSchema(client: Client): Promise<void> {
       SELECT count(*) INTO v_pending_count FROM online_registrations
         WHERE record_id = p_record_id AND lower(registration_status) = 'pending';
       IF v_pending_count = 0 THEN
+        SELECT migrated_employee_record_id INTO v_employee_record_id FROM online_registrations
+          WHERE record_id = p_record_id AND lower(registration_status) = 'approved';
+        IF v_employee_record_id IS NOT NULL THEN RETURN v_employee_record_id; END IF;
         RAISE EXCEPTION 'Online registration % not found or not pending', p_record_id;
+      END IF;
+
+      IF NULLIF(btrim(p_employee_fields->>'nik'), '') IS NOT NULL AND EXISTS (
+        SELECT 1 FROM employees WHERE nik = p_employee_fields->>'nik'
+      ) THEN
+        RAISE EXCEPTION 'NIK % already exists in employees', p_employee_fields->>'nik';
       END IF;
 
       INSERT INTO employees (${writableColumnList})
@@ -532,7 +645,8 @@ export async function ensureSchema(client: Client): Promise<void> {
       RETURNING record_id INTO v_employee_record_id;
 
       UPDATE online_registrations
-      SET registration_status = 'Approved', updated_at = now()
+      SET registration_status = 'Approved', approved_by = p_approved_by, approved_at = now(), archived_at = now(),
+          migrated_employee_record_id = v_employee_record_id, updated_at = now()
       WHERE record_id = p_record_id;
 
       RETURN v_employee_record_id;

@@ -53,6 +53,22 @@ function rowToRegistration(row: string[]): OnlineRegistration {
     registrationStatus: row[EXTRA_START] || "Pending",
     sourcePlatform: sourcePlatform === "walkin" || sourcePlatform === "direct_link" ? (sourcePlatform as SourcePlatform) : "",
     submittedAt: row[EXTRA_START + 2] ?? "",
+    // Legacy provider compatibility only; Google Sheets is not part of the new domain.
+    candidateNumber: "",
+    accessChannel: "",
+    duplicateCheckResult: "",
+    ocrSourceDocumentId: "",
+    newHiringLinkToken: "",
+    newHiringLinkExpiry: "",
+    newHiringLinkStatus: "",
+    approvedBy: "",
+    approvedAt: "",
+    archivedAt: "",
+    migratedEmployeeRecordId: "",
+    newHiringLinkCreatedAt: "",
+    newHiringLinkAccessedAt: "",
+    newHiringLinkUsedAt: "",
+    newHiringLinkRevokedAt: "",
   };
 }
 

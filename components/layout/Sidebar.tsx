@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -15,8 +15,6 @@ interface SidebarProps {
   onClose: () => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
-  width: number;
-  onWidthChange: (width: number) => void;
 }
 
 function NavLink({
@@ -103,10 +101,14 @@ function NavGroup({
   onNavigate: () => void;
 }) {
   const active = pathname === item.href || pathname.startsWith(item.href + "/");
+  const activeChild = item.children?.some((child) => pathname === child.href || pathname.startsWith(child.href + "/")) ?? false;
   const [expanded, setExpanded] = useState(active);
 
   if (item.collapsible && item.children) {
+    // In minimized mode, keep the active module's submenu icons visible.
+    // Labels stay hidden by ChildLinks.
     const showChildren = expanded && !collapsed;
+    const showActiveChildren = collapsed && (active || activeChild);
     return (
       <div>
         <button
@@ -125,7 +127,7 @@ function NavGroup({
           <span className={cn("flex-1 overflow-hidden whitespace-nowrap text-left transition-[max-width,opacity] duration-200", collapsed ? "max-w-0 opacity-0" : "max-w-[180px] opacity-100")}>{item.label}</span>
           {!collapsed && <ChevronDown className={cn("size-4 shrink-0 transition-transform", expanded && "rotate-180")} />}
         </button>
-        {(showChildren || (collapsed && active)) && <ChildLinks items={item.children} pathname={pathname} collapsed={collapsed} onNavigate={onNavigate} />}
+        {(showChildren || showActiveChildren) && <ChildLinks items={item.children} pathname={pathname} collapsed={collapsed} onNavigate={onNavigate} />}
       </div>
     );
   }
@@ -231,33 +233,17 @@ function SidebarContent({
   );
 }
 
-export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapsed, isDeveloper, width, onWidthChange }: SidebarProps) {
-  function startResize(event: ReactPointerEvent<HTMLDivElement>) {
-    if (collapsed) return;
-    event.preventDefault();
-    const handleMove = (moveEvent: PointerEvent) => onWidthChange(moveEvent.clientX);
-    const handleUp = () => {
-      document.removeEventListener("pointermove", handleMove);
-      document.removeEventListener("pointerup", handleUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    document.addEventListener("pointermove", handleMove);
-    document.addEventListener("pointerup", handleUp, { once: true });
-  }
-
+export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapsed, isDeveloper }: SidebarProps) {
   return (
     <>
       {/* Desktop / tablet persistent sidebar */}
       <aside
         className={cn(
           "hidden lg:block lg:shrink-0 lg:border-r lg:border-sidebar-border lg:transition-[width] lg:duration-200",
-          collapsed ? "lg:w-20" : "lg:w-64",
+          collapsed ? "lg:w-20" : "lg:w-[227px]",
         )}
       >
-        <div className="relative sticky top-0 h-screen" style={{ width: collapsed ? 80 : width }}>
+        <div className="relative sticky top-0 h-screen">
           <SidebarContent
             collapsed={collapsed}
             onClose={onClose}
@@ -266,7 +252,6 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapsed, isD
             showCollapseToggle
             isDeveloper={isDeveloper}
           />
-          {!collapsed && <div role="separator" aria-label="Resize sidebar" aria-orientation="vertical" onPointerDown={startResize} className="absolute right-0 top-0 z-20 h-full w-1 cursor-col-resize bg-transparent transition-colors hover:bg-sidebar-primary/40" />}
         </div>
       </aside>
 

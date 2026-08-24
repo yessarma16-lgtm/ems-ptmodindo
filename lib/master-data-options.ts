@@ -36,7 +36,10 @@ function toOptions(items: MasterDataItem[]): SelectOption[] {
 export function toEmployeeFormMasterData(data: AllMasterData): EmployeeFormMasterData {
   const lookup: Record<string, SelectOption[]> = {};
   for (const [type, items] of Object.entries(data.lookup)) {
-    lookup[type] = toOptions(items);
+    // Master data may come from Sheets/Postgres with inconsistent casing or
+    // accidental surrounding spaces in TYPE. Normalize the key once so every
+    // public form can reliably find its dropdown options.
+    lookup[type.trim().toUpperCase()] = toOptions(items);
   }
   return {
     departments: toOptions(data.departments),
@@ -55,5 +58,7 @@ export function getOptionsForField(
   if (!masterData) return [];
   const source = FIELD_MASTER_DATA_SOURCE[field.key];
   if (!source) return [];
-  return source.kind === "sheet" ? masterData[source.sheet] : masterData.lookup[source.type] ?? [];
+  return source.kind === "sheet"
+    ? masterData[source.sheet]
+    : masterData.lookup[source.type.trim().toUpperCase()] ?? [];
 }

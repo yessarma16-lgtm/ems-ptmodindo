@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, Loader2, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, Loader2, Save, Trash2, Plus } from "lucide-react";
 
 import {
   ALL_EMPLOYEE_FORM_FIELDS,
@@ -23,13 +23,7 @@ import type { ContractHistoryEntry } from "@/lib/database/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -43,6 +37,16 @@ import {
 } from "@/components/ui/dialog";
 
 export type EmployeeFormMode = "create" | "edit" | "view";
+
+/** A row in the Work Experience section, backed by `applicant_previous_jobs`. `key` is the real DB id once persisted, otherwise a client-generated temp id. */
+interface WorkExperienceRow {
+  key: string;
+  company: string;
+  position: string;
+  startYear: string;
+  endYear: string;
+  experience: string;
+}
 
 interface EmployeeFormProps {
   mode: EmployeeFormMode;
@@ -58,6 +62,19 @@ interface EmployeeFormProps {
   redirectTo?: string;
   /** Overrides the default "Employee created/updated" toast text. */
   successMessage?: string;
+  /** Overrides the default "Save Employee" submit button text. */
+  submitLabel?: string;
+  /** Skips the post-save redirect entirely — stays on this same page (just refreshes the data) instead of navigating away. Ignores `redirectTo` when set. */
+  stayOnPage?: boolean;
+  /**
+   * Shows the Contract Information period editor (with the same
+   * Probation/Contract auto-date-calc preview as the "New Employee" form)
+   * even though this isn't the internal admin form — e.g. the recruitment
+   * review page, where HR wants to see the computed Probation end date while
+   * deciding, before the candidate is actually approved into a real Employee
+   * record. Defaults to whatever `isInternalAdminForm` already is.
+   */
+  showContractPeriods?: boolean;
   /** Field keys that render read-only regardless of `mode` — e.g. Name/HP Number/Position locked on the public /apply form. */
   lockedFields?: string[];
   /** Field keys omitted from rendering entirely — e.g. FINGER CODE on the public apply/walk-in forms, which applicants never see or fill in. */
@@ -71,6 +88,19 @@ interface EmployeeFormProps {
     /** Shown in the confirmation dialog, e.g. the employee's name. */
     itemLabel?: string;
   };
+}
+
+/**
+ * `crypto.randomUUID()` only exists in a secure context (HTTPS or
+ * `localhost`) — the walk-in/new-hiring QR links are opened over plain HTTP
+ * on a LAN IP (that's the whole point, so a phone on-site can reach them),
+ * which is NOT a secure context, so the real API is simply absent there.
+ * Only used for client-side-only temp keys (never sent to the server), so a
+ * non-cryptographic fallback is fine.
+ */
+function randomClientKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `tmp-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function buildInitialState(initialValues?: Record<string, string>) {
@@ -90,10 +120,13 @@ export function EmployeeForm({
   submitUrl,
   redirectTo,
   successMessage,
+  submitLabel = "Save Employee",
   lockedFields,
   excludeFields,
   sectionOrder = EMPLOYEE_SECTIONS,
   deleteConfig,
+  showContractPeriods,
+  stayOnPage = false,
 }: EmployeeFormProps) {
   const router = useRouter();
   const [values, setValues] = useState<Record<string, string>>(() =>
@@ -108,9 +141,12 @@ export function EmployeeForm({
   // never shown on the public apply/walk-in forms, which always pass their
   // own `submitUrl`.
   const isInternalAdminForm = !submitUrl;
+  const showContractPeriodsResolved = showContractPeriods ?? isInternalAdminForm;
 
   const [contractEntries, setContractEntries] = useState<ContractPeriodRow[]>([]);
   const [originalContractIds, setOriginalContractIds] = useState<string[]>([]);
+  const [workExperiences, setWorkExperiences] = useState<WorkExperienceRow[]>([]);
+  const [originalWorkExperienceIds, setOriginalWorkExperienceIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isInternalAdminForm || mode === "create" || !recordId) return;
@@ -134,6 +170,34 @@ export function EmployeeForm({
     };
   }, [isInternalAdminForm, mode, recordId]);
 
+  // Work Experience is backed by `applicant_previous_jobs`, keyed off the
+  // online-registration's recordId — only applies to the public apply/edit
+  // flows and the admin's registration edit page (all pass `submitUrl`), not
+  // the internal Employees form (an Employee record isn't an applicant).
+  useEffect(() => {
+    if (isInternalAdminForm || mode === "create" || !recordId) return;
+    let cancelled = false;
+    fetch(`/api/new-hiring/previous-jobs?applicant_id=${encodeURIComponent(recordId)}`)
+      .then((r) => r.json())
+      .then((data: { jobs?: { id: string; companyName: string; lastPosition: string; startYear: number; endYear: number | null; description: string }[] }) => {
+        if (cancelled) return;
+        const rows: WorkExperienceRow[] = (data.jobs ?? []).map((j) => ({
+          key: j.id,
+          company: j.companyName,
+          position: j.lastPosition,
+          startYear: String(j.startYear),
+          endYear: j.endYear ? String(j.endYear) : "",
+          experience: j.description,
+        }));
+        setWorkExperiences(rows);
+        setOriginalWorkExperienceIds(rows.map((r) => r.key));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isInternalAdminForm, mode, recordId]);
+
   function computeNextContractLabel(entries: ContractPeriodRow[]): string {
     const n = entries.filter((e) => e.contractType !== "Probation").length + 1;
     return `Contract ${n}`;
@@ -142,7 +206,7 @@ export function EmployeeForm({
   function handleAddContractPeriod() {
     setContractEntries((prev) => [
       ...prev,
-      { key: crypto.randomUUID(), contractType: computeNextContractLabel(prev), startDate: "", endDate: "" },
+      { key: randomClientKey(), contractType: computeNextContractLabel(prev), startDate: "", endDate: "" },
     ]);
   }
 
@@ -152,6 +216,51 @@ export function EmployeeForm({
 
   function handleRemoveContractPeriod(key: string) {
     setContractEntries((prev) => prev.filter((e) => e.key !== key));
+  }
+
+  function handleAddWorkExperience() {
+    setWorkExperiences((prev) => [
+      ...prev,
+      { key: randomClientKey(), company: "", position: "", startYear: "", endYear: "", experience: "" },
+    ]);
+  }
+
+  function handleRemoveWorkExperience(key: string) {
+    setWorkExperiences((prev) => prev.filter((e) => e.key !== key));
+  }
+
+  /** Diffs workExperiences against what was originally loaded and syncs the difference — create/update/delete, run once after the registration itself is saved. Rows missing a company or start year are skipped (incomplete/blank rows the applicant never filled in). */
+  async function reconcileWorkExperience(applicantId: string) {
+    const currentKeys = new Set(workExperiences.map((e) => e.key));
+    const removedIds = originalWorkExperienceIds.filter((id) => !currentKeys.has(id));
+
+    await Promise.all([
+      ...workExperiences
+        .filter((e) => e.company.trim() && e.startYear.trim())
+        .map((e) => {
+          const payload = {
+            applicant_id: applicantId,
+            companyName: e.company,
+            lastPosition: e.position,
+            startYear: Number(e.startYear),
+            endYear: e.endYear ? Number(e.endYear) : null,
+            description: e.experience,
+          };
+          const isExisting = originalWorkExperienceIds.includes(e.key);
+          return isExisting
+            ? fetch(`/api/new-hiring/previous-jobs/${e.key}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              })
+            : fetch("/api/new-hiring/previous-jobs", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+        }),
+      ...removedIds.map((id) => fetch(`/api/new-hiring/previous-jobs/${id}`, { method: "DELETE" })),
+    ]);
   }
 
   /** Diffs contractEntries against what was originally loaded and syncs the difference — create/update/delete, run once after the employee record itself is saved. */
@@ -219,7 +328,7 @@ export function EmployeeForm({
 
       if (statusNorm === "probation") {
         const first: ContractPeriodRow = {
-          key: hasAutoFirst ? prev[0].key : crypto.randomUUID(),
+          key: hasAutoFirst ? prev[0].key : randomClientKey(),
           contractType: "Probation",
           startDate: nextJoinDate,
           endDate: nextJoinDate ? calculateProbationEndDate(nextJoinDate) : "",
@@ -229,7 +338,7 @@ export function EmployeeForm({
 
       if (statusNorm === "contract") {
         const first: ContractPeriodRow = {
-          key: hasAutoFirst ? prev[0].key : crypto.randomUUID(),
+          key: hasAutoFirst ? prev[0].key : randomClientKey(),
           contractType: "Contract 1",
           startDate: nextJoinDate,
           endDate: hasAutoFirst && prev[0].contractType === "Contract 1" ? prev[0].endDate : "",
@@ -253,9 +362,16 @@ export function EmployeeForm({
       return next;
     });
 
-    if (key === "joinDate" && isInternalAdminForm && mode === "create") {
+    // Auto-fires on the internal admin form only while creating (never
+    // silently overwrite an existing employee's real contract history just
+    // because someone touched JOIN DATE/CONTRACT STATUS on an edit) — but
+    // always on the recruitment review context (showContractPeriods), since
+    // nothing has been persisted as real contract history yet there either
+    // way; this is purely a live preview of what approval will create.
+    const contractSyncAllowed = showContractPeriodsResolved && (!isInternalAdminForm || mode === "create");
+    if (key === "joinDate" && contractSyncAllowed) {
       syncFirstContractPeriod(value, values.contractStatus);
-    } else if (key === "contractStatus" && isInternalAdminForm && mode === "create") {
+    } else if (key === "contractStatus" && contractSyncAllowed) {
       syncFirstContractPeriod(values.joinDate, value);
     }
   }
@@ -270,7 +386,16 @@ export function EmployeeForm({
     e.preventDefault();
     if (readOnly) return;
 
-    const parsed = (isInternalAdminForm ? employeeSchema : publicApplySchema).safeParse(values);
+    // Read the current DOM values as well as React state. This keeps mobile
+    // browser input/autofill values from being lost when the form is saved.
+    const submittedValues = { ...values };
+    const formData = new FormData(e.currentTarget);
+    for (const field of ALL_EMPLOYEE_FORM_FIELDS) {
+      const value = formData.get(field.key);
+      if (typeof value === "string") submittedValues[field.key] = value;
+    }
+
+    const parsed = (isInternalAdminForm ? employeeSchema : publicApplySchema).safeParse(submittedValues);
     const flat: Record<string, string> = {};
     if (!parsed.success) {
       const fieldErrors = parsed.error.flatten().fieldErrors;
@@ -329,22 +454,29 @@ export function EmployeeForm({
         if (isInternalAdminForm) {
           const savedEmployeeId = mode === "create" ? data.employee?.recordId : recordId;
           if (savedEmployeeId) await reconcileContractHistory(savedEmployeeId);
+        } else {
+          const savedApplicantId = mode === "create" ? data.registration?.recordId : recordId;
+          if (savedApplicantId) await reconcileWorkExperience(savedApplicantId);
         }
 
         toast.success(
           successMessage ?? (mode === "create" ? "Employee created successfully." : "Employee updated successfully."),
         );
 
-        let target = redirectTo ?? (mode === "create" ? "/employees" : `/employees/${recordId}`);
-        // For a custom redirectTo (e.g. the walk-in Thank You page), carry the
-        // newly-created record's id forward as a query param so that page can
-        // look up its own submission details to display.
-        const createdRecordId: string | undefined = data.employee?.recordId ?? data.registration?.recordId;
-        if (redirectTo && createdRecordId) {
-          target = `${target}${target.includes("?") ? "&" : "?"}rid=${createdRecordId}`;
+        if (stayOnPage) {
+          router.refresh();
+        } else {
+          let target = redirectTo ?? (mode === "create" ? "/employees" : `/employees/${recordId}`);
+          // For a custom redirectTo (e.g. the walk-in Thank You page), carry the
+          // newly-created record's id forward as a query param so that page can
+          // look up its own submission details to display.
+          const createdRecordId: string | undefined = data.employee?.recordId ?? data.registration?.recordId;
+          if (redirectTo && createdRecordId) {
+            target = `${target}${target.includes("?") ? "&" : "?"}rid=${createdRecordId}`;
+          }
+          router.push(target);
+          router.refresh();
         }
-        router.push(target);
-        router.refresh();
       } catch {
         toast.error("Unable to connect to Employee Database.");
       }
@@ -390,10 +522,11 @@ export function EmployeeForm({
                       options={locked ? [] : getOptionsForField(field, masterData)}
                       onChange={(v) => setField(field.key, v)}
                       mode={mode}
+                      label={submitUrl && field.key === "position" ? "POSITION APPLIED" : field.label}
                     />
                   );
                 })}
-                {section === "Contract Information" && isInternalAdminForm && (
+                {section === "Contract Information" && showContractPeriodsResolved && (
                   <ContractHistoryEditor
                     mode={mode}
                     entries={contractEntries}
@@ -408,8 +541,39 @@ export function EmployeeForm({
         })}
       </div>
 
+      <Card className="mt-6">
+        <CardHeader><CardTitle>Work Experience</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          {workExperiences.map((item) => (
+            <div key={item.key} className="grid grid-cols-1 items-start gap-4 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-6">
+              <Input placeholder="Company" value={item.company} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, company: e.target.value } : row))} />
+              <Input placeholder="Job Position" value={item.position} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, position: e.target.value } : row))} />
+              <Input type="number" placeholder="Start Year" aria-label="Start Year" value={item.startYear} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, startYear: e.target.value } : row))} />
+              <Input type="number" placeholder="End Year" aria-label="End Year (blank = present)" value={item.endYear} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, endYear: e.target.value } : row))} />
+              <Textarea placeholder="Work Experience" value={item.experience} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, experience: e.target.value } : row))} />
+              {!readOnly && (
+                <Button type="button" variant="ghost" size="icon" title="Remove this entry" className="justify-self-start sm:justify-self-end" onClick={() => handleRemoveWorkExperience(item.key)}>
+                  <Trash2 className="size-4" />
+                </Button>
+              )}
+            </div>
+          ))}
+          {!readOnly && (
+            <button
+              type="button"
+              className="inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border border-input bg-card px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={handleAddWorkExperience}
+            >
+              <Plus className="size-4" />
+              Add Work Experience
+            </button>
+          )}
+          {readOnly && workExperiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience recorded.</p>}
+        </CardContent>
+      </Card>
+
       {!readOnly && (
-        <div className="sticky bottom-0 mt-6 flex items-center justify-end gap-3 border-t border-border bg-background/95 py-4 backdrop-blur">
+        <div className="mt-6 flex items-center justify-end gap-3 border-t border-border py-4">
           <Button type="button" variant="outline" onClick={() => router.back()}>
             Cancel
           </Button>
@@ -426,7 +590,7 @@ export function EmployeeForm({
           )}
           <Button type="submit" disabled={isPending}>
             {isPending ? <Loader2 className="animate-spin" /> : <Save />}
-            Save Employee
+            {submitLabel}
           </Button>
         </div>
       )}
@@ -466,6 +630,7 @@ function FieldControl({
   options,
   onChange,
   mode,
+  label,
 }: {
   field: EmployeeField;
   value: string;
@@ -474,11 +639,12 @@ function FieldControl({
   options: SelectOption[];
   onChange: (value: string) => void;
   mode: EmployeeFormMode;
+  label?: string;
 }) {
   const id = `field-${field.key}`;
   const labelNode = (
     <Label htmlFor={id} className="mb-1.5 block">
-      {field.label}
+      {label ?? field.label}
       {field.required && <span className="ml-0.5 text-destructive">*</span>}
     </Label>
   );
@@ -493,6 +659,7 @@ function FieldControl({
         {labelNode}
         <Input
           id={id}
+          name={field.key}
           value={value}
           readOnly
           disabled
@@ -540,7 +707,10 @@ function FieldControl({
     return (
       <div>
         {labelNode}
-        <Select value={value || undefined} onValueChange={onChange} disabled={isEmpty && !hasUnknownValue}>
+        {/* A custom (Radix) dropdown instead of a native <select> — tapping an
+            option applies it immediately and closes the list, instead of mobile
+            browsers' native picker wheel that needs an extra "Done" tap to confirm. */}
+        <Select name={field.key} value={value || undefined} onValueChange={onChange} disabled={isEmpty && !hasUnknownValue}>
           <SelectTrigger id={id}>
             <SelectValue placeholder={isEmpty ? `No ${field.label.toLowerCase()} available` : "Select..."} />
           </SelectTrigger>
@@ -563,6 +733,7 @@ function FieldControl({
         {labelNode}
         <Textarea
           id={id}
+          name={field.key}
           value={value}
           readOnly={disabled}
           className={disabled ? "bg-muted cursor-text" : undefined}
@@ -578,6 +749,7 @@ function FieldControl({
       {labelNode}
       <Input
         id={id}
+        name={field.key}
         type={disabled ? "text" : field.type === "date" ? "date" : "text"}
         value={disabled && field.type === "date" ? formatDateDMY(value) : value}
         readOnly={disabled}

@@ -52,7 +52,13 @@ export const MAIN_NAV: NavItem[] = [
       { label: "Expatriate", href: "/employees/expatriate", icon: Globe2 },
     ],
   },
-  { label: "Recruitment", href: "/recruitment", icon: UserPlus },
+  {
+    label: "Recruitment", href: "/recruitment", icon: UserPlus, collapsible: true,
+    children: [
+      { label: "New Hiring", href: "/recruitment/new-hiring", icon: UserPlus },
+      { label: "Applicant Pool", href: "/recruitment/applicant-pool", icon: UsersRound },
+    ],
+  },
   {
     label: "Attendance",
     href: "/attendance/import",

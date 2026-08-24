@@ -23,6 +23,7 @@ import { formatDateDMY, formatTimeHM } from "@/lib/date-format";
 
 interface OnlineRegisterTableProps {
   registrations: OnlineRegistration[];
+  emptyMessage?: string;
 }
 
 function statusVariant(status: string): "default" | "success" | "warning" | "destructive" | "secondary" {
@@ -61,7 +62,7 @@ function formatAppliedAt(iso: string): string {
 }
 
 /** Same table look as the Employees list, so Online Register reads as one consistent module. */
-export function OnlineRegisterTable({ registrations }: OnlineRegisterTableProps) {
+export function OnlineRegisterTable({ registrations, emptyMessage = "No registrations yet." }: OnlineRegisterTableProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<OnlineRegistration | null>(null);
@@ -96,7 +97,7 @@ export function OnlineRegisterTable({ registrations }: OnlineRegisterTableProps)
       <div className="relative mb-4 max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search by name or email..."
+          placeholder="Search by name, email, or position..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9"
@@ -109,6 +110,7 @@ export function OnlineRegisterTable({ registrations }: OnlineRegisterTableProps)
             <TableRow>
               <TableHead className="w-12">SN</TableHead>
               <TableHead>Name</TableHead>
+              <TableHead>Candidate No.</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>HP Number</TableHead>
               <TableHead>Applied Position</TableHead>
@@ -122,7 +124,7 @@ export function OnlineRegisterTable({ registrations }: OnlineRegisterTableProps)
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
-                  No registrations yet.
+                  {emptyMessage}
                 </TableCell>
               </TableRow>
             )}
@@ -130,6 +132,7 @@ export function OnlineRegisterTable({ registrations }: OnlineRegisterTableProps)
               <TableRow key={r.recordId}>
                 <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                 <TableCell className="font-medium">{r.name}</TableCell>
+                <TableCell>{r.candidateNumber || "—"}</TableCell>
                 <TableCell>{r.email}</TableCell>
                 <TableCell>{r.hpNumber}</TableCell>
                 <TableCell>{r.position}</TableCell>

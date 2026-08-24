@@ -4,6 +4,9 @@ interface ApplicationReceivedProps {
   applicationDate: string;
   applicationId: string;
   positionApplied: string;
+  candidateNumber?: string;
+  /** Applicant Pool has no NIK/Application-ID login, so the code is just noise there — New Hiring's lookup feature relies on it, so it stays visible by default. */
+  showApplicationId?: boolean;
 }
 
 const REQUIRED_DOCUMENTS: { label: string; qty: string }[] = [
@@ -20,7 +23,7 @@ const REQUIRED_DOCUMENTS: { label: string; qty: string }[] = [
 ];
 
 /** Shown after a successful public apply/walk-in submission (and again if the candidate revisits the link) — same design for both entry points. */
-export function ApplicationReceived({ applicationDate, applicationId, positionApplied }: ApplicationReceivedProps) {
+export function ApplicationReceived({ applicationDate, applicationId, positionApplied, candidateNumber, showApplicationId = true }: ApplicationReceivedProps) {
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <div className="relative mb-4 flex justify-center">
@@ -38,9 +41,12 @@ export function ApplicationReceived({ applicationDate, applicationId, positionAp
         Your application has been successfully submitted to HR PT MOD INDO.
       </p>
 
-      <div className="mt-8 grid grid-cols-1 gap-6 rounded-2xl border border-border bg-card p-6 shadow-sm sm:grid-cols-3">
+      <div className={`mt-8 grid grid-cols-1 gap-6 rounded-2xl border border-border bg-card p-6 shadow-sm ${showApplicationId ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
         <SummaryItem icon={<Calendar className="size-5 text-sky-600" />} iconBg="bg-sky-50 dark:bg-sky-950/40" label="Application Date" value={applicationDate} />
-        <SummaryItem icon={<BadgeCheck className="size-5 text-emerald-600" />} iconBg="bg-emerald-50 dark:bg-emerald-950/40" label="Application ID" value={applicationId} />
+        {showApplicationId && (
+          <SummaryItem icon={<BadgeCheck className="size-5 text-emerald-600" />} iconBg="bg-emerald-50 dark:bg-emerald-950/40" label="Application ID" value={applicationId} />
+        )}
+        <SummaryItem icon={<BadgeCheck className="size-5 text-amber-600" />} iconBg="bg-amber-50 dark:bg-amber-950/40" label="Candidate Number" value={candidateNumber ?? ""} valueClassName="text-lg" />
         <SummaryItem icon={<Briefcase className="size-5 text-violet-600" />} iconBg="bg-violet-50 dark:bg-violet-950/40" label="Position Applied" value={positionApplied} />
       </div>
 
@@ -99,17 +105,19 @@ function SummaryItem({
   iconBg,
   label,
   value,
+  valueClassName = "",
 }: {
   icon: React.ReactNode;
   iconBg: string;
   label: string;
   value: string;
+  valueClassName?: string;
 }) {
   return (
     <div className="flex flex-col items-center text-center">
       <div className={`mb-2 flex size-10 items-center justify-center rounded-full ${iconBg}`}>{icon}</div>
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-0.5 font-semibold text-foreground">{value || "—"}</p>
+      <p className={`mt-0.5 font-semibold text-foreground ${valueClassName}`}>{value || "—"}</p>
     </div>
   );
 }

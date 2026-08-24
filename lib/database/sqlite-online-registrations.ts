@@ -10,7 +10,7 @@ import {
   RegistrationAlreadyDecidedError,
   RegistrationAlreadySubmittedError,
 } from "@/lib/database/online-registration-errors";
-import type { EmployeeRecord, EmployeeInput } from "@/lib/database/types";
+import type { EmployeeRecord, EmployeeInput, ApplicantAccessChannel, NewHiringLinkStatus, DuplicateCheckResult } from "@/lib/database/types";
 
 export { RegistrationIncompleteError, RegistrationAlreadyDecidedError, RegistrationAlreadySubmittedError };
 
@@ -36,6 +36,21 @@ export interface OnlineRegistration extends EmployeeRecord {
   /** ISO timestamp set once the candidate submits the public /apply form; blank while the link is still unfilled. */
   submittedAt: string;
   sourcePlatform: SourcePlatform | "";
+  candidateNumber: string;
+  accessChannel: ApplicantAccessChannel | "";
+  duplicateCheckResult: string;
+  ocrSourceDocumentId: string;
+  newHiringLinkToken: string;
+  newHiringLinkExpiry: string;
+  newHiringLinkStatus: NewHiringLinkStatus | "";
+  approvedBy: string;
+  approvedAt: string;
+  archivedAt: string;
+  migratedEmployeeRecordId: string;
+  newHiringLinkCreatedAt: string;
+  newHiringLinkAccessedAt: string;
+  newHiringLinkUsedAt: string;
+  newHiringLinkRevokedAt: string;
 }
 
 function str(v: unknown): string {
@@ -63,6 +78,23 @@ function rowToRegistration(row: SqlRow): OnlineRegistration {
     registrationStatus: str(row.registration_status) || "Pending",
     submittedAt: str(row.submitted_at),
     sourcePlatform: sourcePlatform === "walkin" || sourcePlatform === "direct_link" ? sourcePlatform : "",
+    candidateNumber: str(row.candidate_number),
+    accessChannel: ["applicant_pool_qr", "new_hiring_qr_nik", "new_hiring_link"].includes(str(row.access_channel))
+      ? str(row.access_channel) as ApplicantAccessChannel : "",
+    duplicateCheckResult: str(row.duplicate_check_result),
+    ocrSourceDocumentId: str(row.ocr_source_document_id),
+    newHiringLinkToken: str(row.new_hiring_link_token),
+    newHiringLinkExpiry: str(row.new_hiring_link_expiry),
+    newHiringLinkStatus: ["active", "used", "expired", "revoked"].includes(str(row.new_hiring_link_status))
+      ? str(row.new_hiring_link_status) as NewHiringLinkStatus : "",
+    approvedBy: str(row.approved_by),
+    approvedAt: str(row.approved_at),
+    archivedAt: str(row.archived_at),
+    migratedEmployeeRecordId: str(row.migrated_employee_record_id),
+    newHiringLinkCreatedAt: str(row.new_hiring_link_created_at),
+    newHiringLinkAccessedAt: str(row.new_hiring_link_accessed_at),
+    newHiringLinkUsedAt: str(row.new_hiring_link_used_at),
+    newHiringLinkRevokedAt: str(row.new_hiring_link_revoked_at),
   };
 }
 
@@ -78,6 +110,18 @@ export function getOnlineRegistrationById(recordId: string): OnlineRegistration 
     | SqlRow
     | undefined;
   return row ? rowToRegistration(row) : null;
+}
+
+/** Generates MODMMHHXXX using an atomic, permanent counter per MMHH bucket. */
+function generateCandidateNumber(db: ReturnType<typeof getSqliteDb>, now: Date): string {
+  const key = `${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getHours()).padStart(2, "0")}`;
+  const timestamp = now.toISOString();
+  db.prepare(`INSERT INTO candidate_number_sequences(sequence_key, last_value, updated_at)
+    VALUES (?, 1, ?)
+    ON CONFLICT(sequence_key) DO UPDATE SET last_value = last_value + 1, updated_at = excluded.updated_at`).run(key, timestamp);
+  const row = db.prepare("SELECT last_value FROM candidate_number_sequences WHERE sequence_key = ?").get(key) as { last_value: number };
+  if (row.last_value > 999) throw new Error(`Candidate number capacity exhausted for ${key}.`);
+  return `MOD${key}${String(row.last_value).padStart(3, "0")}`;
 }
 
 /**
@@ -124,9 +168,11 @@ export function createWalkInApplication(input: EmployeeInput): OnlineRegistratio
   const db = getSqliteDb();
   const now = new Date().toISOString();
   const recordId = crypto.randomUUID();
+  const candidateNumber = generateCandidateNumber(db, new Date());
 
   const columns = [
     "record_id",
+    "candidate_number",
     ...WRITABLE_EMPLOYEE_COLUMNS.map((c) => c.column),
     "registration_status",
     "source_platform",
@@ -136,8 +182,9 @@ export function createWalkInApplication(input: EmployeeInput): OnlineRegistratio
   ];
   const values: string[] = [
     recordId,
+    candidateNumber,
     ...WRITABLE_EMPLOYEE_COLUMNS.map((c) => (c.key === "fingerCode" ? "" : input[c.key] ?? "")),
-    "Pending",
+    "applicant_pool",
     "walkin",
     now,
     now,
@@ -271,12 +318,18 @@ export function approveOnlineRegistration(recordId: string): { employeeRecordId:
   const db = getSqliteDb();
   const registration = getOnlineRegistrationById(recordId);
   if (!registration) throw new RecordNotFoundError("Online Registration", recordId);
+  if (registration.registrationStatus.toLowerCase() === "approved" && registration.migratedEmployeeRecordId) {
+    return { employeeRecordId: registration.migratedEmployeeRecordId };
+  }
   if (registration.registrationStatus.toLowerCase() !== "pending") {
     throw new RegistrationAlreadyDecidedError(registration.registrationStatus);
   }
 
   const missing = REQUIRED_FOR_APPROVAL.filter((f) => !registration[f.key]?.trim()).map((f) => f.label);
   if (missing.length > 0) throw new RegistrationIncompleteError(missing);
+
+  const duplicateNik = db.prepare("SELECT record_id FROM employees WHERE trim(nik) = trim(?) LIMIT 1").get(registration.nik) as { record_id: string } | undefined;
+  if (duplicateNik) throw new Error("NIK sudah terdaftar di employees.");
 
   const now = new Date().toISOString();
   const employeeRecordId = crypto.randomUUID();
@@ -296,7 +349,10 @@ export function approveOnlineRegistration(recordId: string): { employeeRecordId:
   db.exec("BEGIN");
   try {
     db.prepare(`INSERT INTO employees (${columns.join(", ")}) VALUES (${placeholders})`).run(...values);
-    db.prepare("UPDATE online_registrations SET registration_status = 'Approved', updated_at = ? WHERE record_id = ?").run(
+    db.prepare("UPDATE online_registrations SET registration_status = 'Approved', approved_at = ?, archived_at = ?, migrated_employee_record_id = ?, updated_at = ? WHERE record_id = ? AND lower(registration_status) = 'pending'").run(
+      now,
+      now,
+      employeeRecordId,
       now,
       recordId,
     );

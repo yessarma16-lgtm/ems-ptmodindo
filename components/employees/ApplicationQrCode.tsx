@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { toast } from "sonner";
-import { AlertTriangle, Check, Copy, Loader2, QrCode as QrCodeIcon, RefreshCw, ZoomIn } from "lucide-react";
+import { AlertTriangle, Check, Copy, Loader2, Maximize2, Minimize2, QrCode as QrCodeIcon, RefreshCw, ZoomIn } from "lucide-react";
 
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,7 +26,19 @@ import {
 interface ApplicationQrCodeProps {
   /** Only Administrators can rotate the fixed token — everyone else sees the code as read-only. */
   canRegenerate?: boolean;
+  fixedPath?: string;
+  heading?: string;
+  description?: string;
+  /** Starts the box collapsed (e.g. on pages where the candidate list below matters more than the QR itself). */
+  defaultCollapsed?: boolean;
+  /** Which rotating-token flow this QR represents when `fixedPath` isn't set — picks the settings-token API and the /apply path prefix. Defaults to "walkin". */
+  kind?: "walkin" | "new-hiring";
 }
+
+const QR_KIND_CONFIG = {
+  walkin: { tokenEndpoint: "/api/settings/public-apply-token", applyPathPrefix: "/apply/walkin" },
+  "new-hiring": { tokenEndpoint: "/api/settings/new-hiring-apply-token", applyPathPrefix: "/apply/new-hiring" },
+} as const;
 
 /**
  * Module-level cache (survives client-side navigation between pages, only
@@ -35,20 +47,48 @@ interface ApplicationQrCodeProps {
  * QR briefly re-flashed a loading spinner and redrew itself every single
  * time someone navigated to this page, even though the token — and
  * therefore the image — was identical to what was already showing.
+ *
+ * Keyed per `fixedPath` (Applicant Pool's token-based QR vs New Hiring's
+ * fixed one, or any other fixedPath) — this component renders more than one
+ * *kind* of QR across the app, and a single flat cache used to let whichever
+ * kind was visited last clobber the other: navigating New Hiring -> Applicant
+ * Pool client-side would briefly (or, if the token happened to already be
+ * cached, indefinitely until a hard reload) show New Hiring's QR/URL on the
+ * Applicant Pool page.
  */
-let cachedToken: string | null = null;
-let cachedUrl: string | null = null;
-let cachedQrDataUrl: string | null = null;
+type QrCacheEntry = { token: string | null; url: string | null; qrDataUrl: string | null };
+const qrCache = new Map<string, QrCacheEntry>();
+function getQrCacheEntry(cacheKey: string): QrCacheEntry {
+  let entry = qrCache.get(cacheKey);
+  if (!entry) {
+    entry = { token: null, url: null, qrDataUrl: null };
+    qrCache.set(cacheKey, entry);
+  }
+  return entry;
+}
 
-export function ApplicationQrCode({ canRegenerate = false }: ApplicationQrCodeProps) {
-  const [url, setUrl] = useState<string | null>(cachedUrl);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(cachedQrDataUrl);
+function getPublicOrigin(): string {
+  const origin = window.location.origin;
+  // Local testing: localhost in a QR code points back to the phone itself.
+  // Use the laptop's LAN address while the app is running on port 3001.
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return "http://192.168.43.198:3001";
+  }
+  return origin;
+}
+
+export function ApplicationQrCode({ canRegenerate = false, fixedPath, heading = "Walk-in Application QR Code", description, defaultCollapsed = false, kind = "walkin" }: ApplicationQrCodeProps) {
+  const { tokenEndpoint, applyPathPrefix } = QR_KIND_CONFIG[kind];
+  const cacheKey = fixedPath ?? kind;
+  const [url, setUrl] = useState<string | null>(() => getQrCacheEntry(cacheKey).url);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(() => getQrCacheEntry(cacheKey).qrDataUrl);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
   const [customBg, setCustomBg] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   const loadBackground = useCallback(async () => {
     try {
@@ -66,8 +106,16 @@ export function ApplicationQrCode({ canRegenerate = false }: ApplicationQrCodePr
 
   const loadToken = useCallback(async () => {
     setError(null);
+    const entry = getQrCacheEntry(cacheKey);
+    if (fixedPath) {
+      const fixedUrl = `${getPublicOrigin()}${fixedPath}`;
+      if (entry.url !== fixedUrl) entry.qrDataUrl = null;
+      entry.url = fixedUrl;
+      setUrl(fixedUrl);
+      return;
+    }
     try {
-      const res = await fetch("/api/settings/public-apply-token");
+      const res = await fetch(tokenEndpoint);
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "Unable to load the application QR code.");
@@ -75,17 +123,17 @@ export function ApplicationQrCode({ canRegenerate = false }: ApplicationQrCodePr
       }
       // Same token as last time (the common case — nobody regenerated it) —
       // reuse what's cached instead of re-fetching/re-rendering the QR image.
-      if (data.token === cachedToken && cachedUrl) {
-        setUrl(cachedUrl);
+      if (data.token === entry.token && entry.url) {
+        setUrl(entry.url);
         return;
       }
-      cachedToken = data.token;
-      cachedUrl = `${window.location.origin}/apply/walkin/${data.token}`;
-      setUrl(cachedUrl);
+      entry.token = data.token;
+      entry.url = `${getPublicOrigin()}${applyPathPrefix}/${data.token}`;
+      setUrl(entry.url);
     } catch {
       setError("Unable to connect to Employee Database.");
     }
-  }, []);
+  }, [fixedPath, cacheKey, tokenEndpoint, applyPathPrefix]);
 
   useEffect(() => {
     queueMicrotask(loadToken);
@@ -93,8 +141,9 @@ export function ApplicationQrCode({ canRegenerate = false }: ApplicationQrCodePr
 
   useEffect(() => {
     if (!url) return;
-    if (url === cachedUrl && cachedQrDataUrl) {
-      queueMicrotask(() => setQrDataUrl(cachedQrDataUrl));
+    const entry = getQrCacheEntry(cacheKey);
+    if (url === entry.url && entry.qrDataUrl) {
+      queueMicrotask(() => setQrDataUrl(entry.qrDataUrl));
       return;
     }
     queueMicrotask(() => {
@@ -102,12 +151,12 @@ export function ApplicationQrCode({ canRegenerate = false }: ApplicationQrCodePr
       // zoom on the thumbnail) stays crisp instead of upscaling a blurry source.
       QRCode.toDataURL(url, { width: 512, margin: 1, errorCorrectionLevel: "H" })
         .then((dataUrl) => {
-          cachedQrDataUrl = dataUrl;
+          entry.qrDataUrl = dataUrl;
           setQrDataUrl(dataUrl);
         })
         .catch(() => setError("Unable to render the QR code."));
     });
-  }, [url]);
+  }, [url, cacheKey]);
 
   async function handleCopy() {
     if (!url) return;
@@ -120,16 +169,17 @@ export function ApplicationQrCode({ canRegenerate = false }: ApplicationQrCodePr
   async function handleRegenerate() {
     setRegenerating(true);
     try {
-      const res = await fetch("/api/settings/public-apply-token/regenerate", { method: "POST" });
+      const res = await fetch(`${tokenEndpoint}/regenerate`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         toast.error(data.error ?? "Failed to regenerate the QR code.");
         return;
       }
-      cachedToken = data.token;
-      cachedUrl = `${window.location.origin}/apply/walkin/${data.token}`;
-      cachedQrDataUrl = null;
-      setUrl(cachedUrl);
+      const entry = getQrCacheEntry(cacheKey);
+      entry.token = data.token;
+      entry.url = `${getPublicOrigin()}${applyPathPrefix}/${data.token}`;
+      entry.qrDataUrl = null;
+      setUrl(entry.url);
       toast.success("QR code regenerated — any previously printed copy no longer works.");
       setConfirmOpen(false);
     } finally {
@@ -144,16 +194,34 @@ export function ApplicationQrCode({ canRegenerate = false }: ApplicationQrCodePr
         className="pointer-events-none absolute -inset-4 -z-10 bg-cover bg-center opacity-25 blur-md"
         style={{ backgroundImage: `url(${customBg ?? "/qr-section-bg.jpg"})` }}
       />
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <QrCodeIcon className="size-5" />
-          Walk-in Application QR Code
-        </CardTitle>
-        <CardDescription>
-          A fixed code for posters/flyers — any applicant can scan it to apply. It stays the same until you
-          explicitly regenerate it.
-        </CardDescription>
+      <CardHeader
+        className={`flex-row items-start justify-between gap-4 space-y-0 ${collapsed ? "cursor-pointer" : ""}`}
+        onClick={collapsed ? () => setCollapsed(false) : undefined}
+      >
+        <div className="space-y-1.5">
+          <CardTitle className="flex items-center gap-2">
+            <QrCodeIcon className="size-5" />
+            {heading}
+          </CardTitle>
+          <CardDescription>
+            {description ?? "Satu QR code untuk semua pelamar. QR tetap sama sampai Administrator memilih Regenerate."}
+          </CardDescription>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            setCollapsed((c) => !c);
+          }}
+          title={collapsed ? "Maximize" : "Minimize"}
+        >
+          {collapsed ? <Maximize2 className="size-4" /> : <Minimize2 className="size-4" />}
+        </Button>
       </CardHeader>
+      {collapsed ? null : (
       <CardContent>
         {error ? (
           <div className="flex items-center gap-2 text-sm text-destructive">
@@ -202,11 +270,12 @@ export function ApplicationQrCode({ canRegenerate = false }: ApplicationQrCodePr
           </div>
         )}
       </CardContent>
+      )}
 
       <Dialog open={zoomOpen} onOpenChange={setZoomOpen}>
         <DialogContent className="flex flex-col items-center gap-4 sm:max-w-md">
           <DialogHeader className="w-full">
-            <DialogTitle>Walk-in Application QR Code</DialogTitle>
+            <DialogTitle>{heading}</DialogTitle>
             <DialogDescription>Scan with a phone camera to open the application form.</DialogDescription>
           </DialogHeader>
           {qrDataUrl && (
@@ -232,7 +301,7 @@ export function ApplicationQrCode({ canRegenerate = false }: ApplicationQrCodePr
         <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Regenerate the walk-in QR code?</DialogTitle>
+              <DialogTitle>Regenerate this QR code?</DialogTitle>
               <DialogDescription>
                 Any QR code already printed on a poster/flyer, or link already shared, will stop working immediately.
                 Only do this if the current code needs to be invalidated (e.g. it was misused or leaked).

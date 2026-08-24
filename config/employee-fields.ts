@@ -37,7 +37,7 @@ export interface EmployeeField {
   /** True for system-calculated / non-editable fields (SN, AGE, MASA KERJA). */
   readOnly?: boolean;
   /**
-   * True to remove this field from the Employee Form entirely (not rendered,
+ * True to remove this field from the Employee Form entirely (not rendered,
    * not required). The field stays in this array — and keeps its
    * `spreadsheetColumn` letter — so every other field's positional index
    * into the Google Sheets row stays exactly where it already is.
@@ -75,7 +75,7 @@ export const EMPLOYEE_FIELDS: EmployeeField[] = [
   { key: "skill", label: "SKILL", type: "select", required: false, tabOrder: 9, section: "Employment Information", spreadsheetColumn: "I", optionsKey: "skill" },
   { key: "type", label: "Type", type: "select", required: false, tabOrder: 10, section: "Employment Information", spreadsheetColumn: "J", optionsKey: "type" },
   { key: "shed", label: "Shed", type: "select", required: false, tabOrder: 11, section: "Employment Information", spreadsheetColumn: "K", optionsKey: "shed" },
-  { key: "ktpNo", label: "KTP NO. (ID NO.)", type: "text", required: false, tabOrder: 12, section: "Personal Information", spreadsheetColumn: "L" },
+  { key: "ktpNo", label: "KTP NO. (ID NO.)", type: "text", required: true, tabOrder: 12, section: "Personal Information", spreadsheetColumn: "L" },
   { key: "birthDate", label: "BIRTH DATE", type: "date", required: false, tabOrder: 13, section: "Personal Information", spreadsheetColumn: "M" },
   { key: "birthPlace", label: "BIRTH PLACE", type: "text", required: false, tabOrder: 14, section: "Personal Information", spreadsheetColumn: "N" },
   { key: "age", label: "AGE", type: "auto", required: false, tabOrder: 15, section: "Personal Information", spreadsheetColumn: "O", readOnly: true },
@@ -178,18 +178,14 @@ export function getFieldByKey(key: string): EmployeeField | undefined {
 }
 
 /**
- * Fields hidden from the public apply/walk-in self-registration forms — a
- * candidate doesn't know their own NIK (employee ID, assigned internally)
- * and Employment Information (Category, Department, Position, Level, Skill,
- * Type, Shed, Join Date, Status, Exit Date, Reason, Masa Kerja) is entirely
- * HR-assigned after review, not something they declare themselves. Also
- * hidden: FINGER CODE and Contract Information (HR-managed after hiring), a
- * specific BPJS pair (BPJS KTK/KES — the BPJS NUMBER fields stay), and
- * internal record-keeping (SN, MUTASI I/II, DETAIL DISABILITAS).
+ * Fields hidden from the public apply/walk-in self-registration forms are
+ * internal identifiers, HR-managed dates/status details, and internal
+ * record-keeping fields. Fields backed by Master Data remain available as
+ * dropdowns so applicants can choose from the configured options.
  *
- * NIK/DEPARTMENT/JOIN DATE are normally required — `publicApplySchema` (see
- * schemas/employee.schema.ts) relaxes that specifically for these forms, so
- * submission still works with them blank. `approveOnlineRegistration`
+ * NIK/DEPARTMENT/POTITION/JOIN DATE are normally required —
+ * `publicApplySchema` (see schemas/employee.schema.ts) relaxes these fields
+ * for public forms where HR may complete them later. `approveOnlineRegistration`
  * requires them again before a registration can become a real employee, so
  * HR fills them in at review time, not the candidate.
  */
@@ -198,21 +194,21 @@ export const PUBLIC_APPLY_EXCLUDED_FIELDS = [
   "fingerCode",
   "category",
   "department",
-  "position",
   "level",
   "skill",
   "type",
   "shed",
-  "joinDate",
   "status",
+  "bankName",
+  "rekeningNo",
+  "branch",
+  "bpjsKtk",
+  "bpjsKes",
+  "joinDate",
+  "permanenDate",
   "exitDate",
   "reason",
   "masaKerja",
-  "contractStatus",
-  "permanenDate",
-  "contractCriteria",
-  "bpjsKtk",
-  "bpjsKes",
   "sn",
   "mutasiI",
   "mutasiII",
@@ -220,13 +216,13 @@ export const PUBLIC_APPLY_EXCLUDED_FIELDS = [
 ];
 
 /**
- * Section display order for the public apply/walk-in forms. "Employment
- * Information" and "Contract Information" are omitted on purpose — after
- * PUBLIC_APPLY_EXCLUDED_FIELDS strips their fields, both have nothing left
- * to show and disappear on their own.
+ * Section display order for the public apply/walk-in forms. Fields backed by
+ * Master Data remain visible and are rendered as dropdowns; internal/system
+ * fields are removed by PUBLIC_APPLY_EXCLUDED_FIELDS above.
  */
 export const PUBLIC_APPLY_SECTION_ORDER: EmployeeSection[] = [
   "Personal Information",
+  "Employment Information",
   "Address & Contact",
   "Family Information",
   "Bank Information",

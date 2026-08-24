@@ -21,6 +21,13 @@ interface GenerateRegistrationLinkFormProps {
   positionOptions: SelectOption[];
 }
 
+function getPublicOrigin(): string {
+  if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+    return "http://192.168.43.198:3001";
+  }
+  return window.location.origin;
+}
+
 export function GenerateRegistrationLinkForm({ positionOptions }: GenerateRegistrationLinkFormProps) {
   const [name, setName] = useState("");
   const [hpNumber, setHpNumber] = useState("");
@@ -28,6 +35,7 @@ export function GenerateRegistrationLinkForm({ positionOptions }: GenerateRegist
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [link, setLink] = useState<string | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -55,7 +63,19 @@ export function GenerateRegistrationLinkForm({ positionOptions }: GenerateRegist
         toast.error(data.error ?? "Failed to generate link.");
         return;
       }
-      setLink(`${window.location.origin}/apply/${data.token}`);
+      const generatedToken = [
+        data.token,
+        data.registration?.recordId,
+        // Keep compatibility with an un-normalized Supabase/legacy response.
+        data.registration?.record_id,
+        data.record_id,
+      ].find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
+      if (!generatedToken) {
+        toast.error("Server tidak mengembalikan token application link.");
+        return;
+      }
+      setToken(generatedToken);
+      setLink(`${getPublicOrigin()}/apply/${generatedToken}`);
       toast.success("Application link generated.");
     } catch {
       toast.error("Unable to connect to Employee Database.");
@@ -77,6 +97,7 @@ export function GenerateRegistrationLinkForm({ positionOptions }: GenerateRegist
     setHpNumber("");
     setPosition("");
     setLink(null);
+    setToken(null);
   }
 
   if (link) {
@@ -96,6 +117,7 @@ export function GenerateRegistrationLinkForm({ positionOptions }: GenerateRegist
               {copied ? "Copied" : "Copy"}
             </Button>
           </div>
+          <p className="text-xs text-muted-foreground">Token: <span className="font-mono">{token}</span></p>
           <Button type="button" variant="secondary" onClick={handleGenerateAnother}>
             Generate another link
           </Button>

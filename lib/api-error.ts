@@ -13,6 +13,7 @@ import {
 import { AttendanceProviderNotSupportedError, AttendanceValidationError } from "@/lib/database/attendance-errors";
 import { ImportParseError } from "@/lib/attendance/importer";
 import { ModuleAuthenticationError, ModulePermissionError } from "@/lib/module-permission";
+import { OcrValidationError } from "@/lib/ocr/azure-document-intelligence";
 
 /**
  * Converts a thrown error from the service layer into a safe JSON response.
@@ -45,6 +46,9 @@ export function toApiErrorResponse(err: unknown): NextResponse {
   if (err instanceof RegistrationAlreadySubmittedError) {
     return NextResponse.json({ error: err.message }, { status: 409 });
   }
+  if (err instanceof Error && err.message === "NIK duplikat.") {
+    return NextResponse.json({ error: "NIK duplikat." }, { status: 409 });
+  }
   if (err instanceof RecordNotFoundError) {
     return NextResponse.json({ error: err.message }, { status: 404 });
   }
@@ -55,6 +59,9 @@ export function toApiErrorResponse(err: unknown): NextResponse {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
   if (err instanceof ImportParseError) {
+    return NextResponse.json({ error: err.message }, { status: 400 });
+  }
+  if (err instanceof OcrValidationError) {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
   if (err instanceof DatabaseNotConfiguredError) {

@@ -15,6 +15,27 @@ export interface EmployeeRecord {
 /** Input shape accepted from the validated Employee form (all editable field keys -> string). */
 export type EmployeeInput = Record<string, string>;
 
+export type ApplicantAccessChannel = "applicant_pool_qr" | "new_hiring_qr_nik" | "new_hiring_link";
+export type NewHiringLinkStatus = "active" | "used" | "expired" | "revoked";
+
+export interface ApplicantPreviousJob {
+  id: string;
+  applicantId: string;
+  companyName: string;
+  startYear: number;
+  endYear: number | null;
+  lastPosition: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DuplicateCheckResult {
+  nik: string;
+  foundIn: "employees" | "online_registrations" | "none";
+  checkedAt: string;
+}
+
 /**
  * The handful of fields the Active/Inactive/Expatriate list tables actually
  * display (or filter by) — used instead of the full ~58-field

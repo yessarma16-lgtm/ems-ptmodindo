@@ -14,6 +14,14 @@ export async function regeneratePublicApplyToken(): Promise<string> {
   return store().regeneratePublicApplyToken();
 }
 
+export async function getNewHiringApplyToken(): Promise<string> {
+  return store().getNewHiringApplyToken();
+}
+
+export async function regenerateNewHiringApplyToken(): Promise<string> {
+  return store().regenerateNewHiringApplyToken();
+}
+
 /** Which page(s) an admin-uploaded background wallpaper applies to. */
 export type BackgroundSurface = "login" | "qr" | "apply";
 

@@ -37,6 +37,19 @@ class QueryBuilder implements PromiseLike<Result> {
   upsert(values: Row | Row[], options?: { onConflict?: string }) { this.action = "insert"; this.payload = values; this.conflict = options?.onConflict; return this; }
   eq(column: string, value: unknown) { return this.where(column, "=", value); }
   neq(column: string, value: unknown) { return this.where(column, "<>", value); }
+  /** Supabase-compatible negated filter, e.g. not('status', 'ilike', 'inactive'). */
+  not(column: string, operator: string, value: unknown) {
+    const allowedOperators = new Set(["eq", "neq", "gt", "gte", "lt", "lte", "ilike", "like", "is"]);
+    if (!allowedOperators.has(operator)) throw new Error(`Unsupported filter operator: ${operator}`);
+    const sqlOperator = operator === "eq" ? "=" : operator === "neq" ? "<>" : operator.toUpperCase();
+    if (operator === "is") {
+      this.filters.push(`NOT (${id(column)} IS ${value === null ? "NULL" : value ? "TRUE" : "FALSE"})`);
+      return this;
+    }
+    this.filters.push(`NOT (${id(column)} ${sqlOperator} $${this.values.length + 1})`);
+    this.values.push(value);
+    return this;
+  }
   gt(column: string, value: unknown) { return this.where(column, ">", value); }
   gte(column: string, value: unknown) { return this.where(column, ">=", value); }
   lt(column: string, value: unknown) { return this.where(column, "<", value); }
@@ -49,7 +62,7 @@ class QueryBuilder implements PromiseLike<Result> {
   limit(value: number) { this.limitValue = value; return this; }
   range(from: number, to: number) { this.offsetValue = from; this.limitValue = to - from + 1; return this; }
   maybeSingle() { return this.run(true); }
-  single() { return this.run(false); }
+  single() { return this.run(true); }
   private where(column: string, operator: string, value: unknown) { this.filters.push(`${id(column)} ${operator} $${this.values.length + 1}`); this.values.push(value); return this; }
   private async run(single: boolean): Promise<Result> { return this.execute(single); }
   async then<TResult1 = Result, TResult2 = never>(resolve?: ((value: Result) => TResult1 | PromiseLike<TResult1>) | null, reject?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null): Promise<TResult1 | TResult2> { return this.execute(false).then(resolve, reject); }
@@ -86,7 +99,12 @@ class QueryBuilder implements PromiseLike<Result> {
         const sql = `SELECT ${columns} ${from}${where}${orderBy}${this.limitValue === undefined ? "" : ` LIMIT ${this.limitValue}`}${this.offsetValue === undefined ? "" : ` OFFSET ${this.offsetValue}`}`;
         result = await client.query(sql, this.values);
         const data = this.head ? null : (single ? (result.rows[0] ?? null) : result.rows);
-        return { data, error: null, count: this.wantCount ? (result.rowCount ?? 0) : undefined };
+        let count: number | undefined;
+        if (this.wantCount) {
+          const countResult = await client.query(`SELECT COUNT(*) AS count ${from}${where}`, this.values);
+          count = Number(countResult.rows[0]?.count ?? 0);
+        }
+        return { data, error: null, count };
       }
       const rows = Array.isArray(this.payload) ? this.payload : [this.payload ?? {}];
       const keys = Object.keys(rows[0]);
@@ -111,7 +129,11 @@ class QueryBuilder implements PromiseLike<Result> {
 export function createLocalPostgresClient() {
   return {
     from(table: string) { return new QueryBuilder(table); },
-    async rpc(name: string, args: Row) { const client = await getPool().connect(); try { const params = Object.values(args); const result = await client.query(`SELECT ${id(name)}(${Object.keys(args).map((key, i) => `$${i + 1}`).join(",")})`, params); return { data: result.rows[0] ?? null, error: null }; } catch (error) { return { data: null, error: error instanceof Error ? error : new Error(String(error)) }; } finally { client.release(); } },
+    // Mirrors PostgREST's `rpc()` unwrapping: a function returning a single scalar
+    // (e.g. `next_applicant_candidate_number() RETURNS text`) comes back from Supabase
+    // as that bare value, not `{ next_applicant_candidate_number: value }` — callers
+    // like `approveOnlineRegistration` do `String(data)` expecting the scalar directly.
+    async rpc(name: string, args: Row = {}) { const client = await getPool().connect(); try { const params = Object.values(args); const result = await client.query(`SELECT ${id(name)}(${Object.keys(args).map((key, i) => `$${i + 1}`).join(",")})`, params); const row = result.rows[0]; const keys = row ? Object.keys(row) : []; const data = row && keys.length === 1 ? row[keys[0]] : (row ?? null); return { data, error: null }; } catch (error) { return { data: null, error: error instanceof Error ? error : new Error(String(error)) }; } finally { client.release(); } },
     async testConnection() { const client = await getPool().connect(); try { await client.query("SELECT 1"); return true; } finally { client.release(); } },
   };
 }

@@ -2,6 +2,7 @@ import "server-only";
 
 import * as postgresStore from "@/lib/database/postgres-online-registrations";
 import type { EmployeeInput } from "@/lib/database/types";
+import type { ApplicantPreviousJob } from "@/lib/database/types";
 import type { InviteRegistrationInput } from "@/lib/database/postgres-online-registrations";
 
 export type { OnlineRegistration, InviteRegistrationInput } from "@/lib/database/postgres-online-registrations";
@@ -38,6 +39,10 @@ export async function createWalkInApplication(input: EmployeeInput) {
   return store().createWalkInApplication(input);
 }
 
+export async function createNewHiringQrApplication(input: EmployeeInput) {
+  return store().createNewHiringQrApplication(input);
+}
+
 export async function createInviteRegistration(input: InviteRegistrationInput) {
   return store().createInviteRegistration(input);
 }
@@ -51,14 +56,43 @@ export async function updateOnlineRegistration(recordId: string, input: Employee
   return store().updateOnlineRegistration(recordId, input);
 }
 
+/** Advances a registration from Applicant Pool to New Hiring — see postgres-online-registrations.ts for the full rationale. No-op past Applicant Pool. */
+export async function promoteRegistrationToNewHiring(recordId: string) {
+  return store().promoteRegistrationToNewHiring(recordId);
+}
+
 export async function deleteOnlineRegistration(recordId: string) {
   return store().deleteOnlineRegistration(recordId);
 }
 
-export async function approveOnlineRegistration(recordId: string) {
-  return store().approveOnlineRegistration(recordId);
+export async function approveOnlineRegistration(recordId: string, approvedBy?: string) {
+  return store().approveOnlineRegistration(recordId, approvedBy);
 }
 
 export async function rejectOnlineRegistration(recordId: string) {
   return store().rejectOnlineRegistration(recordId);
 }
+
+export async function verifyNewHiringNik(nik: string) {
+  return store().verifyNewHiringNik(nik);
+}
+
+export async function generateNewHiringLink(applicantId: string) {
+  return store().generateNewHiringLink(applicantId);
+}
+
+export async function getNewHiringByToken(token: string) {
+  return store().getNewHiringByToken(token);
+}
+
+export async function submitNewHiringApplication(token: string, input: EmployeeInput) {
+  return store().submitNewHiringApplication(token, input);
+}
+
+export async function revokeNewHiringLink(applicantId: string) { return store().revokeNewHiringLink(applicantId); }
+
+type PreviousJobInput = Omit<ApplicantPreviousJob, "id" | "applicantId" | "createdAt" | "updatedAt">;
+export async function getApplicantPreviousJobs(applicantId: string) { return store().getApplicantPreviousJobs(applicantId); }
+export async function createApplicantPreviousJob(applicantId: string, input: PreviousJobInput) { return store().createApplicantPreviousJob(applicantId, input); }
+export async function updateApplicantPreviousJob(id: string, input: PreviousJobInput) { return store().updateApplicantPreviousJob(id, input); }
+export async function deleteApplicantPreviousJob(id: string) { return store().deleteApplicantPreviousJob(id); }

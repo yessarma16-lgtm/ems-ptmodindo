@@ -4,6 +4,9 @@ import { createLocalPostgresClient } from "@/lib/database/local-postgres-client"
 
 import { DatabaseNotConfiguredError, DatabaseConnectionError, RecordNotFoundError } from "@/lib/database/errors";
 
+/* The local and REST clients expose different dynamic table shapes. */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 /**
  * Low-level Supabase access layer. This is the ONLY module in the codebase
  * allowed to talk to the Supabase (Postgres) API directly. It never runs in

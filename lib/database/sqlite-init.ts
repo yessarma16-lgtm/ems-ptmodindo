@@ -177,6 +177,87 @@ function ensureOnlineRegistrationsEmployeeShaped(db: DatabaseSync): void {
   }
 }
 
+/** Applicant Pool/New Hiring additions. Additive and safe for existing databases. */
+function ensureApplicantPoolSchema(db: DatabaseSync): void {
+  const existingColumns = new Set(
+    (db.prepare("PRAGMA table_info(online_registrations)").all() as { name: string }[]).map((r) => r.name),
+  );
+  const columns: Record<string, string> = {
+    candidate_number: "TEXT",
+    access_channel: "TEXT",
+    duplicate_check_result: "TEXT",
+    ocr_source_document_id: "TEXT",
+    new_hiring_link_token: "TEXT",
+    new_hiring_link_expiry: "TEXT",
+    new_hiring_link_status: "TEXT",
+    approved_by: "TEXT",
+    approved_at: "TEXT",
+    archived_at: "TEXT",
+    migrated_employee_record_id: "TEXT",
+    new_hiring_link_created_at: "TEXT",
+    new_hiring_link_accessed_at: "TEXT",
+    new_hiring_link_used_at: "TEXT",
+    new_hiring_link_revoked_at: "TEXT",
+  };
+  for (const [column, type] of Object.entries(columns)) {
+    if (!existingColumns.has(column)) db.exec(`ALTER TABLE online_registrations ADD COLUMN ${column} ${type}`);
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS candidate_number_sequences (
+      sequence_key TEXT PRIMARY KEY,
+      last_value INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS applicant_previous_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      applicant_id TEXT NOT NULL REFERENCES online_registrations(record_id) ON DELETE CASCADE,
+      company_name TEXT NOT NULL,
+      start_year INTEGER NOT NULL,
+      end_year INTEGER,
+      last_position TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      CHECK (end_year IS NULL OR end_year >= start_year)
+    );
+    CREATE INDEX IF NOT EXISTS idx_previous_jobs_applicant ON applicant_previous_jobs(applicant_id);
+    CREATE TABLE IF NOT EXISTS ocr_documents (
+      id TEXT PRIMARY KEY,
+      applicant_id TEXT REFERENCES online_registrations(record_id) ON DELETE SET NULL,
+      original_filename TEXT NOT NULL DEFAULT '',
+      storage_path TEXT NOT NULL DEFAULT '',
+      mime_type TEXT NOT NULL DEFAULT '',
+      file_size_bytes INTEGER NOT NULL DEFAULT 0,
+      page_count INTEGER,
+      provider TEXT NOT NULL DEFAULT 'azure-document-intelligence',
+      model TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'uploaded',
+      raw_result TEXT,
+      parsed_result TEXT,
+      warning TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_online_candidate_number
+      ON online_registrations(candidate_number)
+      WHERE candidate_number IS NOT NULL AND trim(candidate_number) <> '';
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_online_new_hiring_link_token
+      ON online_registrations(new_hiring_link_token)
+      WHERE new_hiring_link_token IS NOT NULL AND trim(new_hiring_link_token) <> '';
+    CREATE INDEX IF NOT EXISTS idx_online_registration_status ON online_registrations(registration_status);
+    CREATE INDEX IF NOT EXISTS idx_online_registration_nik ON online_registrations(nik);
+  `);
+
+  const duplicate = db.prepare(
+    "SELECT 1 FROM employees WHERE trim(nik) <> '' GROUP BY nik HAVING COUNT(*) > 1 LIMIT 1",
+  ).get();
+  if (!duplicate) {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_employees_nik_nonempty
+      ON employees(nik) WHERE nik IS NOT NULL AND trim(nik) <> ''`);
+  }
+}
+
 /** Adds `username` to an EXISTING `users` table created before it existed. Additive only. */
 function ensureUsersUsernameColumn(db: DatabaseSync): void {
   const existingColumns = new Set(
@@ -337,6 +418,7 @@ export function ensureSchema(db: DatabaseSync): void {
     );
   `);
   ensureOnlineRegistrationsEmployeeShaped(db);
+  ensureApplicantPoolSchema(db);
 
   // User Management + login. Accounts sign in via /login (see
   // lib/auth/*.ts). Role Access (module permissions) is stored per role
