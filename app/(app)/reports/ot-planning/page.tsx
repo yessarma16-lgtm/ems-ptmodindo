@@ -54,7 +54,7 @@ function ReportTable({ group, update }: { group: Report; update: (shed: string, 
   }, { estimated: 0, actual: 0 }));
   const totalEstimatedIdr = totals.reduce((sum, total, index) => sum + total.estimated * rate(durations[index]), 0);
   const totalActualIdr = totals.reduce((sum, total, index) => sum + total.actual * rate(durations[index]), 0);
-  return <Card className="mb-5 overflow-auto"><CardContent className="pt-6"><h3 className="mb-3 text-base font-semibold">{group.shed}</h3><table className="w-full min-w-[1000px] border-collapse text-sm"><thead><tr className="bg-muted"><th className="border p-2 text-left">Division</th>{durations.map((d) => <th colSpan={4} className="border p-2" key={d}>{d} hours<br /><span className="font-normal">Estimated People / IDR · Actual People / IDR</span></th>)}<th className="border p-2">Total Estimated IDR</th><th className="border p-2">Total Actual IDR</th></tr></thead><tbody>{group.rows.map((row) => <tr key={row.division}><td className="border p-2 font-medium">{row.division}</td>{durations.map((d) => { const c = row.cells.find((x) => x.duration === d) ?? { duration: d, estimated: 0, actual: 0 }; return <>{<td className="border p-1"><Input className="h-8 w-16" type="number" min="0" value={c.estimated} onChange={(e) => update(group.shed, row.division, d, Number(e.target.value))} /></td>}<td className="border p-1">{money(c.estimated * rate(d))}</td><td className="border p-1">{c.actual}</td><td className="border p-1">{money(c.actual * rate(d))}</td></>; })}<td className="border p-2">{money(row.cells.reduce((s, c) => s + c.estimated * rate(c.duration), 0))}</td><td className="border p-2">{money(row.cells.reduce((s, c) => s + c.actual * rate(c.duration), 0))}</td></tr>)}</tbody><tfoot><tr className="bg-primary/10 font-bold"><td className="border p-2">TOTAL {group.shed}</td>{totals.map((total, index) => <Fragment key={durations[index]}><td className="border p-2">{money(total.estimated)}</td><td className="border p-2">{money(total.estimated * rate(durations[index]))}</td><td className="border p-2">{money(total.actual)}</td><td className="border p-2">{money(total.actual * rate(durations[index]))}</td></Fragment>)}<td className="border p-2">{money(totalEstimatedIdr)}</td><td className="border p-2">{money(totalActualIdr)}</td></tr></tfoot></table></CardContent></Card>;
+  return <Card className="mb-5 overflow-auto"><CardContent className="pt-6"><h3 className="mb-3 text-base font-semibold">{group.shed}</h3><table className="w-full min-w-[1000px] border-collapse text-sm"><thead><tr className="bg-muted"><th className="border p-2 text-left">Unit</th>{durations.map((d) => <th colSpan={4} className="border p-2" key={d}>{d} hours<br /><span className="font-normal">Estimated People / IDR · Actual People / IDR</span></th>)}<th className="border p-2">Total Estimated IDR</th><th className="border p-2">Total Actual IDR</th></tr></thead><tbody>{group.rows.map((row) => <tr key={row.division}><td className="border p-2 font-medium">{row.division}</td>{durations.map((d) => { const c = row.cells.find((x) => x.duration === d) ?? { duration: d, estimated: 0, actual: 0 }; return <>{<td className="border p-1"><Input className="h-8 w-16" type="number" min="0" value={c.estimated} onChange={(e) => update(group.shed, row.division, d, Number(e.target.value))} /></td>}<td className="border p-1">{money(c.estimated * rate(d))}</td><td className="border p-1">{c.actual}</td><td className="border p-1">{money(c.actual * rate(d))}</td></>; })}<td className="border p-2">{money(row.cells.reduce((s, c) => s + c.estimated * rate(c.duration), 0))}</td><td className="border p-2">{money(row.cells.reduce((s, c) => s + c.actual * rate(c.duration), 0))}</td></tr>)}</tbody><tfoot><tr className="bg-primary/10 font-bold"><td className="border p-2">TOTAL {group.shed}</td>{totals.map((total, index) => <Fragment key={durations[index]}><td className="border p-2">{money(total.estimated)}</td><td className="border p-2">{money(total.estimated * rate(durations[index]))}</td><td className="border p-2">{money(total.actual)}</td><td className="border p-2">{money(total.actual * rate(durations[index]))}</td></Fragment>)}<td className="border p-2">{money(totalEstimatedIdr)}</td><td className="border p-2">{money(totalActualIdr)}</td></tr></tfoot></table></CardContent></Card>;
 }
 
 function groupByShed<T extends { shed: string }>(rows: T[]): [string, T[]][] {
@@ -81,16 +81,18 @@ function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, se
   const deleteDivision = (x: Division) => void del({ kind: "division", id: x.id });
   const editMapping = (x: Mapping) => setM({ id: x.id, attendanceDepartment: x.attendance_department, shed: x.shed, division: x.division, displayOrder: x.display_order });
   const deleteMapping = (x: Mapping) => void del({ kind: "mapping", id: x.id });
+  /** Inline reassignment straight from the table cell — saves immediately, no need to load the row into the top form first. */
+  const updateMappingUnit = (x: Mapping, division: string) => void post({ kind: "mapping", value: { id: x.id, attendanceDepartment: x.attendance_department, shed: x.shed, division, displayOrder: x.display_order } });
 
   return <div className="grid gap-5">
     <Card><CardContent className="grid max-w-xl gap-4 pt-6"><label>UMR (IDR)<Input type="number" value={umr} onChange={(e) => setUmr(Number(e.target.value))} /></label><label>USD Rate (IDR)<Input type="number" value={usdRate} onChange={(e) => setUsdRate(Number(e.target.value))} /></label><p className="text-xs text-muted-foreground">Effective snapshot for {date}. Divisor is fixed at 173.</p><Button onClick={() => void post({ kind: "config", effectiveDate: date, umr, usdRate })}>Save Reference</Button></CardContent></Card>
     <Card><CardContent className="pt-6"><h2 className="mb-3 font-semibold">Duration & Paid Hours</h2><div className="grid grid-cols-2 gap-2 text-sm">{multipliers.map((x: any) => <div className="border-b p-1" key={x.duration}>{x.duration} hours → {x.paid_hours} paid hours</div>)}</div></CardContent></Card>
 
     <Card><CardContent className="pt-6">
-      <h2 className="mb-3 font-semibold">Divisions by Shed</h2>
+      <h2 className="mb-3 font-semibold">Units by Shed</h2>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Select value={d.shed} onValueChange={(v) => setD({ ...d, shed: v })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
-        <Input className="w-56" placeholder="Division" value={d.division} onChange={(e) => setD({ ...d, division: e.target.value })} />
+        <Input className="w-56" placeholder="Unit" value={d.division} onChange={(e) => setD({ ...d, division: e.target.value })} />
         <Button onClick={() => void saveDivision()}>{d.id ? <><Pencil className="size-4" />Update</> : <><Plus className="size-4" />Add</>}</Button>
         {d.id ? <Button variant="outline" onClick={() => setD(EMPTY_DIVISION)}><X className="size-4" />Cancel</Button> : null}
       </div>
@@ -98,7 +100,7 @@ function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, se
         {divisionGroups.map(([shed, rows]) => <div key={shed}>
           <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{shed}</h3>
           <table className="w-full border-collapse text-sm">
-            <thead><tr className="bg-muted"><th className="border p-2 text-left">Division</th><th className="border p-2 text-right">Actions</th></tr></thead>
+            <thead><tr className="bg-muted"><th className="border p-2 text-left">Unit</th><th className="border p-2 text-right">Actions</th></tr></thead>
             <tbody>{rows.map((x) => <tr key={x.id}><td className="border p-2">{x.division}</td><td className="border p-1 text-right"><div className="flex justify-end gap-1"><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted" title="Edit" onClick={() => editDivision(x)}><Pencil className="size-3.5" /></button><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-destructive/10" title="Delete" onClick={() => deleteDivision(x)}><Trash2 className="size-3.5 text-destructive" /></button></div></td></tr>)}</tbody>
           </table>
         </div>)}
@@ -111,7 +113,7 @@ function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, se
         <Input className="w-64" placeholder="Attendance department" value={m.attendanceDepartment} onChange={(e) => setM({ ...m, attendanceDepartment: e.target.value })} />
         <Select value={m.shed} onValueChange={(v) => setM({ ...m, shed: v, division: "" })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
         <Select value={m.division} onValueChange={(v) => setM({ ...m, division: v })}>
-          <SelectTrigger className="w-56"><SelectValue placeholder="Division" /></SelectTrigger>
+          <SelectTrigger className="w-56"><SelectValue placeholder="Unit" /></SelectTrigger>
           <SelectContent>{divisionOptionsForShed.map((x) => <SelectItem key={x.id} value={x.division}>{x.division}</SelectItem>)}</SelectContent>
         </Select>
         <Button onClick={() => void saveMapping()}>{m.id ? <><Pencil className="size-4" />Update</> : <><Plus className="size-4" />Add</>}</Button>
@@ -121,8 +123,13 @@ function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, se
         {mappingGroups.map(([shed, rows]) => <div key={shed}>
           <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{shed}</h3>
           <table className="w-full border-collapse text-sm">
-            <thead><tr className="bg-muted"><th className="border p-2 text-left">Attendance Department</th><th className="border p-2 text-left">Division</th><th className="border p-2 text-right">Actions</th></tr></thead>
-            <tbody>{rows.map((x) => <tr key={x.id}><td className="border p-2">{x.attendance_department}</td><td className="border p-2">{x.division}</td><td className="border p-1 text-right"><div className="flex justify-end gap-1"><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted" title="Edit" onClick={() => editMapping(x)}><Pencil className="size-3.5" /></button><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-destructive/10" title="Delete" onClick={() => deleteMapping(x)}><Trash2 className="size-3.5 text-destructive" /></button></div></td></tr>)}</tbody>
+            <thead><tr className="bg-muted"><th className="border p-2 text-left">Attendance Department</th><th className="border p-2 text-left">Unit</th><th className="border p-2 text-right">Actions</th></tr></thead>
+            <tbody>{rows.map((x) => <tr key={x.id}><td className="border p-2">{x.attendance_department}</td><td className="border p-1">
+              <Select value={x.division} onValueChange={(v) => updateMappingUnit(x, v)}>
+                <SelectTrigger className="h-8 w-full border-0 bg-transparent shadow-none hover:bg-muted"><SelectValue /></SelectTrigger>
+                <SelectContent>{(divisions as Division[]).filter((u) => u.shed === x.shed).map((u) => <SelectItem key={u.id} value={u.division}>{u.division}</SelectItem>)}</SelectContent>
+              </Select>
+            </td><td className="border p-1 text-right"><div className="flex justify-end gap-1"><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted" title="Edit" onClick={() => editMapping(x)}><Pencil className="size-3.5" /></button><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-destructive/10" title="Delete" onClick={() => deleteMapping(x)}><Trash2 className="size-3.5 text-destructive" /></button></div></td></tr>)}</tbody>
           </table>
         </div>)}
       </div>

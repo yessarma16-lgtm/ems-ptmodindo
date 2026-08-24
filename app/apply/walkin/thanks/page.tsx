@@ -38,7 +38,7 @@ export default async function WalkInThanksPage({ searchParams }: PageProps) {
       <ApplicationReceived
         applicationDate={formatDateLong(registration.submittedAt)}
         applicationId={buildApplicationId(registration.recordId, registration.submittedAt)}
-        positionApplied={registration.position}
+        positionApplied={registration.positionApplied || registration.position}
         candidateNumber={registration.candidateNumber}
         showApplicationId={false}
       />

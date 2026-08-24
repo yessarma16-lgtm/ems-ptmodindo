@@ -50,7 +50,7 @@ export async function buildOtPlanningWorkbook(date: string, reports: OtPlanningR
   reference.getCell("B10").value = "Overtime Reference"; reference.getCell("B11").value = "Duration"; reference.getCell("C11").value = "Paid Hour";
   const multiplierRows = references?.multipliers?.length ? references.multipliers : Array.from({ length: 26 }, (_, i) => ({ duration: (i + 1) / 2, paid_hours: paidHours((i + 1) / 2) }));
   multiplierRows.forEach((item, index) => { reference.getCell(`B${12 + index}`).value = `${item.duration.toString().replace(".", ",")} JAM`; reference.getCell(`C${12 + index}`).value = item.paid_hours; });
-  let refRow = 40; reference.getCell(`B${refRow}`).value = "Department Mapping"; refRow++; ["Attendance Department", "Shed", "Division", "Source"].forEach((value, index) => reference.getCell(`${colLetter(2 + index)}${refRow}`).value = value); refRow++;
+  let refRow = 40; reference.getCell(`B${refRow}`).value = "Department Mapping"; refRow++; ["Attendance Department", "Shed", "Unit", "Source"].forEach((value, index) => reference.getCell(`${colLetter(2 + index)}${refRow}`).value = value); refRow++;
   (references?.mappings ?? []).forEach((item) => { reference.getCell(`B${refRow}`).value = item.attendance_department; reference.getCell(`C${refRow}`).value = item.shed; reference.getCell(`D${refRow}`).value = item.division; reference.getCell(`E${refRow}`).value = "OT Planning Reference"; refRow++; });
   reference.getColumn(2).width = 30; reference.getColumn(3).width = 18; reference.getColumn(4).width = 24; reference.getColumn(5).width = 28;
   reference.eachRow((row) => row.eachCell((cell) => { cell.border = { top: border, left: border, bottom: border, right: border }; }));
