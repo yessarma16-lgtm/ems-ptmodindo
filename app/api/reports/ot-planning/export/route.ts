@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireModuleAccess } from "@/lib/module-permission";
-import { getOtPlanning, getOtReferences } from "@/lib/ot-planning-service";
+import { getOtPlanning, getOtPlanningMonthToDate } from "@/lib/ot-planning-service";
 import { buildOtPlanningWorkbook } from "@/lib/ot-planning-export";
 import { toApiErrorResponse } from "@/lib/api-error";
 
@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
     const dateTo = request.nextUrl.searchParams.get("dateTo") ?? undefined;
     const sheds = request.nextUrl.searchParams.getAll("shed");
     const reports = await getOtPlanning(date, sheds.length ? sheds : undefined, dateTo);
-    const workbook = await buildOtPlanningWorkbook(dateTo ? `${date} to ${dateTo}` : date, reports, await getOtReferences());
+    const monthToDate = await getOtPlanningMonthToDate(dateTo || date);
+    const workbook = await buildOtPlanningWorkbook(dateTo ? `${date} to ${dateTo}` : date, reports, monthToDate);
     const buffer = await workbook.xlsx.writeBuffer();
     const filterLabel = (sheds.length ? sheds : ["ALL-DEPARTMENTS"]).join("-").replace(/[^a-zA-Z0-9-]+/g, "-");
     const periodLabel = dateTo ? `${date}_to_${dateTo}` : date;

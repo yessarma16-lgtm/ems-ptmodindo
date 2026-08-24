@@ -84,6 +84,22 @@ export async function getOtPlanning(date: string, sheds: string[] = Object.keys(
   });
 }
 
+export type OtPlanningDaySnapshot = { date: string; reports: Awaited<ReturnType<typeof getOtPlanning>> };
+
+/**
+ * One getOtPlanning(day, day) snapshot per calendar day, day 1 through `dateTo`,
+ * for the Excel export's month-to-date sheets (Recap Per Day / Per Department /
+ * Accounting Report) — those always show every day-so-far in the month, computed
+ * fresh from the database each time (not a remembered/accumulated file), per HR's
+ * explicit request that every regenerate carries the whole month's history.
+ */
+export async function getOtPlanningMonthToDate(dateTo: string): Promise<OtPlanningDaySnapshot[]> {
+  const monthPrefix = dateTo.slice(0, 7); // YYYY-MM
+  const lastDay = Number(dateTo.slice(8, 10));
+  const dates = Array.from({ length: lastDay }, (_, i) => `${monthPrefix}-${String(i + 1).padStart(2, "0")}`);
+  return Promise.all(dates.map(async (date) => ({ date, reports: await getOtPlanning(date) })));
+}
+
 export async function saveOtEstimates(date: string, values: Array<{ shed: string; division: string; duration: number; person: number }>) {
   return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_estimates").upsert(values.map((x) => ({ ...x, tanggal: date, updated_at: new Date().toISOString() })), { onConflict: "tanggal,shed,division,duration" }); if (error) throw error; });
 }
