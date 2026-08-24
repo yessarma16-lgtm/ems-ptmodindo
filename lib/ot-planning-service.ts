@@ -89,9 +89,35 @@ export async function saveOtConfig(effectiveDate: string, umr: number, usdRate: 
 }
 
 export async function getOtReferences() { return supabaseGuarded(async () => { const client = getSupabaseClient(); const [{ data: mappings, error: me }, { data: divisions, error: de }, { data: multipliers, error: be }] = await Promise.all([client.from("ot_planning_mappings").select("id,attendance_department,shed,division,display_order").order("display_order"), client.from("ot_planning_divisions").select("id,shed,division,display_order").order("display_order"), client.from("ot_planning_duration_multipliers").select("id,duration,paid_hours").order("duration")]); if (me) throw me; if (de) throw de; if (be) throw be; const mappingData = (mappings?.length ? mappings : seedMappings).map((x: any) => ({ id: x.id, attendance_department: String(x.attendance_department ?? x.attendanceDepartment), shed: String(x.shed), division: String(x.division), display_order: Number(x.display_order ?? x.displayOrder ?? 0) })); const multiplierData = multipliers?.length ? multipliers : Array.from({ length: 26 }, (_, i) => ({ duration: (i + 1) / 2, paid_hours: paidHours((i + 1) / 2) })); return { mappings: mappingData, divisions: divisions?.length ? divisions : Object.entries(DIVISIONS).flatMap(([shed, names]) => names.map((division, display_order) => ({ shed, division, display_order }))), multipliers: multiplierData }; }); }
-export async function saveOtMapping(value: OtMapping) { return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_mappings").upsert({ ...(value.id ? { id: value.id } : {}), attendance_department: value.attendanceDepartment, shed: value.shed, division: value.division, display_order: value.displayOrder }, { onConflict: "attendance_department" }); if (error) throw error; }); }
+/** Editing (value.id set) must UPDATE by primary key — upserting by the natural key (attendance_department) breaks the moment that key's value itself changes, since the row then no longer matches the ON CONFLICT target and Postgres falls through to a plain INSERT carrying the old id, colliding with the primary key. Only a fresh Add (no id) should dedupe via upsert-by-natural-key. */
+export async function saveOtMapping(value: OtMapping) {
+  return supabaseGuarded(async () => {
+    const client = getSupabaseClient();
+    const row = { attendance_department: value.attendanceDepartment, shed: value.shed, division: value.division, display_order: value.displayOrder };
+    if (value.id) {
+      const { error } = await client.from("ot_planning_mappings").update(row).eq("id", value.id);
+      if (error) throw error;
+    } else {
+      const { error } = await client.from("ot_planning_mappings").upsert(row, { onConflict: "attendance_department" });
+      if (error) throw error;
+    }
+  });
+}
 export async function deleteOtMapping(id: number) { return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_mappings").delete().eq("id", id); if (error) throw error; }); }
-export async function saveOtDivision(value: OtDivision) { return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_divisions").upsert({ ...(value.id ? { id: value.id } : {}), shed: value.shed, division: value.division, display_order: value.displayOrder }, { onConflict: "shed,division" }); if (error) throw error; }); }
+/** Same reasoning as saveOtMapping: edit (id set) must UPDATE by primary key, not upsert-by-(shed,division) — renaming the division changes the natural key the ON CONFLICT target relies on. */
+export async function saveOtDivision(value: OtDivision) {
+  return supabaseGuarded(async () => {
+    const client = getSupabaseClient();
+    const row = { shed: value.shed, division: value.division, display_order: value.displayOrder };
+    if (value.id) {
+      const { error } = await client.from("ot_planning_divisions").update(row).eq("id", value.id);
+      if (error) throw error;
+    } else {
+      const { error } = await client.from("ot_planning_divisions").upsert(row, { onConflict: "shed,division" });
+      if (error) throw error;
+    }
+  });
+}
 export async function deleteOtDivision(id: number) { return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_divisions").delete().eq("id", id); if (error) throw error; }); }
 
 export { paidHours };

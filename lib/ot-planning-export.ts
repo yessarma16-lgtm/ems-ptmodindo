@@ -27,30 +27,6 @@ export function getOtDurations(report: OtPlanningReport) {
   return values.length ? values : [0.5, 1];
 }
 
-/**
- * Ringkasan khusus export saat seluruh department dipilih.
- * Shed produksi ditampilkan sebagai satu total per shed, sedangkan COMMON
- * tetap mempertahankan detail division agar campuran department tetap terbaca.
- */
-export function summarizeOtPlanningReports(reports: OtPlanningReport[]) {
-  return reports.map((report) => {
-    if (report.shed === "COMMON") {
-      return { ...report, shed: "Campuran Detail Common" };
-    }
-
-    const cells = new Map<number, { duration: number; estimated: number; actual: number }>();
-    for (const row of report.rows) {
-      for (const cell of row.cells) {
-        const current = cells.get(cell.duration) ?? { duration: cell.duration, estimated: 0, actual: 0 };
-        current.estimated += cell.estimated;
-        current.actual += cell.actual;
-        cells.set(cell.duration, current);
-      }
-    }
-    return { ...report, rows: [{ division: `TOTAL ${report.shed}`, cells: [...cells.values()].sort((a, b) => a.duration - b.duration) }] };
-  });
-}
-
 function rate(report: OtPlanningReport, duration: number) {
   return report.config.umr / report.config.divisor * (report.config.multipliers?.[String(duration)] ?? paidHours(duration));
 }
@@ -118,7 +94,7 @@ export async function buildOtPlanningWorkbook(date: string, reports: OtPlanningR
     for (let row = headerRow; row <= labelRow; row++) for (let column = 1; column <= totalEnd; column++) { const cell = sheet.getCell(row, column); cell.border = { top: border, left: border, bottom: border, right: border }; cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: row === headerRow ? navy : lightBlue } }; cell.font = { bold: true, color: { argb: row === headerRow ? "FFFFFFFF" : "FF000000" } }; }
     const dataStart = labelRow + 1;
     report.rows.forEach((row, index) => { const values = rowValues(report, row, durations, index); const excelRow = sheet.addRow(values); durations.forEach((duration, durationIndex) => { const first = 3 + durationIndex * 4; const ref = `VLOOKUP(${col(first)}$${labelRow},Reference!$B$12:$C$37,2,FALSE)`; excelRow.getCell(first + 1).value = { formula: `${col(first)}${excelRow.number}*(Reference!$C$5/Reference!$C$7)*${ref}`, result: values[first + 1] as number }; excelRow.getCell(first + 3).value = { formula: `${col(first + 2)}${excelRow.number}*(Reference!$C$5/Reference!$C$7)*${ref}`, result: values[first + 3] as number }; }); const estimatedPeople = durations.map((_, i) => `${col(3 + i * 4)}${excelRow.number}`); const estimatedBudget = durations.map((_, i) => `${col(4 + i * 4)}${excelRow.number}`); const actualPeople = durations.map((_, i) => `${col(5 + i * 4)}${excelRow.number}`); const actualBudget = durations.map((_, i) => `${col(6 + i * 4)}${excelRow.number}`); excelRow.getCell(totalStart).value = { formula: `SUM(${estimatedPeople.join(",")})`, result: values[totalStart] as number }; excelRow.getCell(totalStart + 1).value = { formula: `SUM(${estimatedBudget.join(",")})`, result: values[totalStart + 1] as number }; excelRow.getCell(totalStart + 2).value = { formula: `${col(totalStart + 1)}${excelRow.number}/Reference!$C$6`, result: values[totalStart + 2] as number }; excelRow.getCell(totalStart + 3).value = { formula: `SUM(${actualPeople.join(",")})`, result: values[totalStart + 3] as number }; excelRow.getCell(totalStart + 4).value = { formula: `SUM(${actualBudget.join(",")})`, result: values[totalStart + 4] as number }; excelRow.getCell(totalEnd).value = { formula: `${col(totalStart + 4)}${excelRow.number}/Reference!$C$6`, result: values[totalEnd] as number }; excelRow.eachCell((cell, column) => { cell.border = { top: border, left: border, bottom: border, right: border }; cell.alignment = { vertical: "middle", horizontal: column <= 2 ? "left" : "right" }; if (column >= 4) cell.numFmt = column % 4 === 0 ? moneyFormat : column > totalStart + 1 && column <= totalEnd ? moneyFormat : "#,##0.##"; }); [totalStart + 2, totalEnd].forEach((column) => { excelRow.getCell(column).numFmt = usdFormat; }); });
-    const totalRow = sheet.addRow([null, "TOTAL"]);
+    const totalRow = sheet.addRow([null, `TOTAL ${report.shed}`]);
     for (let column = 3; column <= totalEnd; column++) { const cell = totalRow.getCell(column); cell.value = { formula: `SUM(${col(column)}${dataStart}:${col(column)}${totalRow.number - 1})` }; cell.numFmt = column === totalStart + 2 || column === totalEnd ? usdFormat : column % 4 === 0 || column === totalStart + 1 || column === totalStart + 4 ? moneyFormat : "#,##0.##"; }
     totalRow.eachCell((cell) => { cell.border = { top: border, left: border, bottom: border, right: border }; cell.font = { bold: true }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: lightBlue } }; });
     startRow = totalRow.number + 3;
