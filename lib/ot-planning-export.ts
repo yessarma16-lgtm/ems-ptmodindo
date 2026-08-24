@@ -66,9 +66,11 @@ const ROLLUP_CATEGORIES = ["CUTTING", "ADM PRODUKSI", "QC", "MEKANIK", "FINISHIN
 const PRODUCTION_SHEDS = ["SHED A", "SHED B", "SHED C"];
 
 function sewLineSortKey(division: string): number | null {
-  const match = division.match(/^SEW L(\d+)(B)?$/i);
+  const match = division.match(/^SEW L(\d+)([A-Z])?$/i);
   if (!match) return null;
-  return Number(match[1]) + (match[2] ? 0.5 : 0);
+  const letter = match[2];
+  const fraction = letter ? (letter.toUpperCase().charCodeAt(0) - 64) / 10 : 0; // A -> .1, B -> .2, ...
+  return Number(match[1]) + fraction;
 }
 
 /** Merges same-named rows across SHED A/B/C into one, summing every duration cell — the
@@ -278,7 +280,9 @@ function buildRecapPerDepartmentSheet(workbook: ExcelJS.Workbook, dateTo: string
   const sheet = workbook.addWorksheet("Recap Per Department");
   const dayCount = monthToDate.length;
   const columnsPerDay = 2;
-  const lastColumn = 2 + dayCount * columnsPerDay;
+  const lastColumn = 2 + dayCount * columnsPerDay + columnsPerDay; // +1 trailing IDR/USD grand-total pair
+  const totalIdrColumn = lastColumn - 1;
+  const totalUsdColumn = lastColumn;
   sheet.getColumn(1).width = 6; sheet.getColumn(2).width = 30;
   for (let c = 3; c <= lastColumn; c++) sheet.getColumn(c).width = 14;
 
@@ -286,17 +290,21 @@ function buildRecapPerDepartmentSheet(workbook: ExcelJS.Workbook, dateTo: string
   titleRow(sheet, `ACTUAL OVERTIME ${rangeLabel}`, lastColumn);
 
   function writeDepartmentBlock(label: string, categoryRows: { name: string; totals: (day: OtPlanningDaySnapshot) => { idr: number; usd: number } }[]) {
-    const dayHeaderRow = sheet.addRow(["", "1 USD = IDR 16,000", ...monthToDate.flatMap((day) => [new Date(`${day.date}T00:00:00`).getDate(), ""])]);
+    const dayHeaderRow = sheet.addRow(["", "1 USD = IDR 16,000", ...monthToDate.flatMap((day) => [new Date(`${day.date}T00:00:00`).getDate(), ""]), "TOTAL", ""]);
     monthToDate.forEach((_, i) => sheet.mergeCells(dayHeaderRow.number, 3 + i * 2, dayHeaderRow.number, 4 + i * 2));
+    sheet.mergeCells(dayHeaderRow.number, totalIdrColumn, dayHeaderRow.number, totalUsdColumn);
     styleHeaderRow(dayHeaderRow, lightBlue);
 
-    const colHeaderRow = sheet.addRow(["NO", label, ...monthToDate.flatMap(() => ["TOTAL ESTIMATION IDR", "ESTIMASI USD"])]);
+    const colHeaderRow = sheet.addRow(["NO", label, ...monthToDate.flatMap(() => ["TOTAL ESTIMATION IDR", "ESTIMASI USD"]), "TOTAL ESTIMATION IDR", "ESTIMASI USD"]);
     styleHeaderRow(colHeaderRow, navy);
 
     const dataStart = colHeaderRow.number + 1;
     categoryRows.forEach((category, index) => {
-      const values = monthToDate.flatMap((day) => { const t = category.totals(day); return [t.idr || "", t.usd || ""]; });
-      const row = sheet.addRow([index + 1, category.name, ...values]);
+      const perDay = monthToDate.map((day) => category.totals(day));
+      const values = perDay.flatMap((t) => [t.idr || "", t.usd || ""]);
+      const grandIdr = perDay.reduce((sum, t) => sum + t.idr, 0);
+      const grandUsd = perDay.reduce((sum, t) => sum + t.usd, 0);
+      const row = sheet.addRow([index + 1, category.name, ...values, grandIdr || "", grandUsd || ""]);
       row.eachCell((cell, column) => {
         cell.border = { top: border, left: border, bottom: border, right: border };
         cell.alignment = { horizontal: column <= 2 ? "left" : "center", vertical: "middle" };
