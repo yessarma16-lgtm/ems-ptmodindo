@@ -19,7 +19,19 @@ export type TimeOverdueBucket = "0:00 - 0:15" | "0:16 - 0:20" | "> 0:21 Minute";
 export const TIME_OVERDUE_BUCKETS: TimeOverdueBucket[] = ["0:00 - 0:15", "0:16 - 0:20", "> 0:21 Minute"];
 
 export interface TimeOverdueUnitRow { shed: string; division: string; counts: Record<TimeOverdueBucket, number>; total: number }
-export interface TimeOverdueDetailRow { nik: string; name: string; shed: string; division: string; tanggal: string; selisihMinutes: number }
+export interface TimeOverdueDetailRow {
+  nik: string;
+  name: string;
+  department: string;
+  shed: string;
+  division: string;
+  tanggal: string;
+  intime: string;
+  outtime: string;
+  it1: string;
+  ot1: string;
+  selisihMinutes: number;
+}
 export interface TimeOverdueReport {
   units: TimeOverdueUnitRow[];
   detail: Record<TimeOverdueBucket, TimeOverdueDetailRow[]>;
@@ -63,8 +75,8 @@ export async function getTimeOverdueReport(date: string, dateTo?: string): Promi
     const endDate = dateTo || date;
     const dateFilter = (query: any) => (dateTo ? query.gte("tanggal", date).lte("tanggal", endDate) : query.eq("tanggal", date));
 
-    const raw = await fetchAllPages<{ id: number; nik: string; nama: string; department: string; tanggal: string; it1: string | null; intime: string | null }>(
-      client, "raw_attendance", "id,nik,nama,department,tanggal,it1,intime", dateFilter,
+    const raw = await fetchAllPages<{ id: number; nik: string; nama: string; department: string; tanggal: string; it1: string | null; intime: string | null; outtime: string | null; ot1: string | null }>(
+      client, "raw_attendance", "id,nik,nama,department,tanggal,it1,intime,outtime,ot1", dateFilter,
     );
     const rawIds = raw.map((x) => Number(x.id));
     const validRawIds = new Set<number>();
@@ -105,9 +117,14 @@ export async function getTimeOverdueReport(date: string, dateTo?: string): Promi
       detail[bucket].push({
         nik: String(row.nik ?? ""),
         name: String(row.nama ?? ""),
+        department: String(row.department ?? ""),
         shed: unit.shed,
         division: unit.division,
         tanggal: String(row.tanggal ?? ""),
+        intime: String(row.intime ?? ""),
+        outtime: String(row.outtime ?? ""),
+        it1: String(row.it1 ?? ""),
+        ot1: String(row.ot1 ?? ""),
         selisihMinutes,
       });
     }

@@ -17,6 +17,18 @@ const DETAIL_SHEET_NAMES: Record<TimeOverdueBucket, string> = {
   "> 0:21 Minute": "Name Over 21 Min",
 };
 
+const DETAIL_DESCRIPTIONS: Record<TimeOverdueBucket, string> = {
+  "0:00 - 0:15": "0-15",
+  "0:16 - 0:20": "16-20",
+  "> 0:21 Minute": ">21",
+};
+
+function formatHHMM(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}:${String(minutes).padStart(2, "0")}`;
+}
+
 function groupByShed<T extends { shed: string }>(rows: T[]): [string, T[]][] {
   const groups = new Map<string, T[]>();
   for (const row of rows) { const list = groups.get(row.shed) ?? []; list.push(row); groups.set(row.shed, list); }
@@ -69,14 +81,20 @@ export function buildTimeOverdueWorkbook(date: string, report: TimeOverdueReport
 
   for (const bucket of TIME_OVERDUE_BUCKETS) {
     const sheet = workbook.addWorksheet(DETAIL_SHEET_NAMES[bucket]);
-    sheet.columns = [{ width: 6 }, { width: 16 }, { width: 26 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 16 }];
-    const headerRow = sheet.addRow(["NO", "NIK", "NAME", "SHED", "UNIT", "DATE", "IT1 - INTIME (MIN)"]);
+    sheet.columns = [
+      { width: 6 }, { width: 16 }, { width: 26 }, { width: 26 }, { width: 10 }, { width: 20 },
+      { width: 12 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 14 }, { width: 12 },
+    ];
+    const headerRow = sheet.addRow(["NO", "NIK", "NAME", "DEPARTMENT", "SHED", "UNIT", "DATE", "INTIME", "OUTTIME", "IT1", "OT1", "OVERDUE (HH:MM)", "DESCRIPTION"]);
     styleHeaderRow(headerRow, navy);
     report.detail[bucket].forEach((item, index) => {
-      const dataRow = sheet.addRow([index + 1, item.nik, item.name, item.shed, item.division, item.tanggal, item.selisihMinutes]);
+      const dataRow = sheet.addRow([
+        index + 1, item.nik, item.name, item.department, item.shed, item.division, item.tanggal,
+        item.intime, item.outtime, item.it1, item.ot1, formatHHMM(item.selisihMinutes), DETAIL_DESCRIPTIONS[bucket],
+      ]);
       dataRow.eachCell((cell, column) => {
         cell.border = { top: border, left: border, bottom: border, right: border };
-        cell.alignment = { horizontal: column <= 3 ? "left" : "center", vertical: "middle" };
+        cell.alignment = { horizontal: column <= 4 ? "left" : "center", vertical: "middle" };
       });
     });
   }
