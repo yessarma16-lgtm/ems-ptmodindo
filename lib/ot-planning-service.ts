@@ -21,22 +21,44 @@ const seedMappings: OtMapping[] = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((line
 
 function paidHours(duration: number) { return 1.5 * Math.min(duration, 1) + 2 * Math.max(duration - 1, 0); }
 function num(value: unknown) { return value == null ? 0 : Number(value) || 0; }
+function chunk<T>(items: T[], size: number): T[][] { const out: T[][] = []; for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size)); return out; }
+
+/** PostgREST caps unpaginated selects at 1000 rows — a single day of raw_attendance already exceeds that, so this pages through with .range() instead of trusting one request to return everything. */
+async function fetchAllPages<T>(client: any, table: string, columns: string, applyFilter: (query: any) => any): Promise<T[]> {
+  const PAGE_SIZE = 1000;
+  const rows: T[] = [];
+  for (let page = 0; ; page += 1) {
+    const { data, error } = await applyFilter(client.from(table).select(columns)).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...((data ?? []) as T[]));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return rows;
+}
 
 export async function getOtPlanning(date: string, sheds: string[] = Object.keys(DIVISIONS), dateTo?: string) {
   return supabaseGuarded(async () => {
     const client = getSupabaseClient();
     const endDate = dateTo || date;
     const dateFilter = (query: any) => dateTo ? query.gte("tanggal", date).lte("tanggal", endDate) : query.eq("tanggal", date);
-    const [{ data: raw, error: rawError }, { data: calculated, error: calculatedError }, { data: estimates, error: estimateError }, { data: configs, error: configError }, { data: mappings, error: mappingError }, { data: divisions, error: divisionError }, { data: multipliers, error: multiplierError }] = await Promise.all([
-      dateFilter(client.from("raw_attendance").select("id,department,tanggal")),
-      client.from("calculated_attendance").select("raw_id,system_calculated_oth,status"),
+
+    const raw = await fetchAllPages<{ id: number; department: string; tanggal: string }>(client, "raw_attendance", "id,department,tanggal", dateFilter);
+    const rawIds = raw.map((x) => Number(x.id));
+    const calculated: { raw_id: number; system_calculated_oth: number; status: string }[] = [];
+    for (const idBatch of chunk(rawIds, 500)) {
+      const { data, error } = await client.from("calculated_attendance").select("raw_id,system_calculated_oth,status").in("raw_id", idBatch);
+      if (error) throw error;
+      calculated.push(...(data ?? []));
+    }
+
+    const [{ data: estimates, error: estimateError }, { data: configs, error: configError }, { data: mappings, error: mappingError }, { data: divisions, error: divisionError }, { data: multipliers, error: multiplierError }] = await Promise.all([
       dateFilter(client.from("ot_planning_estimates").select("shed,division,duration,person,tanggal")),
       client.from("ot_planning_config_history").select("umr,usd_rate").lte("effective_date", endDate).order("effective_date", { ascending: false }).limit(1),
       client.from("ot_planning_mappings").select("id,attendance_department,shed,division,display_order").order("display_order"),
       client.from("ot_planning_divisions").select("id,shed,division,display_order").order("display_order"),
       client.from("ot_planning_duration_multipliers").select("duration,paid_hours").order("duration"),
     ]);
-    if (rawError) throw rawError; if (calculatedError) throw calculatedError; if (estimateError) throw estimateError; if (configError) throw configError; if (mappingError) throw mappingError; if (divisionError) throw divisionError; if (multiplierError) throw multiplierError;
+    if (estimateError) throw estimateError; if (configError) throw configError; if (mappingError) throw mappingError; if (divisionError) throw divisionError; if (multiplierError) throw multiplierError;
     const paidByDuration = new Map((multipliers ?? []).map((x: any) => [Number(x.duration), Number(x.paid_hours)]));
     const config = configs?.[0] ?? { umr: DEFAULT_UMR, usd_rate: DEFAULT_USD_RATE };
     const mappingRows: OtMapping[] = (mappings?.length ? mappings : seedMappings).map((x: any) => ({ attendanceDepartment: String(x.attendance_department ?? x.attendanceDepartment), shed: String(x.shed), division: String(x.division), displayOrder: Number(x.display_order ?? x.displayOrder ?? 0) }));

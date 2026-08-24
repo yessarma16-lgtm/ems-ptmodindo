@@ -76,11 +76,14 @@ function normalizeHeaderLabel(value: unknown): string {
 }
 
 /**
- * Scan beberapa baris pertama untuk menemukan baris header — tidak
- * mengasumsikan header selalu di baris 1 atau 2, karena ada file nyata
- * dengan posisi header berbeda-beda.
+ * Scan beberapa baris pertama satu sheet untuk menemukan baris header —
+ * tidak mengasumsikan header selalu di baris 1 atau 2, karena ada file nyata
+ * dengan posisi header berbeda-beda. Return null (bukan throw) kalau sheet
+ * ini tidak punya baris header yang cocok, supaya pemanggil bisa coba sheet
+ * lain (lihat `selectSheetWithHeaderRow` — sebagian file punya sheet pivot
+ * ringkasan sebelum sheet data asli).
  */
-function findHeaderRow(sheet: ExcelJS.Worksheet): { rowNumber: number; columnKeyByIndex: Map<number, WhitelistHeader> } {
+function scanHeaderRow(sheet: ExcelJS.Worksheet): { rowNumber: number; columnKeyByIndex: Map<number, WhitelistHeader> } | null {
   const whitelistByLabel = new Map<string, WhitelistHeader>(WHITELIST_HEADERS.map((h) => [h.toLowerCase(), h]));
 
   let best: { rowNumber: number; columnKeyByIndex: Map<number, WhitelistHeader> } | null = null;
@@ -101,7 +104,24 @@ function findHeaderRow(sheet: ExcelJS.Worksheet): { rowNumber: number; columnKey
     }
   }
 
-  if (!best || bestMatches < MIN_HEADER_MATCHES) {
+  return bestMatches >= MIN_HEADER_MATCHES ? best : null;
+}
+
+/**
+ * Pilih sheet yang punya baris header paling cocok di antara semua sheet di
+ * workbook — bukan cuma sheet pertama, karena beberapa file nyata menaruh
+ * sheet pivot/ringkasan (mis. "Sheet2") sebelum sheet data absensi
+ * sebenarnya.
+ */
+function selectSheetWithHeaderRow(workbook: ExcelJS.Workbook): { sheet: ExcelJS.Worksheet; rowNumber: number; columnKeyByIndex: Map<number, WhitelistHeader> } {
+  let best: { sheet: ExcelJS.Worksheet; rowNumber: number; columnKeyByIndex: Map<number, WhitelistHeader> } | null = null;
+  for (const sheet of workbook.worksheets) {
+    const found = scanHeaderRow(sheet);
+    if (found && (!best || found.columnKeyByIndex.size > best.columnKeyByIndex.size)) {
+      best = { sheet, ...found };
+    }
+  }
+  if (!best) {
     throw new ImportParseError(
       "Tidak ditemukan baris header yang cocok. Pastikan kolom NIK, Nama, Date, dst ada dan namanya sesuai.",
     );
@@ -187,10 +207,9 @@ export async function parseAttendanceImportWorkbook(buffer: Buffer): Promise<Par
     throw new ImportParseError("This doesn't look like a valid .xls or .xlsx file.");
   }
 
-  const sheet = workbook.getWorksheet("Data Cross Check NK") ?? workbook.worksheets[0];
-  if (!sheet) throw new ImportParseError("The uploaded file has no sheets.");
+  if (!workbook.worksheets.length) throw new ImportParseError("The uploaded file has no sheets.");
 
-  const { rowNumber: headerRowNumber, columnKeyByIndex } = findHeaderRow(sheet);
+  const { sheet, rowNumber: headerRowNumber, columnKeyByIndex } = selectSheetWithHeaderRow(workbook);
 
   const rows: RawAttendanceParsedRow[] = [];
   const rejected: RawAttendanceRejectedRow[] = [];
