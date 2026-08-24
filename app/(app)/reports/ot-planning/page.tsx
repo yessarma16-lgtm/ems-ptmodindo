@@ -79,6 +79,8 @@ function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, se
   const saveDivision = async () => { if (!d.division) return; await post({ kind: "division", value: d }); setD(EMPTY_DIVISION); };
   const editDivision = (x: Division) => setD({ id: x.id, shed: x.shed, division: x.division, displayOrder: x.display_order });
   const deleteDivision = (x: Division) => void del({ kind: "division", id: x.id });
+  const editMapping = (x: Mapping) => setM({ id: x.id, attendanceDepartment: x.attendance_department, shed: x.shed, division: x.division, displayOrder: x.display_order });
+  const deleteMapping = (x: Mapping) => void del({ kind: "mapping", id: x.id });
 
   return <div className="grid gap-5">
     <Card><CardContent className="grid max-w-xl gap-4 pt-6"><label>UMR (IDR)<Input type="number" value={umr} onChange={(e) => setUmr(Number(e.target.value))} /></label><label>USD Rate (IDR)<Input type="number" value={usdRate} onChange={(e) => setUsdRate(Number(e.target.value))} /></label><p className="text-xs text-muted-foreground">Effective snapshot for {date}. Divisor is fixed at 173.</p><Button onClick={() => void post({ kind: "config", effectiveDate: date, umr, usdRate })}>Save Reference</Button></CardContent></Card>
@@ -112,14 +114,15 @@ function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, se
           <SelectTrigger className="w-56"><SelectValue placeholder="Division" /></SelectTrigger>
           <SelectContent>{divisionOptionsForShed.map((x) => <SelectItem key={x.id} value={x.division}>{x.division}</SelectItem>)}</SelectContent>
         </Select>
-        <Button onClick={() => void saveMapping()}><Plus className="size-4" />Add</Button>
+        <Button onClick={() => void saveMapping()}>{m.id ? <><Pencil className="size-4" />Update</> : <><Plus className="size-4" />Add</>}</Button>
+        {m.id ? <Button variant="outline" onClick={() => setM(EMPTY_MAPPING)}><X className="size-4" />Cancel</Button> : null}
       </div>
       <div className="grid gap-5">
         {mappingGroups.map(([shed, rows]) => <div key={shed}>
           <h3 className="mb-2 text-sm font-semibold text-muted-foreground">{shed}</h3>
           <table className="w-full border-collapse text-sm">
-            <thead><tr className="bg-muted"><th className="border p-2 text-left">Attendance Department</th><th className="border p-2 text-left">Division</th></tr></thead>
-            <tbody>{rows.map((x) => <tr key={x.id}><td className="border p-2">{x.attendance_department}</td><td className="border p-2">{x.division}</td></tr>)}</tbody>
+            <thead><tr className="bg-muted"><th className="border p-2 text-left">Attendance Department</th><th className="border p-2 text-left">Division</th><th className="border p-2 text-right">Actions</th></tr></thead>
+            <tbody>{rows.map((x) => <tr key={x.id}><td className="border p-2">{x.attendance_department}</td><td className="border p-2">{x.division}</td><td className="border p-1 text-right"><div className="flex justify-end gap-1"><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted" title="Edit" onClick={() => editMapping(x)}><Pencil className="size-3.5" /></button><button className="inline-flex size-7 items-center justify-center rounded-md hover:bg-destructive/10" title="Delete" onClick={() => deleteMapping(x)}><Trash2 className="size-3.5 text-destructive" /></button></div></td></tr>)}</tbody>
           </table>
         </div>)}
       </div>
