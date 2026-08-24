@@ -267,8 +267,10 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     if (filters.dateTo) { conditions.push("tanggal <= ?"); params.push(filters.dateTo); }
     if (filters.department) { conditions.push("department = ?"); params.push(filters.department); }
     if (filters.nik) { conditions.push("nik = ?"); params.push(filters.nik); }
+    if (filters.sourceFilename) { conditions.push("source_filename = ?"); params.push(filters.sourceFilename); }
+    if (filters.importedAt) { conditions.push("imported_at = ?"); params.push(filters.importedAt); }
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const rows = db.prepare(`SELECT ra.*, CASE WHEN ca.raw_id IS NULL THEN 'Waiting Process' ELSE 'Done Process' END AS process_status FROM raw_attendance ra LEFT JOIN calculated_attendance ca ON ca.raw_id = ra.id ${where.replace(/\btanggal\b/g, "ra.tanggal").replace(/\bdepartment\b/g, "ra.department").replace(/\bnik\b/g, "ra.nik")} ORDER BY ra.tanggal, ra.nik`).all(...params) as SqlRow[];
+    const rows = db.prepare(`SELECT ra.*, CASE WHEN ca.raw_id IS NULL THEN 'Waiting Process' ELSE 'Done Process' END AS process_status FROM raw_attendance ra LEFT JOIN calculated_attendance ca ON ca.raw_id = ra.id ${where.replace(/\btanggal\b/g, "ra.tanggal").replace(/\bdepartment\b/g, "ra.department").replace(/\bnik\b/g, "ra.nik").replace(/\bsource_filename\b/g, "ra.source_filename").replace(/\bimported_at\b/g, "ra.imported_at")} ORDER BY ra.tanggal, ra.nik`).all(...params) as SqlRow[];
     return rows.map(rowToRawAttendance);
   }
 

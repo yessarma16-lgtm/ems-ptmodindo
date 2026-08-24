@@ -264,16 +264,31 @@ async function deleteImport(sourceFilename: string, importedAt: string): Promise
   });
 }
 
+/** PostgREST caps unpaginated selects at 1000 rows — a single day's raw_attendance already exceeds that, so this always pages through with .range() instead of trusting one request to return everything (same fix as getOtPlanning/getTimeOverdueReport). */
 async function getRawAttendance(filters: RawAttendanceFilter): Promise<RawAttendanceRecord[]> {
   return supabaseGuarded(async () => {
-    let query = getSupabaseClient().from("raw_attendance").select("*, calculated_attendance(id)");
-    if (filters.dateFrom) query = query.gte("tanggal", filters.dateFrom);
-    if (filters.dateTo) query = query.lte("tanggal", filters.dateTo);
-    if (filters.department) query = query.eq("department", filters.department);
-    if (filters.nik) query = query.eq("nik", filters.nik);
-    const { data, error } = await query.order("tanggal", { ascending: true }).order("nik", { ascending: true });
-    if (error) throw error;
-    return (data as SqlRow[]).map(rowToRawAttendance);
+    const applyFilters = (q: any) => {
+      if (filters.dateFrom) q = q.gte("tanggal", filters.dateFrom);
+      if (filters.dateTo) q = q.lte("tanggal", filters.dateTo);
+      if (filters.department) q = q.eq("department", filters.department);
+      if (filters.nik) q = q.eq("nik", filters.nik);
+      if (filters.sourceFilename) q = q.eq("source_filename", filters.sourceFilename);
+      if (filters.importedAt) q = q.eq("imported_at", filters.importedAt);
+      return q;
+    };
+    const PAGE_SIZE = 1000;
+    const rows: SqlRow[] = [];
+    for (let page = 0; ; page += 1) {
+      const query = applyFilters(getSupabaseClient().from("raw_attendance").select("*, calculated_attendance(id)"))
+        .order("tanggal", { ascending: true })
+        .order("nik", { ascending: true })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+      const { data, error } = await query;
+      if (error) throw error;
+      rows.push(...((data ?? []) as SqlRow[]));
+      if (!data || data.length < PAGE_SIZE) break;
+    }
+    return rows.map(rowToRawAttendance);
   });
 }
 

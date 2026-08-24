@@ -112,6 +112,8 @@ export interface RawAttendanceFilter {
   dateTo?: string;
   department?: string;
   nik?: string;
+  sourceFilename?: string;
+  importedAt?: string;
 }
 
 export type CalculatedStatus = "Sesuai" | "Tidak Sesuai" | "Dikoreksi Manual" | "Cek Manual" | "Tidak Berlaku";

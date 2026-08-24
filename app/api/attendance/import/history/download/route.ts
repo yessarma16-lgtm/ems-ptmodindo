@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     const sourceFilename = request.nextUrl.searchParams.get("sourceFilename");
     const importedAt = request.nextUrl.searchParams.get("importedAt");
     if (!sourceFilename || !importedAt) return NextResponse.json({ error: "File dan waktu import wajib diisi." }, { status: 400 });
-    const rows = (await getAttendanceAdapter().getRawAttendance({})).filter((row) => row.sourceFilename === sourceFilename && row.importedAt === importedAt);
+    const rows = await getAttendanceAdapter().getRawAttendance({ sourceFilename, importedAt });
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Data Cross Check NK");
     sheet.columns = ["NIK", "Nama", "Department", "Date", "InTime", "OutTime", "IT1", "OT1", "WHour", "BHour", "OTHour", "Description"].map((header) => ({ header, key: header }));
