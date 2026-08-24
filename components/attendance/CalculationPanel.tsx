@@ -24,6 +24,51 @@ function statusLabel(status: CalculatedStatus | "all") {
   return labels[status];
 }
 
+/** Shared shell for the small multi-select checkbox filters (Status / System OTH / NK OTH) in the filter bar. */
+function CheckboxFilter({
+  label,
+  count,
+  allLabel,
+  countLabel,
+  onClear,
+  children,
+}: {
+  label: string;
+  count: number;
+  allLabel: string;
+  countLabel: string;
+  onClear: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium">{label}</label>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" className="relative h-8 w-full justify-between pr-8 text-xs" size="sm">
+            {count === 0 ? allLabel : `${count} ${countLabel}`}
+            {count > 0 && (
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label={`Clear ${label} filter`}
+                title={`Clear ${label} filter`}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => { event.stopPropagation(); onClear(); }}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onClear(); } }}
+              >
+                <X className="size-3.5" />
+              </span>
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-48">{children}</DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 function statusVariant(status: CalculatedStatus) {
   if (status === "Sesuai") return "success" as const;
   if (status === "Tidak Sesuai") return "destructive" as const;
@@ -37,6 +82,8 @@ export function CalculationPanel() {
   const [department, setDepartment] = useState("");
   const [search, setSearch] = useState("");
   const [statuses, setStatuses] = useState<CalculatedStatus[]>([]);
+  const [systemOthFilter, setSystemOthFilter] = useState<number[]>([]);
+  const [nkOthFilter, setNkOthFilter] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [crosscheckProgress, setCrosscheckProgress] = useState<{ processed: number; total: number } | null>(null);
@@ -47,6 +94,8 @@ export function CalculationPanel() {
   const [selected, setSelected] = useState<CalculatedAttendanceRecord | null>(null);
   const [processedDates, setProcessedDates] = useState<string[]>([]);
   const departments = useMemo(() => Array.from(new Set(rows.map((row) => row.department).filter(Boolean))).sort(), [rows]);
+  const systemOthValues = useMemo(() => Array.from(new Set(rows.map((row) => row.systemCalculatedOth).filter((v): v is number => v !== null && v !== undefined))).sort((a, b) => a - b), [rows]);
+  const nkOthValues = useMemo(() => Array.from(new Set(rows.map((row) => row.finalOth).filter((v): v is number => v !== null && v !== undefined))).sort((a, b) => a - b), [rows]);
 
   useEffect(() => {
     fetch("/api/attendance/status", { cache: "no-store" }).then((res) => res.json()).then((data) => setProcessedDates(data.processedDates ?? [])).catch(() => setProcessedDates([]));
@@ -74,12 +123,14 @@ export function CalculationPanel() {
   const visibleRows = useMemo(() => rows.filter((row) => {
     if (statuses.length > 0 && !statuses.includes(row.status)) return false;
     if (department && row.department !== department) return false;
+    if (systemOthFilter.length > 0 && (row.systemCalculatedOth === null || row.systemCalculatedOth === undefined || !systemOthFilter.includes(row.systemCalculatedOth))) return false;
+    if (nkOthFilter.length > 0 && (row.finalOth === null || row.finalOth === undefined || !nkOthFilter.includes(row.finalOth))) return false;
     if (search.trim()) {
       const term = search.trim().toLowerCase();
       if (!`${row.nik} ${row.nama}`.toLowerCase().includes(term)) return false;
     }
     return true;
-  }), [rows, statuses, department, search]);
+  }), [rows, statuses, department, systemOthFilter, nkOthFilter, search]);
 
   const load = useCallback(async (requestedQuery = query, notifyWhenEmpty = false) => {
     setLoading(true);
@@ -208,6 +259,8 @@ export function CalculationPanel() {
     setDepartment("");
     setSearch("");
     setStatuses([]);
+    setSystemOthFilter([]);
+    setNkOthFilter([]);
     localStorage.removeItem(CALCULATION_JOB_KEY);
   }
 
@@ -238,11 +291,19 @@ export function CalculationPanel() {
       </div>
 
 
-      <div className="grid gap-3 md:grid-cols-5">
-        <div><label htmlFor="calc-search" className="mb-1 block text-xs font-medium">Name / NIK</label><div className="relative"><Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input className="pl-9 pr-9" id="calc-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or NIK" />{search && <button type="button" aria-label="Clear search" title="Clear search" className="absolute right-2 top-2 rounded p-0.5 text-muted-foreground hover:text-foreground" onClick={() => setSearch("")}><X className="size-4" /></button>}</div></div>
-        <div><label htmlFor="calc-department" className="mb-1 block text-xs font-medium">Department</label><Select value={department || "all"} onValueChange={(value) => setDepartment(value === "all" ? "" : value)}><SelectTrigger id="calc-department"><SelectValue placeholder="All departments" /></SelectTrigger><SelectContent><SelectItem value="all">All departments</SelectItem>{departments.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-        <div><label className="mb-1 block text-xs font-medium">Status</label><DropdownMenu><DropdownMenuTrigger asChild><Button id="calc-status" variant="outline" className="relative w-full justify-between pr-9">{statuses.length === 0 ? "All statuses" : `${statuses.length} status dipilih`}{statuses.length > 0 && <span role="button" tabIndex={0} aria-label="Clear status filter" title="Clear status filter" className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); setStatuses([]); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); setStatuses([]); } }}><X className="size-4" /></span>}</Button></DropdownMenuTrigger><DropdownMenuContent align="start" className="w-56">{STATUSES.filter((item): item is CalculatedStatus => item !== "all").map((item) => <DropdownMenuCheckboxItem key={item} checked={statuses.includes(item)} onCheckedChange={(checked) => setStatuses((current) => checked ? [...current, item] : current.filter((value) => value !== item))}>{statusLabel(item)}</DropdownMenuCheckboxItem>)}</DropdownMenuContent></DropdownMenu></div>
-        <div className="md:col-span-2 flex items-end justify-end text-right text-sm font-medium">Total data MPP Attendance Calculation: {loading ? "—" : visibleRows.length}</div>
+      <div className="grid gap-2 md:grid-cols-3 lg:grid-cols-6">
+        <div><label htmlFor="calc-search" className="mb-1 block text-xs font-medium">Name / NIK</label><div className="relative"><Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input className="h-8 pl-8 pr-8 text-xs" id="calc-search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or NIK" />{search && <button type="button" aria-label="Clear search" title="Clear search" className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground" onClick={() => setSearch("")}><X className="size-3.5" /></button>}</div></div>
+        <div><label htmlFor="calc-department" className="mb-1 block text-xs font-medium">Department</label><Select value={department || "all"} onValueChange={(value) => setDepartment(value === "all" ? "" : value)}><SelectTrigger id="calc-department" className="h-8 text-xs"><SelectValue placeholder="All departments" /></SelectTrigger><SelectContent><SelectItem value="all">All departments</SelectItem>{departments.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
+        <CheckboxFilter label="Status" count={statuses.length} allLabel="All statuses" countLabel="status dipilih" onClear={() => setStatuses([])}>
+          {STATUSES.filter((item): item is CalculatedStatus => item !== "all").map((item) => <DropdownMenuCheckboxItem key={item} checked={statuses.includes(item)} onCheckedChange={(checked) => setStatuses((current) => checked ? [...current, item] : current.filter((value) => value !== item))}>{statusLabel(item)}</DropdownMenuCheckboxItem>)}
+        </CheckboxFilter>
+        <CheckboxFilter label="System OTH" count={systemOthFilter.length} allLabel="All System OTH" countLabel="nilai dipilih" onClear={() => setSystemOthFilter([])}>
+          {systemOthValues.map((value) => <DropdownMenuCheckboxItem key={value} checked={systemOthFilter.includes(value)} onCheckedChange={(checked) => setSystemOthFilter((current) => checked ? [...current, value] : current.filter((v) => v !== value))}>{value}</DropdownMenuCheckboxItem>)}
+        </CheckboxFilter>
+        <CheckboxFilter label="NK OTH" count={nkOthFilter.length} allLabel="All NK OTH" countLabel="nilai dipilih" onClear={() => setNkOthFilter([])}>
+          {nkOthValues.map((value) => <DropdownMenuCheckboxItem key={value} checked={nkOthFilter.includes(value)} onCheckedChange={(checked) => setNkOthFilter((current) => checked ? [...current, value] : current.filter((v) => v !== value))}>{value}</DropdownMenuCheckboxItem>)}
+        </CheckboxFilter>
+        <div className="flex items-end justify-end text-right text-xs font-medium">Total: {loading ? "—" : visibleRows.length}</div>
       </div>
 
       {summary && <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">Processed: <strong>{summary.processed}</strong> · Match: <strong>{summary.sesuai}</strong> · Mismatch: <strong>{summary.tidakSesuai}</strong> · Manual review: <strong>{summary.cekManual}</strong> · Manual corrections preserved: <strong>{summary.preservedManualCorrections}</strong></div>}
