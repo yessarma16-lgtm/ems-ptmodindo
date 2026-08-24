@@ -9,9 +9,8 @@
  *   regardless of how fields are visually grouped into sections.
  * - `spreadsheetColumn` is the column letter in the `Employees` sheet of
  *   the Google Spreadsheet database (Employee Database).
- * - `label` preserves the original Excel header text verbatim (including
- *   the "POTITION" typo present in the source file) so the UI matches the
- *   source of truth exactly.
+ * - `label` preserves the original Excel header text verbatim — the source
+ *   file's "POTITION" typo was fixed to "POSITION" per HR request.
  */
 
 export type EmployeeFieldType =
@@ -70,7 +69,7 @@ export const EMPLOYEE_FIELDS: EmployeeField[] = [
   { key: "nik", label: "NIK (EMPLOYEE ID)", type: "text", required: true, tabOrder: 4, section: "Personal Information", spreadsheetColumn: "D" },
   { key: "name", label: "NAME", type: "text", required: true, tabOrder: 5, section: "Personal Information", spreadsheetColumn: "E" },
   { key: "department", label: "DEPARTMENT", type: "select", required: true, tabOrder: 6, section: "Employment Information", spreadsheetColumn: "F", optionsKey: "department" },
-  { key: "position", label: "POTITION", type: "select", required: true, tabOrder: 7, section: "Employment Information", spreadsheetColumn: "G", optionsKey: "position" },
+  { key: "position", label: "POSITION", type: "select", required: true, tabOrder: 7, section: "Employment Information", spreadsheetColumn: "G", optionsKey: "position" },
   { key: "level", label: "LEVEL", type: "select", required: false, tabOrder: 8, section: "Employment Information", spreadsheetColumn: "H", optionsKey: "level" },
   { key: "skill", label: "SKILL", type: "select", required: false, tabOrder: 9, section: "Employment Information", spreadsheetColumn: "I", optionsKey: "skill" },
   { key: "type", label: "Type", type: "select", required: false, tabOrder: 10, section: "Employment Information", spreadsheetColumn: "J", optionsKey: "type" },
@@ -185,7 +184,7 @@ export function getFieldByKey(key: string): EmployeeField | undefined {
  * record-keeping fields. Fields backed by Master Data remain available as
  * dropdowns so applicants can choose from the configured options.
  *
- * NIK/DEPARTMENT/POTITION/JOIN DATE are normally required —
+ * NIK/DEPARTMENT/POSITION/JOIN DATE are normally required —
  * `publicApplySchema` (see schemas/employee.schema.ts) relaxes these fields
  * for public forms where HR may complete them later. `approveOnlineRegistration`
  * requires them again before a registration can become a real employee, so

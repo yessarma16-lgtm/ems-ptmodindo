@@ -33,7 +33,7 @@ export default async function NewEmployeePage() {
           { label: "Add Employee" },
         ]}
       />
-      <EmployeeForm mode="create" masterData={masterData} masterDataError={masterDataError} />
+      <EmployeeForm mode="create" masterData={masterData} masterDataError={masterDataError} excludeFields={["positionApplied"]} />
     </div>
   );
 }

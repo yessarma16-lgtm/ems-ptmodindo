@@ -71,7 +71,7 @@ export function OnlineRegisterTable({ registrations, emptyMessage = "No registra
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return registrations;
-    return registrations.filter((r) => `${r.name} ${r.email} ${r.position}`.toLowerCase().includes(q));
+    return registrations.filter((r) => `${r.name} ${r.email} ${r.positionApplied} ${r.position}`.toLowerCase().includes(q));
   }, [registrations, search]);
 
   async function handleDelete() {
@@ -136,7 +136,7 @@ export function OnlineRegisterTable({ registrations, emptyMessage = "No registra
                 <TableCell>{r.candidateNumber || "—"}</TableCell>
                 <TableCell>{r.email}</TableCell>
                 <TableCell>{r.hpNumber}</TableCell>
-                <TableCell>{r.position}</TableCell>
+                <TableCell>{r.positionApplied || r.position}</TableCell>
                 <TableCell>
                   <SourcePlatformBadge sourcePlatform={r.sourcePlatform} />
                 </TableCell>

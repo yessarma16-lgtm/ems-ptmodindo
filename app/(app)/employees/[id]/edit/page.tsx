@@ -64,6 +64,7 @@ export default async function EditEmployeePage({
           initialValues={employee}
           masterData={masterData}
           masterDataError={masterDataError}
+          excludeFields={["positionApplied"]}
           deleteConfig={{
             url: `/api/employees/${employee.recordId}`,
             redirectTo: "/employees",

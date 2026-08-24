@@ -32,7 +32,7 @@ const PUBLIC_APPLY_OPTIONAL_OVERRIDES = new Set(["nik", "department", "joinDate"
 /**
  * Zod schema built dynamically from `config/employee-fields.ts`, the single
  * source of truth for the Employee Master model. Required fields (NIK, NAME,
- * DEPARTMENT, POTITION, JOIN DATE) are enforced here; every other field
+ * DEPARTMENT, POSITION, JOIN DATE) are enforced here; every other field
  * (including the extra fields appended after the 55 db_mod.xlsx fields —
  * Blood Type, Email, Branch) is optional text.
  *

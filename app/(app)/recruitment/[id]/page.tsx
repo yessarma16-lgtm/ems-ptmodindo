@@ -68,6 +68,7 @@ export default async function EditOnlineRegistrationPage({
             showContractPeriods
             stayOnPage
             hrReview
+            excludeFields={["positionApplied"]}
           />
         </>
       )}

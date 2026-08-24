@@ -13,7 +13,7 @@ import { PUBLIC_APPLY_EXCLUDED_FIELDS, PUBLIC_APPLY_SECTION_ORDER } from "@/conf
 export const dynamic = "force-dynamic";
 
 /**
- * POSITION ("Potition") is superseded on this specific form by POSITION
+ * POSITION is superseded on this specific form by POSITION
  * APPLIED (sourced from Vacant Position master data, see
  * config/employee-fields.ts) — hidden here only, not on New Hiring or the
  * invite-link flow, which still use the plain PUBLIC_APPLY_EXCLUDED_FIELDS.
