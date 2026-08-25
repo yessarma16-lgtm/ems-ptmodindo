@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmployeeTable } from "@/components/employees/EmployeeTable";
 import { ImportEmployeesDialog } from "@/components/employees/ImportEmployeesDialog";
+import { ExportEmployeesButton } from "@/components/employees/ExportEmployeesButton";
 import { NotConfiguredNotice, ConnectionErrorNotice } from "@/components/layout/ConnectionNotice";
 import { loadEmployeeListPageData, parseEmployeeListSearchParams } from "@/lib/employee-list-data";
 
@@ -25,7 +26,12 @@ export default async function InactiveEmployeesPage({ searchParams }: PageProps)
           { label: "Employees", href: "/employees" },
           { label: "Inactive" },
         ]}
-        actions={<ImportEmployeesDialog />}
+        actions={
+          <div className="flex items-center gap-3">
+            <ExportEmployeesButton query={query} />
+            <ImportEmployeesDialog />
+          </div>
+        }
       />
 
       {!configured ? (

@@ -145,9 +145,8 @@ export function ImportEmployeesDialog() {
 
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" size="icon" title="Import Employees" onClick={() => setOpen(true)}>
         <Upload />
-        Import
       </Button>
 
       <Dialog open={open} onOpenChange={handleOpenChange}>

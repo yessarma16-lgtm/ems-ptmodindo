@@ -41,6 +41,21 @@ export function parseEmployeeListSearchParams(
   };
 }
 
+/** Mirrors EmployeeTable's own URL-building logic — used to carry the current search/filter/sort state into the Export-to-Excel link. */
+export function buildEmployeeExportQueryString(query: EmployeeListQuery): string {
+  const params = new URLSearchParams();
+  params.set("scope", query.scope);
+  if (query.search) params.set("q", query.search);
+  if (query.department) params.set("dept", query.department);
+  if (query.status) params.set("status", query.status);
+  if (query.contractStatus) params.set("contract", query.contractStatus);
+  if (query.dateFrom) params.set("from", query.dateFrom);
+  if (query.dateTo) params.set("to", query.dateTo);
+  if (query.sortKey !== "name") params.set("sort", query.sortKey);
+  if (!query.sortAsc) params.set("dir", "desc");
+  return params.toString();
+}
+
 export interface EmployeeListPageData {
   configured: boolean;
   connectionError: string | null;

@@ -4,6 +4,7 @@ import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmployeeTable } from "@/components/employees/EmployeeTable";
 import { NotConfiguredNotice, ConnectionErrorNotice } from "@/components/layout/ConnectionNotice";
+import { ExportEmployeesButton } from "@/components/employees/ExportEmployeesButton";
 import { Button } from "@/components/ui/button";
 import { loadEmployeeListPageData, parseEmployeeListSearchParams } from "@/lib/employee-list-data";
 
@@ -30,12 +31,15 @@ export default async function ExpatriateEmployeesPage({ searchParams }: PageProp
           { label: "Expatriate" },
         ]}
         actions={
-          <Button asChild>
-            <Link href="/employees/new">
-              <Plus />
-              Add Employee
-            </Link>
-          </Button>
+          <div className="flex items-center gap-3">
+            <ExportEmployeesButton query={query} />
+            <Button asChild>
+              <Link href="/employees/new">
+                <Plus />
+                Add Employee
+              </Link>
+            </Button>
+          </div>
         }
       />
 
