@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { EmployeeTable } from "@/components/employees/EmployeeTable";
 import { ImportEmployeesDialog } from "@/components/employees/ImportEmployeesDialog";
 import { ExportEmployeesButton } from "@/components/employees/ExportEmployeesButton";
+import { EmployeeSyncPanel } from "@/components/employees/EmployeeSyncPanel";
 import { NotConfiguredNotice, ConnectionErrorNotice } from "@/components/layout/ConnectionNotice";
 import { Button } from "@/components/ui/button";
 import { loadEmployeeListPageData, parseEmployeeListSearchParams } from "@/lib/employee-list-data";
@@ -29,6 +30,7 @@ export default async function EmployeesPage({ searchParams }: PageProps) {
         breadcrumb={[{ label: "Dashboard", href: "/dashboard" }, { label: "Employees" }]}
         actions={
           <div className="flex items-center gap-3">
+            <EmployeeSyncPanel />
             <ExportEmployeesButton query={query} />
             <ImportEmployeesDialog />
             <Button asChild>

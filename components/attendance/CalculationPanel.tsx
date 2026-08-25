@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Play, RefreshCw, Search, X } from "lucide-react";
+import { Download, Loader2, Play, RefreshCw, Search, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -93,6 +93,8 @@ export function CalculationPanel() {
   const [calculateController, setCalculateController] = useState<AbortController | null>(null);
   const [selected, setSelected] = useState<CalculatedAttendanceRecord | null>(null);
   const [processedDates, setProcessedDates] = useState<string[]>([]);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const departments = useMemo(() => Array.from(new Set(rows.map((row) => row.department).filter(Boolean))).sort(), [rows]);
   const systemOthValues = useMemo(() => Array.from(new Set(rows.map((row) => row.systemCalculatedOth).filter((v): v is number => v !== null && v !== undefined))).sort((a, b) => a - b), [rows]);
   const nkOthValues = useMemo(() => Array.from(new Set(rows.map((row) => row.finalOth).filter((v): v is number => v !== null && v !== undefined))).sort((a, b) => a - b), [rows]);
@@ -170,6 +172,7 @@ export function CalculationPanel() {
   async function runCrosscheck(from: string, to: string) {
     setRunning(true);
     setCrosscheckProgress(null);
+    setAiAnalysis(null);
     const controller = new AbortController();
     setCalculateController(controller);
     try {
@@ -261,7 +264,28 @@ export function CalculationPanel() {
     setStatuses([]);
     setSystemOthFilter([]);
     setNkOthFilter([]);
+    setAiAnalysis(null);
     localStorage.removeItem(CALCULATION_JOB_KEY);
+  }
+
+  async function runAnalysis() {
+    if (!summary) return;
+    setAnalyzing(true);
+    setAiAnalysis(null);
+    try {
+      const mismatches = rows
+        .filter((row) => row.status === "Tidak Sesuai" || row.status === "Cek Manual")
+        .slice(0, 200)
+        .map((row) => ({ nik: row.nik, nama: row.nama, department: row.department, tanggal: row.tanggal, systemCalculatedOth: row.systemCalculatedOth ?? null, finalOth: row.finalOth ?? null, status: row.status }));
+      const res = await fetch("/api/attendance/calculation/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dateFrom, dateTo, summary, mismatches }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to generate AI analysis.");
+      setAiAnalysis(data.analysis);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate AI analysis.");
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   async function exportRows() {
@@ -306,7 +330,23 @@ export function CalculationPanel() {
         <div className="flex items-end justify-end text-right text-xs font-medium">Total: {loading ? "—" : visibleRows.length}</div>
       </div>
 
-      {summary && <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">Processed: <strong>{summary.processed}</strong> · Match: <strong>{summary.sesuai}</strong> · Mismatch: <strong>{summary.tidakSesuai}</strong> · Manual review: <strong>{summary.cekManual}</strong> · Manual corrections preserved: <strong>{summary.preservedManualCorrections}</strong></div>}
+      {summary && (
+        <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>Processed: <strong>{summary.processed}</strong> · Match: <strong>{summary.sesuai}</strong> · Mismatch: <strong>{summary.tidakSesuai}</strong> · Manual review: <strong>{summary.cekManual}</strong> · Manual corrections preserved: <strong>{summary.preservedManualCorrections}</strong></div>
+            <Button size="sm" variant="outline" onClick={runAnalysis} disabled={analyzing}>
+              {analyzing ? <Loader2 className="animate-spin" /> : <Sparkles />}
+              {analyzing ? "Analyzing…" : "Analyze with AI"}
+            </Button>
+          </div>
+          {aiAnalysis && (
+            <div className="mt-3 whitespace-pre-wrap rounded-md border border-border bg-background p-3 text-sm">
+              <div className="mb-1 flex items-center gap-1 text-xs font-medium text-muted-foreground"><Sparkles className="size-3.5" />AI Analysis</div>
+              {aiAnalysis}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="rounded-lg border border-border text-[13px]">
         <Table containerClassName="max-h-[65vh] overflow-auto">

@@ -53,6 +53,34 @@ export const attendanceCalculationFilterSchema = z.object({
   status: z.enum(["Sesuai", "Tidak Sesuai", "Dikoreksi Manual", "Cek Manual", "Tidak Berlaku"]).optional(),
 });
 
+/** Body untuk POST /api/attendance/calculation/analyze — ringkasan hasil crosscheck dikirim ke OpenAI untuk dianalisa. */
+export const attendanceAnalysisRequestSchema = z.object({
+  dateFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  summary: z.object({
+    processed: z.number().int().min(0),
+    sesuai: z.number().int().min(0),
+    tidakSesuai: z.number().int().min(0),
+    cekManual: z.number().int().min(0),
+    tidakBerlaku: z.number().int().min(0),
+    preservedManualCorrections: z.number().int().min(0),
+  }),
+  mismatches: z
+    .array(
+      z.object({
+        nik: z.string(),
+        nama: z.string(),
+        department: z.string(),
+        tanggal: z.string(),
+        systemCalculatedOth: z.number().nullable(),
+        finalOth: z.number().nullable(),
+        status: z.string(),
+      }),
+    )
+    .max(200),
+});
+export type AttendanceAnalysisRequest = z.infer<typeof attendanceAnalysisRequestSchema>;
+
 export const attendanceCorrectionSchema = z.object({
   id: z.coerce.number().int().positive(),
   rawId: z.coerce.number().int().positive(),

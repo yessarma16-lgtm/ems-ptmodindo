@@ -189,6 +189,15 @@ async function ensureApplicantPoolSchema(client: Client): Promise<void> {
     END;
     $$ LANGUAGE plpgsql;
   `);
+
+  // Read-only helper for the Settings > Database "Storage Usage" card — PostgREST
+  // (used in production) can't run pg_database_size() directly, only exposed functions.
+  await client.query(`
+    CREATE OR REPLACE FUNCTION get_database_size_bytes()
+    RETURNS BIGINT AS $$
+      SELECT pg_database_size(current_database());
+    $$ LANGUAGE sql STABLE;
+  `);
 }
 
 /** Seeds one default admin account so login isn't empty on first use. Never runs if any user already exists. */

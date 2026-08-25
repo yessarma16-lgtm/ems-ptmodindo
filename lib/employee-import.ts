@@ -86,7 +86,7 @@ export interface ImportProgressEvent {
  * ignoring case) is left as-is — still saved, just flagged as unrecognized
  * in the Edit Employee form.
  */
-async function buildMasterDataCasingMap(): Promise<Map<string, Map<string, string>>> {
+export async function buildMasterDataCasingMap(): Promise<Map<string, Map<string, string>>> {
   const allMasterData = await getAllMasterData();
   const byField = new Map<string, Map<string, string>>();
 
@@ -101,7 +101,7 @@ async function buildMasterDataCasingMap(): Promise<Map<string, Map<string, strin
   return byField;
 }
 
-function normalizeToMasterDataCasing(input: EmployeeInput, casingByField: Map<string, Map<string, string>>): void {
+export function normalizeToMasterDataCasing(input: EmployeeInput, casingByField: Map<string, Map<string, string>>): void {
   for (const [fieldKey, casingMap] of casingByField) {
     const raw = input[fieldKey];
     if (!raw) continue;
