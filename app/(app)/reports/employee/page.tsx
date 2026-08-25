@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarCheck, FileSpreadsheet } from "lucide-react";
+import { CalendarCheck, FileSpreadsheet, Play } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -55,29 +55,27 @@ function TimeOverdueReportTab() {
   const [processedDates, setProcessedDates] = useState<string[]>([]);
   const [report, setReport] = useState<TimeOverdueReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
 
   useEffect(() => {
     fetch("/api/attendance/status", { cache: "no-store" }).then((r) => r.json()).then((v) => setProcessedDates(v.processedDates ?? [])).catch(() => undefined);
   }, []);
 
-  useEffect(() => {
-    if (!dateFrom || !dateTo || dateFrom > dateTo) return;
-    const timeoutId = window.setTimeout(() => { void load(); }, 0);
-    return () => window.clearTimeout(timeoutId);
-    async function load() {
-      setLoading(true);
-      try {
-        const q = new URLSearchParams({ dateFrom, dateTo });
-        const r = await fetch(`/api/reports/time-overdue?${q}`, { cache: "no-store" });
-        if (!r.ok) throw new Error("Failed to load report.");
-        setReport(await r.json());
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Failed to load report.");
-      } finally {
-        setLoading(false);
-      }
+  async function load() {
+    if (!dateFrom || !dateTo || dateFrom > dateTo) { toast.error("Pilih tanggal mulai dan tanggal akhir yang valid."); return; }
+    setHasRun(true);
+    setLoading(true);
+    try {
+      const q = new URLSearchParams({ dateFrom, dateTo });
+      const r = await fetch(`/api/reports/time-overdue?${q}`, { cache: "no-store" });
+      if (!r.ok) throw new Error("Failed to load report.");
+      setReport(await r.json());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to load report.");
+    } finally {
+      setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }
 
   const exportQuery = () => new URLSearchParams({ dateFrom, dateTo }).toString();
   const groups = report ? groupByShed(report.units) : [];
@@ -89,19 +87,31 @@ function TimeOverdueReportTab() {
           <div><label className="mb-1 block text-xs font-medium">From</label><AttendanceDatePicker value={dateFrom} onChange={setDateFrom} processedDates={processedDates} /></div>
           <div><label className="mb-1 block text-xs font-medium">To</label><AttendanceDatePicker value={dateTo} onChange={setDateTo} processedDates={processedDates} /></div>
         </div>
-        <Button
-          size="icon"
-          className="rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 text-white shadow-md transition-all hover:shadow-lg hover:from-sky-600 hover:to-sky-700"
-          title="Export Excel"
-          aria-label="Export Excel"
-          onClick={() => window.open(`/api/reports/time-overdue/export?${exportQuery()}`, "_blank")}
-        >
-          <FileSpreadsheet className="size-[18px]" />
-        </Button>
+        <div className="flex flex-wrap gap-2 rounded-2xl border border-border bg-muted/30 p-1.5 shadow-sm">
+          <Button
+            size="icon"
+            className="rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-md transition-all hover:shadow-lg hover:from-violet-600 hover:to-violet-700"
+            title="Run"
+            aria-label="Run"
+            onClick={() => void load()}
+            disabled={loading}
+          >
+            <Play className="size-[18px]" />
+          </Button>
+          <Button
+            size="icon"
+            className="rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 text-white shadow-md transition-all hover:shadow-lg hover:from-sky-600 hover:to-sky-700"
+            title="Export Excel"
+            aria-label="Export Excel"
+            onClick={() => window.open(`/api/reports/time-overdue/export?${exportQuery()}`, "_blank")}
+          >
+            <FileSpreadsheet className="size-[18px]" />
+          </Button>
+        </div>
       </div>
       <p className="text-xs text-muted-foreground"><CalendarCheck className="mr-1 inline size-3" />Green ring indicates a date with completed MPP Calculation. Counts IT1 (actual clock-in) minus scheduled InTime, per attendance record. IT1 at or before InTime counts as Normal.</p>
 
-      {loading ? <p className="text-sm text-muted-foreground">Loading...</p> : !report || groups.length === 0 ? <p className="text-sm text-muted-foreground">No data for the selected filters.</p> : (
+      {!hasRun ? <p className="text-sm text-muted-foreground">Select a date range, then click Run to load the report.</p> : loading ? <p className="text-sm text-muted-foreground">Loading...</p> : !report || groups.length === 0 ? <p className="text-sm text-muted-foreground">No data for the selected filters.</p> : (
         <div className="grid gap-5">
           {groups.map(([shed, units]) => {
             const totals = BUCKETS.reduce((acc, b) => { acc[b] = units.reduce((sum, u) => sum + (u.counts[b] || 0), 0); return acc; }, {} as Record<string, number>);
