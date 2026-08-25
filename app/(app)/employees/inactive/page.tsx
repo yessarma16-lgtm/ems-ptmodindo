@@ -28,7 +28,7 @@ export default async function InactiveEmployeesPage({ searchParams }: PageProps)
         ]}
         actions={
           <div className="flex items-center gap-3">
-            <ExportEmployeesButton query={query} />
+            <ExportEmployeesButton scope={query.scope} />
             <ImportEmployeesDialog />
           </div>
         }

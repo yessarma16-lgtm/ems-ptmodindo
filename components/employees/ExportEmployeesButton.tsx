@@ -1,12 +1,11 @@
 import { FileSpreadsheet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { buildEmployeeExportQueryString } from "@/lib/employee-list-data";
-import type { EmployeeListQuery } from "@/lib/database/types";
+import type { EmployeeListScope } from "@/lib/database/types";
 
-/** Icon-only download link — exports the current list view (same filters/sort as on screen) to .xlsx via /api/employees/export. */
-export function ExportEmployeesButton({ query }: { query: EmployeeListQuery }) {
-  const href = `/api/employees/export?${buildEmployeeExportQueryString(query)}`;
+/** Icon-only download link — exports EVERY employee in this scope (Active/Inactive/Expatriate) with the full ~60-field record, not just what the on-screen table shows or the current search/filter state. */
+export function ExportEmployeesButton({ scope }: { scope: EmployeeListScope }) {
+  const href = `/api/employees/export?scope=${scope}`;
   return (
     <Button type="button" variant="outline" size="icon" asChild title="Export to Excel">
       <a href={href} download>
