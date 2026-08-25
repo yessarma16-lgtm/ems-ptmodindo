@@ -141,6 +141,8 @@ export interface CalculatedAttendanceRecord {
   ot1?: string | null;
   whour?: number | null;
   kategori?: string;
+  /** OTHour column as originally imported from Excel — compared against systemCalculatedOth to decide Sesuai/Tidak Sesuai, never itself the calculated value. */
+  othourRecorded?: number | null;
 }
 
 export interface CalculatedAttendanceFilter {

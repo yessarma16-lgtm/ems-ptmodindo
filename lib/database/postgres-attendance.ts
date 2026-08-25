@@ -597,7 +597,7 @@ async function getCalculatedAttendance(filters: CalculatedAttendanceFilter): Pro
     const pages = await Promise.all(Array.from({ length: pageCount }, async (_, page) => {
       let pageQuery = getSupabaseClient()
         .from("calculated_attendance")
-        .select("*, raw_attendance!inner(nik, nama, department, tanggal, intime, outtime, it1, ot1, whour, kategori)");
+        .select("*, raw_attendance!inner(nik, nama, department, tanggal, intime, outtime, it1, ot1, whour, kategori, othour_recorded)");
       if (filters.status) pageQuery = pageQuery.eq("status", filters.status);
       if (filters.dateFrom) pageQuery = pageQuery.gte("raw_attendance.tanggal", filters.dateFrom);
       if (filters.dateTo) pageQuery = pageQuery.lte("raw_attendance.tanggal", filters.dateTo);
@@ -631,7 +631,7 @@ async function getCalculatedAttendance(filters: CalculatedAttendanceFilter): Pro
         department: toStr(ra?.department),
         tanggal: toStr(ra?.tanggal),
         intime: toStrOrNull(ra?.intime), outtime: toStrOrNull(ra?.outtime), it1: toStrOrNull(ra?.it1), ot1: toStrOrNull(ra?.ot1),
-        whour: toNumOrNull(ra?.whour), kategori: toStr(ra?.kategori),
+        whour: toNumOrNull(ra?.whour), kategori: toStr(ra?.kategori), othourRecorded: toNumOrNull(ra?.othour_recorded),
       };
     });
   });

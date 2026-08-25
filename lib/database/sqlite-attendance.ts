@@ -116,7 +116,7 @@ function rowToCalculated(row: SqlRow): CalculatedAttendanceRecord {
     department: toStrOrNull(row.department) ?? "",
     tanggal: toStrOrNull(row.tanggal) ?? "",
     intime: toStrOrNull(row.intime), outtime: toStrOrNull(row.outtime), it1: toStrOrNull(row.it1), ot1: toStrOrNull(row.ot1),
-    whour: toNumOrNull(row.whour), kategori: toStr(row.kategori),
+    whour: toNumOrNull(row.whour), kategori: toStr(row.kategori), othourRecorded: toNumOrNull(row.othour_recorded),
   };
 }
 
@@ -484,7 +484,7 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     const rows = db
       .prepare(
          `SELECT ca.*, ra.nik as nik, ra.nama as nama, ra.department as department, ra.tanggal as tanggal,
-                 ra.intime as intime, ra.outtime as outtime, ra.it1 as it1, ra.ot1 as ot1, ra.whour as whour, ra.kategori as kategori
+                 ra.intime as intime, ra.outtime as outtime, ra.it1 as it1, ra.ot1 as ot1, ra.whour as whour, ra.kategori as kategori, ra.othour_recorded as othour_recorded
          FROM calculated_attendance ca JOIN raw_attendance ra ON ra.id = ca.raw_id
          ${where} ORDER BY ra.tanggal, ra.nik`,
       )

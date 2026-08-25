@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const columns = [
       ["Date", "tanggal"], ["NIK", "nik"], ["Name", "nama"], ["Department", "department"],
       ["InTime", "intime"], ["OutTime", "outtime"], ["IT1", "it1"], ["OT1", "ot1"], ["WHour", "whour"], ["Description", "kategori"],
-      ["Day Type", "dayType"], ["Bracket Used", "bracketUsed"], ["Recorded OTH", "recordedOth"], ["System OTH", "systemCalculatedOth"], ["NK OTH", "finalOth"], ["Status", "status"], ["Calculated At", "calculatedAt"], ["Correction Note", "correctionNote"], ["Corrected By", "correctedBy"],
+      ["Day Type", "dayType"], ["Bracket Used", "bracketUsed"], ["Recorded OTH", "recordedOth"], ["System OTH", "systemCalculatedOth"], ["EDIT OTH", "finalOth"], ["Status", "status"], ["Calculated At", "calculatedAt"], ["Correction Note", "correctionNote"], ["Corrected By", "correctedBy"],
     ] as const;
     sheet.columns = columns.map(([header, key]) => ({ header, key }));
     const rawRows = await getAttendanceAdapter().getRawAttendance({});

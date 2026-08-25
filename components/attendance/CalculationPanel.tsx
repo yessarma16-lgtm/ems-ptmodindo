@@ -24,7 +24,7 @@ function statusLabel(status: CalculatedStatus | "all") {
   return labels[status];
 }
 
-/** Shared shell for the small multi-select checkbox filters (Status / System OTH / NK OTH) in the filter bar. */
+/** Shared shell for the small multi-select checkbox filters (Status / System OTH / EDIT OTH) in the filter bar. */
 function CheckboxFilter({
   label,
   count,
@@ -300,7 +300,7 @@ export function CalculationPanel() {
         <CheckboxFilter label="System OTH" count={systemOthFilter.length} allLabel="All System OTH" countLabel="nilai dipilih" onClear={() => setSystemOthFilter([])}>
           {systemOthValues.map((value) => <DropdownMenuCheckboxItem key={value} checked={systemOthFilter.includes(value)} onCheckedChange={(checked) => setSystemOthFilter((current) => checked ? [...current, value] : current.filter((v) => v !== value))}>{value}</DropdownMenuCheckboxItem>)}
         </CheckboxFilter>
-        <CheckboxFilter label="NK OTH" count={nkOthFilter.length} allLabel="All NK OTH" countLabel="nilai dipilih" onClear={() => setNkOthFilter([])}>
+        <CheckboxFilter label="EDIT OTH" count={nkOthFilter.length} allLabel="All EDIT OTH" countLabel="nilai dipilih" onClear={() => setNkOthFilter([])}>
           {nkOthValues.map((value) => <DropdownMenuCheckboxItem key={value} checked={nkOthFilter.includes(value)} onCheckedChange={(checked) => setNkOthFilter((current) => checked ? [...current, value] : current.filter((v) => v !== value))}>{value}</DropdownMenuCheckboxItem>)}
         </CheckboxFilter>
         <div className="flex items-end justify-end text-right text-xs font-medium">Total: {loading ? "—" : visibleRows.length}</div>
@@ -310,9 +310,9 @@ export function CalculationPanel() {
 
       <div className="rounded-lg border border-border text-[13px]">
         <Table containerClassName="max-h-[65vh] overflow-auto">
-          <TableHeader className="sticky top-0 z-10 bg-background [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background"><TableRow><TableHead>Date</TableHead><TableHead>NIK</TableHead><TableHead>Name</TableHead><TableHead>Department</TableHead><TableHead>InTime</TableHead><TableHead>OutTime</TableHead><TableHead>IT1</TableHead><TableHead>OT1</TableHead><TableHead>WHour</TableHead><TableHead>Description</TableHead><TableHead>System OTH</TableHead><TableHead>NK OTH</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+          <TableHeader className="sticky top-0 z-10 bg-background [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-background"><TableRow><TableHead>Date</TableHead><TableHead>NIK</TableHead><TableHead>Name</TableHead><TableHead>Department</TableHead><TableHead>InTime</TableHead><TableHead>OutTime</TableHead><TableHead>IT1</TableHead><TableHead>OT1</TableHead><TableHead>WHour</TableHead><TableHead>OTH</TableHead><TableHead>Description</TableHead><TableHead>System OTH</TableHead><TableHead>EDIT OTH</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
           <TableBody>
-            {loading ? <TableRow><TableCell colSpan={13} className="py-10 text-center"><Loader2 className="mx-auto animate-spin" /></TableCell></TableRow> : visibleRows.length === 0 ? <TableRow><TableCell colSpan={13} className="py-10 text-center text-sm text-muted-foreground">{dateFrom && dateTo ? "No calculation results." : "Select a date range and click Run."}</TableCell></TableRow> : visibleRows.map((row) => <TableRow key={row.id} onClick={() => setSelected(row)} className="cursor-pointer hover:bg-muted/50" title="Click to edit IT1, OT1, and NK OTH"><TableCell>{row.tanggal}</TableCell><TableCell>{row.nik}</TableCell><TableCell className="font-medium">{row.nama}</TableCell><TableCell>{row.department}</TableCell><TableCell>{row.intime ?? "—"}</TableCell><TableCell>{row.outtime ?? "—"}</TableCell><TableCell>{row.it1 ?? "—"}</TableCell><TableCell>{row.ot1 ?? "—"}</TableCell><TableCell>{row.whour ?? "—"}</TableCell><TableCell>{row.kategori}</TableCell><TableCell>{row.systemCalculatedOth ?? "—"}</TableCell><TableCell className={row.status === "Dikoreksi Manual" ? "font-semibold text-warning" : undefined}>{row.finalOth ?? "—"}</TableCell><TableCell><Badge variant={statusVariant(row.status)}>{row.status}</Badge></TableCell></TableRow>)}
+            {loading ? <TableRow><TableCell colSpan={14} className="py-10 text-center"><Loader2 className="mx-auto animate-spin" /></TableCell></TableRow> : visibleRows.length === 0 ? <TableRow><TableCell colSpan={14} className="py-10 text-center text-sm text-muted-foreground">{dateFrom && dateTo ? "No calculation results." : "Select a date range and click Run."}</TableCell></TableRow> : visibleRows.map((row) => <TableRow key={row.id} onClick={() => setSelected(row)} className="cursor-pointer hover:bg-muted/50" title="Click to edit IT1, OT1, and EDIT OTH"><TableCell>{row.tanggal}</TableCell><TableCell>{row.nik}</TableCell><TableCell className="font-medium">{row.nama}</TableCell><TableCell>{row.department}</TableCell><TableCell>{row.intime ?? "—"}</TableCell><TableCell>{row.outtime ?? "—"}</TableCell><TableCell>{row.it1 ?? "—"}</TableCell><TableCell>{row.ot1 ?? "—"}</TableCell><TableCell>{row.whour ?? "—"}</TableCell><TableCell>{row.othourRecorded ?? "—"}</TableCell><TableCell>{row.kategori}</TableCell><TableCell>{row.systemCalculatedOth ?? "—"}</TableCell><TableCell className={row.status === "Dikoreksi Manual" ? "font-semibold text-warning" : undefined}>{row.finalOth ?? "—"}</TableCell><TableCell><Badge variant={statusVariant(row.status)}>{row.status}</Badge></TableCell></TableRow>)}
           </TableBody>
         </Table>
       </div>
