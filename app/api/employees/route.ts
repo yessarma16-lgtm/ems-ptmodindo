@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { employeeSchema } from "@/schemas/employee.schema";
+import { employeeSchema, checkPermanenDateRequired } from "@/schemas/employee.schema";
 import { getEmployees, createEmployee, ensureEmployeesSheet } from "@/lib/employee-service";
+import { autoLogPermanentMovement } from "@/lib/employee-movement-service";
 import { toApiErrorResponse } from "@/lib/api-error";
 import { requireModuleAccess } from "@/lib/module-permission";
 import { logActivity } from "@/lib/activity-log";
@@ -38,8 +39,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const permanenDateError = checkPermanenDateRequired(parsed.data);
+    if (permanenDateError) {
+      return NextResponse.json({ error: "Validation failed.", issues: { permanenDate: [permanenDateError] } }, { status: 400 });
+    }
+
     await ensureEmployeesSheet();
     const employee = await createEmployee(parsed.data);
+    await autoLogPermanentMovement(
+      employee.recordId,
+      "",
+      employee.contractStatus,
+      employee.department,
+      employee.position,
+      employee.permanenDate,
+    );
     await logActivity(user.name, "Tambah employee");
     return NextResponse.json({ employee }, { status: 201 });
   } catch (err) {

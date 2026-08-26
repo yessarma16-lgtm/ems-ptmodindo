@@ -291,6 +291,29 @@ export async function ensureSchema(client: Client): Promise<void> {
   `);
   await client.query("CREATE INDEX IF NOT EXISTS idx_contract_history_employee ON contract_history(employee_id);");
 
+  // Employee Movement History (promosi/demosi/mutasi + the auto-logged
+  // "Permanent" transition) — see lib/employee-movement-service.ts.
+  // `applied` tracks whether the effective-date-triggered Department/Position
+  // update (app/api/cron/apply-movements) has run for this row yet.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS employee_movement_history (
+      id BIGSERIAL PRIMARY KEY,
+      record_id UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+      employee_id TEXT NOT NULL,
+      movement_type TEXT NOT NULL DEFAULT '',
+      effective_date TEXT NOT NULL DEFAULT '',
+      last_department TEXT NOT NULL DEFAULT '',
+      last_position TEXT NOT NULL DEFAULT '',
+      new_department TEXT NOT NULL DEFAULT '',
+      new_position TEXT NOT NULL DEFAULT '',
+      applied BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+  await client.query("CREATE INDEX IF NOT EXISTS idx_employee_movement_employee ON employee_movement_history(employee_id);");
+  await client.query("CREATE INDEX IF NOT EXISTS idx_employee_movement_pending ON employee_movement_history(effective_date) WHERE applied = FALSE;");
+
   await client.query(`
     CREATE TABLE IF NOT EXISTS family (
       id BIGSERIAL PRIMARY KEY,

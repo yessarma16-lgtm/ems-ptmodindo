@@ -107,6 +107,27 @@ function buildEmployeeSchema(optionalOverrides: Set<string>) {
 
 export const employeeSchema = buildEmployeeSchema(new Set());
 
+/**
+ * PERMANEN DATE must be filled before CONTRACT STATUS can be saved as
+ * "Permanent" — it's both the source of the auto-logged "Permanent" Employee
+ * Movement History entry and its effective date (see
+ * lib/employee-movement-service.ts, autoLogPermanentMovement), so a blank
+ * date here would create an undated movement record. Deliberately NOT baked
+ * into employeeSchema's shape via `.superRefine` (that would turn it into a
+ * ZodEffects and break the `.partial()` call in
+ * app/api/online-register/[recordId]/route.ts) — checked manually instead,
+ * same pattern already used for FINGER CODE / POSITION APPLIED in
+ * EmployeeForm.tsx.
+ */
+export function checkPermanenDateRequired(data: Record<string, unknown>): string | null {
+  const contractStatus = String(data.contractStatus ?? "").trim().toLowerCase();
+  const permanenDate = String(data.permanenDate ?? "").trim();
+  if (contractStatus === "permanent" && !permanenDate) {
+    return "PERMANEN DATE wajib diisi sebelum Contract Status diset ke Permanent";
+  }
+  return null;
+}
+
 /** Used by /api/apply/[token] and /api/apply/walkin/[token] — see PUBLIC_APPLY_OPTIONAL_OVERRIDES above. */
 export const publicApplySchema = buildEmployeeSchema(PUBLIC_APPLY_OPTIONAL_OVERRIDES);
 

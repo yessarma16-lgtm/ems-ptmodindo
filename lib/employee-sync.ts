@@ -13,6 +13,7 @@ import {
   createContractHistoryEntry,
 } from "@/lib/employee-service";
 import { getContractCriteria } from "@/lib/contract-criteria-service";
+import { autoLogPermanentMovement } from "@/lib/employee-movement-service";
 import { calculateContractPeriodDates } from "@/lib/contract-dates";
 import type { EmployeeInput, EmployeeRecord, ContractCriteriaItem } from "@/lib/database/types";
 
@@ -212,6 +213,18 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
       // prior status to accidentally clear here, unlike the existing-row case below).
       if (!norm(incoming.status)) incoming.status = "Active";
       applyContractCriteriaCalc(incoming, undefined, criteriaList);
+      if (norm(incoming.contractStatus).toLowerCase() === "permanent") {
+        // PERMANEN DATE isn't a sync-managed field (see EMPLOYEE_SYNC_EXCLUDED_KEYS)
+        // and there's no existing record to fall back on for a new row, so this
+        // combination can never be satisfied from the sheet alone.
+        rejected.push({
+          rowNumber: row.rowNumber,
+          name: sheetName,
+          reason:
+            "CONTRACT STATUS is Permanent but this employee doesn't exist yet, so there's no PERMANEN DATE to use — create the employee with another status first, then set it to Permanent on the dashboard.",
+        });
+        continue;
+      }
       newRows.push({ rowNumber: row.rowNumber, nik, incoming });
       continue;
     }
@@ -223,6 +236,16 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
     if (!sheetStatusRaw) delete incoming.status;
 
     applyContractCriteriaCalc(incoming, existing, criteriaList);
+
+    if (norm(incoming.contractStatus).toLowerCase() === "permanent" && !norm(existing.permanenDate)) {
+      rejected.push({
+        rowNumber: row.rowNumber,
+        name: sheetName,
+        reason:
+          "CONTRACT STATUS is Permanent but PERMANEN DATE isn't set on the dashboard yet — set it there first (PERMANEN DATE isn't a sync-managed field), then re-run sync.",
+      });
+      continue;
+    }
 
     const diffs: SyncFieldDiff[] = [];
     for (const key of EMPLOYEE_SYNC_FIELD_KEYS) {
@@ -309,8 +332,12 @@ export async function commitEmployeeSync(
       continue;
     }
     try {
-      await updateEmployee(row.recordId, row.incoming);
+      const updated = await updateEmployee(row.recordId, row.incoming);
       await seedContractHistoryIfEmpty(row.recordId, row.incoming, criteriaList);
+      // previousContractStatus is passed blank ("") rather than tracked precisely —
+      // autoLogPermanentMovement's own "already logged?" check (by movementType,
+      // not by this flag) is what actually prevents a duplicate entry on repeat syncs.
+      await autoLogPermanentMovement(row.recordId, "", updated.contractStatus, updated.department, updated.position, updated.permanenDate);
       summary.updatedCount += 1;
     } catch (err) {
       summary.errors.push({ rowNumber: row.rowNumber, nik: row.nik, message: err instanceof Error ? err.message : "Failed to update employee." });

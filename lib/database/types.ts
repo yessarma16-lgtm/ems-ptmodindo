@@ -115,6 +115,37 @@ export interface ContractHistoryInput {
   endDate: string;
 }
 
+export type MovementType = "Promosi" | "Demosi" | "Mutasi" | "Permanent";
+
+/**
+ * One promotion/demotion/transfer (or the auto-logged "Permanent" contract
+ * transition) for an employee, stored in the `employee_movement_history`
+ * table. `applied` tracks whether the effective-date-triggered
+ * Department/Position update has run yet (see app/api/cron/apply-movements).
+ */
+export interface EmployeeMovementEntry {
+  id: string;
+  employeeId: string;
+  movementType: string;
+  effectiveDate: string;
+  lastDepartment: string;
+  lastPosition: string;
+  newDepartment: string;
+  newPosition: string;
+  applied: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeMovementInput {
+  movementType: string;
+  effectiveDate: string;
+  lastDepartment: string;
+  lastPosition: string;
+  newDepartment: string;
+  newPosition: string;
+}
+
 export interface DashboardStats {
   totalEmployees: number;
   activeEmployees: number;

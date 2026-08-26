@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
+import { Fragment, useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { AlertTriangle, ClipboardCheck, Loader2, Save, Trash2, Plus } from "lucide-react";
@@ -13,13 +13,14 @@ import {
   type EmployeeSection,
 } from "@/config/employee-fields";
 import { getOptionsForField, type EmployeeFormMasterData, type SelectOption } from "@/lib/master-data-options";
-import { employeeSchema, publicApplySchema } from "@/schemas/employee.schema";
+import { employeeSchema, publicApplySchema, checkPermanenDateRequired } from "@/schemas/employee.schema";
 import { calculateAge, calculateMasaKerja } from "@/lib/calculations";
 import { calculateProbationEndDate, calculateContractPeriodDates } from "@/lib/contract-dates";
 import { formatDateDMY } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
 import { ContractHistoryEditor, type ContractPeriodRow } from "@/components/employees/ContractHistoryEditor";
-import type { ContractHistoryEntry, ContractCriteriaItem } from "@/lib/database/types";
+import { EmployeeMovementHistoryEditor, type EmployeeMovementRow } from "@/components/employees/EmployeeMovementHistoryEditor";
+import type { ContractHistoryEntry, ContractCriteriaItem, EmployeeMovementEntry } from "@/lib/database/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -163,6 +164,8 @@ export function EmployeeForm({
   const autoManagedCountRef = useRef(0);
   const [workExperiences, setWorkExperiences] = useState<WorkExperienceRow[]>([]);
   const [originalWorkExperienceIds, setOriginalWorkExperienceIds] = useState<string[]>([]);
+  const [movementEntries, setMovementEntries] = useState<EmployeeMovementRow[]>([]);
+  const [originalMovementIds, setOriginalMovementIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!isInternalAdminForm || mode === "create" || !recordId) return;
@@ -179,6 +182,31 @@ export function EmployeeForm({
         }));
         setContractEntries(rows);
         setOriginalContractIds(rows.map((r) => r.key));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isInternalAdminForm, mode, recordId]);
+
+  useEffect(() => {
+    if (!isInternalAdminForm || mode === "create" || !recordId) return;
+    let cancelled = false;
+    fetch(`/api/employees/${recordId}/movements`)
+      .then((r) => r.json())
+      .then((data: { entries?: EmployeeMovementEntry[] }) => {
+        if (cancelled) return;
+        const rows: EmployeeMovementRow[] = (data.entries ?? []).map((e) => ({
+          key: e.id,
+          movementType: e.movementType,
+          effectiveDate: e.effectiveDate,
+          lastDepartment: e.lastDepartment,
+          lastPosition: e.lastPosition,
+          newDepartment: e.newDepartment,
+          newPosition: e.newPosition,
+        }));
+        setMovementEntries(rows);
+        setOriginalMovementIds(rows.map((r) => r.key));
       })
       .catch(() => {});
     return () => {
@@ -232,6 +260,33 @@ export function EmployeeForm({
 
   function handleRemoveContractPeriod(key: string) {
     setContractEntries((prev) => prev.filter((e) => e.key !== key));
+  }
+
+  function handleAddMovement() {
+    setMovementEntries((prev) => [
+      ...prev,
+      {
+        key: randomClientKey(),
+        movementType: "Promosi",
+        effectiveDate: "",
+        lastDepartment: values.department,
+        lastPosition: values.position,
+        newDepartment: "",
+        newPosition: "",
+      },
+    ]);
+  }
+
+  function handleMovementFieldChange(
+    key: string,
+    field: "movementType" | "effectiveDate" | "lastDepartment" | "lastPosition" | "newDepartment" | "newPosition",
+    value: string,
+  ) {
+    setMovementEntries((prev) => prev.map((e) => (e.key === key ? { ...e, [field]: value } : e)));
+  }
+
+  function handleRemoveMovement(key: string) {
+    setMovementEntries((prev) => prev.filter((e) => e.key !== key));
   }
 
   function handleAddWorkExperience() {
@@ -301,6 +356,40 @@ export function EmployeeForm({
             });
       }),
       ...removedIds.map((id) => fetch(`/api/employees/${employeeId}/contracts/${id}`, { method: "DELETE" })),
+    ]);
+  }
+
+  /** Diffs movementEntries against what was originally loaded and syncs the difference — create/update/delete, run once after the employee record itself is saved. Rows missing an Effective Date are skipped (incomplete rows the admin hasn't finished filling in). */
+  async function reconcileMovementHistory(employeeId: string) {
+    const currentKeys = new Set(movementEntries.map((e) => e.key));
+    const removedIds = originalMovementIds.filter((id) => !currentKeys.has(id));
+
+    await Promise.all([
+      ...movementEntries
+        .filter((e) => e.effectiveDate.trim())
+        .map((e) => {
+          const payload = {
+            movementType: e.movementType,
+            effectiveDate: e.effectiveDate,
+            lastDepartment: e.lastDepartment,
+            lastPosition: e.lastPosition,
+            newDepartment: e.newDepartment,
+            newPosition: e.newPosition,
+          };
+          const isExisting = originalMovementIds.includes(e.key);
+          return isExisting
+            ? fetch(`/api/employees/${employeeId}/movements/${e.key}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              })
+            : fetch(`/api/employees/${employeeId}/movements`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+        }),
+      ...removedIds.map((id) => fetch(`/api/employees/${employeeId}/movements/${id}`, { method: "DELETE" })),
     ]);
   }
 
@@ -485,6 +574,14 @@ export function EmployeeForm({
         flat.fingerCode = "FINGER CODE wajib diisi";
       }
 
+      // PERMANEN DATE must be set before CONTRACT STATUS can be saved as
+      // Permanent — it's the effective date for the auto-logged "Permanent"
+      // Employee Movement History entry (see checkPermanenDateRequired doc).
+      if (isInternalAdminForm) {
+        const permanenDateError = checkPermanenDateRequired(submittedValues);
+        if (permanenDateError) flat.permanenDate = permanenDateError;
+      }
+
       // POSITION APPLIED is relaxed to optional in publicApplySchema (it's
       // hidden on New Hiring/invite-link, which would otherwise be blocked by
       // a field they never render) — so it's enforced here instead, only on
@@ -538,7 +635,10 @@ export function EmployeeForm({
 
         if (isInternalAdminForm) {
           const savedEmployeeId = mode === "create" ? data.employee?.recordId : recordId;
-          if (savedEmployeeId) await reconcileContractHistory(savedEmployeeId);
+          if (savedEmployeeId) {
+            await reconcileContractHistory(savedEmployeeId);
+            await reconcileMovementHistory(savedEmployeeId);
+          }
         } else {
           const savedApplicantId = mode === "create" ? data.registration?.recordId : recordId;
           if (savedApplicantId) await reconcileWorkExperience(savedApplicantId);
@@ -590,45 +690,66 @@ export function EmployeeForm({
           const fields = getFieldsBySection(section).filter((f) => !excludeFields?.includes(f.key));
           if (fields.length === 0) return null;
           return (
-            <Card key={section}>
-              <CardHeader>
-                <CardTitle>{section}</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
-                {fields.map((field) => {
-                  const locked = readOnly || !!lockedFields?.includes(field.key);
-                  return (
-                    <FieldControl
-                      key={field.key}
-                      field={field}
-                      value={displayValue(field)}
-                      error={errors[field.key]}
-                      disabled={locked}
-                      options={
-                        locked
-                          ? []
-                          : field.key === "contractCriteria"
-                            ? contractCriteria
-                                .filter((c) => !values.contractStatus || c.appliesToStatus === values.contractStatus)
-                                .map((c) => ({ value: c.name, label: c.name }))
-                            : getOptionsForField(field, masterData)
-                      }
-                      onChange={(v) => setField(field.key, v)}
+            <Fragment key={section}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>{section}</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                  {fields.map((field) => {
+                    const locked = readOnly || !!lockedFields?.includes(field.key);
+                    return (
+                      <FieldControl
+                        key={field.key}
+                        field={field}
+                        value={displayValue(field)}
+                        error={errors[field.key]}
+                        disabled={locked}
+                        options={
+                          locked
+                            ? []
+                            : field.key === "contractCriteria"
+                              ? contractCriteria
+                                  .filter((c) => !values.contractStatus || c.appliesToStatus === values.contractStatus)
+                                  .map((c) => ({ value: c.name, label: c.name }))
+                              : getOptionsForField(field, masterData)
+                        }
+                        onChange={(v) => setField(field.key, v)}
+                        mode={mode}
+                      />
+                    );
+                  })}
+                  {section === "Contract Information" && showContractPeriodsResolved && (
+                    <ContractHistoryEditor
                       mode={mode}
+                      entries={contractEntries}
+                      onAdd={handleAddContractPeriod}
+                      onChangeField={handleContractFieldChange}
+                      onRemove={handleRemoveContractPeriod}
                     />
-                  );
-                })}
-                {section === "Contract Information" && showContractPeriodsResolved && (
-                  <ContractHistoryEditor
-                    mode={mode}
-                    entries={contractEntries}
-                    onAdd={handleAddContractPeriod}
-                    onChangeField={handleContractFieldChange}
-                    onRemove={handleRemoveContractPeriod}
-                  />
-                )}
-              </CardContent>
-            </Card>
+                  )}
+                </CardContent>
+              </Card>
+
+              {section === "Contract Information" && isInternalAdminForm && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Employee Movement History</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+                    <EmployeeMovementHistoryEditor
+                      mode={mode}
+                      entries={movementEntries}
+                      departmentOptions={masterData?.departments ?? []}
+                      positionOptions={masterData?.positions ?? []}
+                      onAdd={handleAddMovement}
+                      onChangeField={handleMovementFieldChange}
+                      onRemove={handleRemoveMovement}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+            </Fragment>
           );
         })}
       </div>
