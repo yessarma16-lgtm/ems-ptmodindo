@@ -59,6 +59,7 @@ export interface EmployeeListItem {
   contractStatus: string;
   status: string;
   interviewEvaluation: string;
+  maritalStatus: string;
 }
 
 /** Which employee list a query is for — maps to the STATUS/CATEGORY filters isActiveEmployee/isInactiveEmployee/isExpatriateEmployee used to apply client-side. */

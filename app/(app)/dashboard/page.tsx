@@ -5,7 +5,7 @@ import { DashboardGreeting } from "@/components/dashboard/DashboardGreeting";
 import { DashboardFilterBar } from "@/components/dashboard/DashboardFilterBar";
 import { NewVsResignChart } from "@/components/dashboard/charts/NewVsResignChart";
 import { MonthlyHeadcountChart } from "@/components/dashboard/charts/MonthlyHeadcountChart";
-import { ContractTypeChart } from "@/components/dashboard/charts/ContractTypeChart";
+import { ResignLineChart } from "@/components/dashboard/charts/ResignLineChart";
 import { WalkinApplicantsChart } from "@/components/dashboard/charts/WalkinApplicantsChart";
 import { TopDepartmentsChart } from "@/components/dashboard/charts/TopDepartmentsChart";
 import { EmployeeTypeChart } from "@/components/dashboard/charts/EmployeeTypeChart";
@@ -125,7 +125,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             <NewVsResignChart data={data.newVsResignByMonth} year={monthlyHeadcountYear} />
             <MonthlyHeadcountChart data={data.monthlyHeadcount} year={monthlyHeadcountYear} />
             <WalkinApplicantsChart data={data.walkinApplicantsByMonth} year={monthlyHeadcountYear} />
-            <ContractTypeChart data={data.contractTypeByMonth} year={monthlyHeadcountYear} />
+            <ResignLineChart byDepartment={data.resignByDepartment} byMaritalStatus={data.resignByMaritalStatus} year={monthlyHeadcountYear} />
             <TopDepartmentsChart data={data.topDepartments} periodLabel={departmentAsOfLabel} />
             <EmployeeTypeChart data={data.employeeTypes} />
           </div>

@@ -132,6 +132,7 @@ async function getEmployeeListItems(): Promise<EmployeeListItem[]> {
     contractStatus: r.contractStatus ?? "",
     status: r.status ?? "",
     interviewEvaluation: r.interviewEvaluation ?? "",
+    maritalStatus: r.maritalStatus ?? "",
   }));
 }
 

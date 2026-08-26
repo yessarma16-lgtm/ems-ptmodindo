@@ -45,10 +45,15 @@ export interface MonthlyHeadcountPoint {
   inactive: number;
 }
 
-export interface ContractTypeMonthPoint {
+export interface ResignBreakdownMonthPoint {
   month: string;
-  permanentProbation: number;
-  contract: number;
+  [seriesKey: string]: string | number;
+}
+
+export interface ResignBreakdownData {
+  points: ResignBreakdownMonthPoint[];
+  /** Ordered series keys present in `points` — drives which lines render and their legend/color order. */
+  series: string[];
 }
 
 export interface CountPoint {
@@ -75,7 +80,8 @@ export interface DashboardData {
   cards: DashboardCards;
   newVsResignByMonth: MonthPoint[];
   monthlyHeadcount: MonthlyHeadcountPoint[];
-  contractTypeByMonth: ContractTypeMonthPoint[];
+  resignByDepartment: ResignBreakdownData;
+  resignByMaritalStatus: ResignBreakdownData;
   walkinApplicantsByMonth: WalkinApplicantsMonthPoint[];
   topDepartments: CountPoint[];
   employeeTypes: CountPoint[];
@@ -130,7 +136,8 @@ export async function loadDashboardData(filter: DashboardFilter): Promise<Dashbo
   const cards = computeCards(items, latestContractEnd, contractEnds, filter);
   const newVsResignByMonth = computeNewVsResignByMonth(items, activeYear);
   const monthlyHeadcount = computeMonthlyHeadcount(items, activeYear);
-  const contractTypeByMonth = computeContractTypeByMonth(items, activeYear);
+  const resignByDepartment = computeResignBreakdown(items, activeYear, (e) => e.department, 5);
+  const resignByMaritalStatus = computeResignBreakdown(items, activeYear, (e) => e.maritalStatus, 6);
   const walkinApplicantsByMonth = computeWalkinApplicantsByMonth(registrations, activeYear);
   const topDepartments = computeTopDepartments(items, filter);
   const employeeTypes = computeEmployeeTypes(items);
@@ -143,7 +150,17 @@ export async function loadDashboardData(filter: DashboardFilter): Promise<Dashbo
   yearsFromData.add(String(new Date().getFullYear()));
   const availableYears = Array.from(yearsFromData).sort((a, b) => Number(b) - Number(a));
 
-  return { cards, newVsResignByMonth, monthlyHeadcount, contractTypeByMonth, walkinApplicantsByMonth, topDepartments, employeeTypes, availableYears };
+  return {
+    cards,
+    newVsResignByMonth,
+    monthlyHeadcount,
+    resignByDepartment,
+    resignByMaritalStatus,
+    walkinApplicantsByMonth,
+    topDepartments,
+    employeeTypes,
+    availableYears,
+  };
 }
 
 /** True if dateStr falls within the filter's year (when set) and month (when set) — "" for either means "any". */
@@ -261,17 +278,53 @@ function computeMonthlyHeadcount(items: EmployeeListItem[], year: number): Month
   return points;
 }
 
-function computeContractTypeByMonth(items: EmployeeListItem[], year: number): ContractTypeMonthPoint[] {
-  const permanentProbation = new Array(12).fill(0);
-  const contract = new Array(12).fill(0);
-  for (const e of items) {
-    if (yearOf(e.joinDate) !== String(year)) continue;
-    const m = Number(e.joinDate.slice(5, 7)) - 1;
-    const status = (e.contractStatus || "").trim().toLowerCase();
-    if (status === "permanent" || status === "probation") permanentProbation[m]++;
-    else if (status === "contract") contract[m]++;
+/**
+ * Resignations (by Exit Date) for the given year, split into monthly line
+ * series by whatever `groupOf` extracts (Department or Marital Status) —
+ * shared by both breakdowns ResignLineChart toggles between. Capped to the
+ * `topN` series with the most resignations in the year (the rest bucketed
+ * into "Other") so a high-cardinality dimension like Department doesn't turn
+ * the chart into unreadable spaghetti.
+ */
+function computeResignBreakdown(
+  items: EmployeeListItem[],
+  year: number,
+  groupOf: (e: EmployeeListItem) => string,
+  topN: number,
+): ResignBreakdownData {
+  const resignedThisYear = items.filter((e) => e.exitDate && yearOf(e.exitDate) === String(year));
+
+  const totals = new Map<string, number>();
+  for (const e of resignedThisYear) {
+    const key = groupOf(e).trim() || "(None)";
+    totals.set(key, (totals.get(key) ?? 0) + 1);
   }
-  return MONTH_NAMES_SHORT.map((month, i) => ({ month, permanentProbation: permanentProbation[i], contract: contract[i] }));
+
+  const topKeys = Array.from(totals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN)
+    .map(([key]) => key);
+  const topKeySet = new Set(topKeys);
+  const hasOther = totals.size > topKeys.length;
+  const series = hasOther ? [...topKeys, "Other"] : topKeys;
+
+  const countsByMonth: Record<string, number[]> = {};
+  for (const key of series) countsByMonth[key] = new Array(12).fill(0);
+
+  for (const e of resignedThisYear) {
+    const key = groupOf(e).trim() || "(None)";
+    const seriesKey = topKeySet.has(key) ? key : "Other";
+    const m = Number(e.exitDate.slice(5, 7)) - 1;
+    if (m >= 0 && m < 12) countsByMonth[seriesKey][m]++;
+  }
+
+  const points: ResignBreakdownMonthPoint[] = MONTH_NAMES_SHORT.map((month, i) => {
+    const point: ResignBreakdownMonthPoint = { month };
+    for (const key of series) point[key] = countsByMonth[key][i];
+    return point;
+  });
+
+  return { points, series };
 }
 
 function computeWalkinApplicantsByMonth(registrations: OnlineRegistration[], year: number): WalkinApplicantsMonthPoint[] {

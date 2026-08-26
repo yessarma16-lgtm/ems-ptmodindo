@@ -131,7 +131,7 @@ async function getEmployees(): Promise<EmployeeRecord[]> {
 }
 
 const LIST_ITEM_COLUMNS =
-  "record_id, nik, name, department, position, level, type, category, join_date, exit_date, contract_status, status, interview_evaluation";
+  "record_id, nik, name, department, position, level, type, category, join_date, exit_date, contract_status, status, interview_evaluation, marital_status";
 
 function rowToListItem(row: SqlRow): EmployeeListItem {
   return {
@@ -148,6 +148,7 @@ function rowToListItem(row: SqlRow): EmployeeListItem {
     contractStatus: str(row.contract_status),
     status: str(row.status),
     interviewEvaluation: str(row.interview_evaluation),
+    maritalStatus: str(row.marital_status),
   };
 }
 
