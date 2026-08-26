@@ -4,7 +4,14 @@ import { EMPLOYEE_SYNC_FIELD_KEYS, EMPLOYEE_SYNC_FIELDS, type EmployeeSyncFieldK
 import { readEmployeeSyncSheet } from "@/lib/employee-sync-sheet";
 import { employeeSyncRowSchema } from "@/schemas/employee-sync.schema";
 import { buildMasterDataCasingMap, normalizeToMasterDataCasing } from "@/lib/employee-import";
-import { getEmployees, createEmployee, updateEmployee, deactivateEmployee } from "@/lib/employee-service";
+import {
+  getEmployees,
+  createEmployee,
+  updateEmployee,
+  deactivateEmployee,
+  getContractHistory,
+  createContractHistoryEntry,
+} from "@/lib/employee-service";
 import { getContractCriteria } from "@/lib/contract-criteria-service";
 import { calculateContractPeriodDates } from "@/lib/contract-dates";
 import type { EmployeeInput, EmployeeRecord, ContractCriteriaItem } from "@/lib/database/types";
@@ -76,10 +83,15 @@ const CONTRACT_CLOSE_KEYS = [
  * form's version only runs client-side on user keystrokes — a row committed
  * straight from the sheet never goes through it). Fills CONTRACT
  * CLOSE-FIRST/SECOND/... from JOIN DATE + CONTRACT CRITERIA's periods
- * (lib/contract-dates.ts), but only into slots that are genuinely empty —
- * a value already on the sheet row (admin typed one explicitly) or already
- * on the existing employee record (manual dashboard edit, or a prior
- * calc/sync) is left untouched, never silently overwritten.
+ * (lib/contract-dates.ts), but treats a blank sheet cell the same way
+ * STATUS's blank cell is treated above: "admin isn't managing this from the
+ * sheet" — never a diff that would clear an existing value. For every slot,
+ * a value already on the sheet row always wins; otherwise the existing
+ * employee record's current value (if any) is copied back into `incoming`
+ * so the diff comes out unchanged instead of "existing -> blank"; only when
+ * BOTH are empty does the CONTRACT CRITERIA calculation fill it in. This
+ * runs over all 5 slots, not just however many periods the matched criteria
+ * has, so a slot beyond that criteria's period count is protected too.
  */
 function applyContractCriteriaCalc(
   incoming: EmployeeInput,
@@ -87,16 +99,54 @@ function applyContractCriteriaCalc(
   criteriaList: ContractCriteriaItem[],
 ): void {
   const criteria = criteriaList.find((c) => c.name === norm(incoming.contractCriteria) && c.periods.length > 0);
+  const computed =
+    criteria && norm(incoming.joinDate) ? calculateContractPeriodDates(incoming.joinDate, criteria.periods) : [];
+
+  CONTRACT_CLOSE_KEYS.forEach((key, idx) => {
+    if (norm(incoming[key])) return; // sheet explicitly set this slot — always wins
+    const existingValue = existing ? norm(existing[key]) : "";
+    if (existingValue) {
+      incoming[key] = existingValue; // preserve — never silently clear a real value
+      return;
+    }
+    const period = computed[idx];
+    if (period) incoming[key] = period.endDate; // both blank — fill in from the criteria
+  });
+}
+
+/**
+ * The "Contract Periods" widget on the Employee Form (Settings > ... >
+ * Contract Information) reads from the separate `contract_history` table,
+ * NOT the CONTRACT CLOSE-FIRST/SECOND/... columns applyContractCriteriaCalc
+ * fills above — those are two different places the same dates end up.
+ * Seeds one contract_history row per computed period, but ONLY when the
+ * employee has zero history rows yet, so this never touches real tracked
+ * history (renewals, manual edits) once it exists — mirrors
+ * EmployeeForm.tsx's syncAutoContractPeriods labeling (first period
+ * "Probation" when CONTRACT STATUS is Probation, otherwise "Contract N").
+ */
+async function seedContractHistoryIfEmpty(
+  employeeId: string,
+  incoming: EmployeeInput,
+  criteriaList: ContractCriteriaItem[],
+): Promise<void> {
+  const criteria = criteriaList.find((c) => c.name === norm(incoming.contractCriteria) && c.periods.length > 0);
   if (!criteria || !norm(incoming.joinDate)) return;
 
+  const existingHistory = await getContractHistory(employeeId);
+  if (existingHistory.length > 0) return;
+
   const computed = calculateContractPeriodDates(incoming.joinDate, criteria.periods);
-  computed.forEach((period, idx) => {
-    const key = CONTRACT_CLOSE_KEYS[idx];
-    if (!key) return;
-    if (norm(incoming[key])) return; // sheet explicitly set this slot
-    if (existing && norm(existing[key])) return; // already set on the dashboard record
-    incoming[key] = period.endDate;
-  });
+  const statusNorm = norm(incoming.contractStatus).toLowerCase();
+  let contractNum = 0;
+  for (let idx = 0; idx < computed.length; idx++) {
+    const contractType = idx === 0 && statusNorm === "probation" ? "Probation" : `Contract ${(contractNum += 1)}`;
+    await createContractHistoryEntry(employeeId, {
+      contractType,
+      startDate: computed[idx].startDate,
+      endDate: computed[idx].endDate,
+    });
+  }
 }
 
 export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
@@ -217,6 +267,7 @@ export async function commitEmployeeSync(
   const total = rows.newRows.length + rows.changedRows.length + rows.inactivatedRows.length;
   let processed = 0;
   const summary: EmployeeSyncCommitSummary = { createdCount: 0, updatedCount: 0, movedToInactiveCount: 0, skippedCount: 0, errors: [] };
+  const criteriaList = await getContractCriteria({ activeOnly: true });
 
   function tick() {
     processed += 1;
@@ -230,7 +281,8 @@ export async function commitEmployeeSync(
       continue;
     }
     try {
-      await createEmployee(row.incoming);
+      const created = await createEmployee(row.incoming);
+      await seedContractHistoryIfEmpty(created.recordId, row.incoming, criteriaList);
       summary.createdCount += 1;
     } catch (err) {
       summary.errors.push({ rowNumber: row.rowNumber, nik: row.nik, message: err instanceof Error ? err.message : "Failed to create employee." });
@@ -246,6 +298,7 @@ export async function commitEmployeeSync(
     }
     try {
       await updateEmployee(row.recordId, row.incoming);
+      await seedContractHistoryIfEmpty(row.recordId, row.incoming, criteriaList);
       summary.updatedCount += 1;
     } catch (err) {
       summary.errors.push({ rowNumber: row.rowNumber, nik: row.nik, message: err instanceof Error ? err.message : "Failed to update employee." });
