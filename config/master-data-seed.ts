@@ -338,10 +338,6 @@ export const LOOKUP_SEED: Record<LookupType, SeedRow[]> = {
     { code: "PROBATION", name: "Probation" },
     { code: "PERMANENT", name: "Permanent" },
   ],
-  CONTRACT_CRITERIA: [
-    { code: "GOOD", name: "Performance Good" },
-    { code: "AVERAGE", name: "Performance Average" },
-  ],
   MARITAL_STATUS: [
     { code: "MARRIED", name: "Kawin (Married)" },
     { code: "SINGLE", name: "Belum Kawin (Single)" },

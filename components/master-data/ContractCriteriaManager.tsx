@@ -9,10 +9,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ContractCriteriaTable } from "@/components/master-data/ContractCriteriaTable";
 import { ContractCriteriaDialog, type ContractCriteriaFormValues } from "@/components/master-data/ContractCriteriaDialog";
 import type { ContractCriteriaItem } from "@/lib/database/types";
+import type { MasterDataItem } from "@/lib/master-data-service";
 
-/** Settings > Master Data > Contract Criteria — same list/create/edit/toggle shape as MasterDataManager, but with a period-based rule instead of just Code/Name. */
+/** Settings > Master Data > Contract Criteria — same list/create/edit/toggle shape as MasterDataManager, but with a period-based rule (and an "applies to" Contract Status) instead of just Code/Name. */
 export function ContractCriteriaManager() {
   const [items, setItems] = useState<ContractCriteriaItem[]>([]);
+  const [statusOptions, setStatusOptions] = useState<MasterDataItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -21,10 +23,18 @@ export function ContractCriteriaManager() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/master-data/contract-criteria", { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Unable to load contract criteria.");
-      setItems(data.items ?? []);
+      const [criteriaRes, statusRes] = await Promise.all([
+        fetch("/api/master-data/contract-criteria", { cache: "no-store" }),
+        fetch("/api/master-data/lookup?type=CONTRACT_STATUS", { cache: "no-store" }),
+      ]);
+      const criteriaData = await criteriaRes.json();
+      if (!criteriaRes.ok) throw new Error(criteriaData.error ?? "Unable to load contract criteria.");
+      setItems(criteriaData.items ?? []);
+
+      const statusData = await statusRes.json();
+      if (statusRes.ok) {
+        setStatusOptions((statusData.items ?? []).filter((i: MasterDataItem) => i.status === "Active"));
+      }
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load contract criteria.");
@@ -50,6 +60,7 @@ export function ContractCriteriaManager() {
         code: values.code,
         name: values.name,
         periods: values.periods,
+        appliesToStatus: values.appliesToStatus,
         sortOrder: values.sortOrder ? Number(values.sortOrder) : undefined,
       }),
     });
@@ -72,6 +83,7 @@ export function ContractCriteriaManager() {
         code: values.code,
         name: values.name,
         periods: values.periods,
+        appliesToStatus: values.appliesToStatus,
         sortOrder: values.sortOrder ? Number(values.sortOrder) : undefined,
       }),
     });
@@ -147,9 +159,16 @@ export function ContractCriteriaManager() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         mode={editing ? "edit" : "create"}
+        statusOptions={statusOptions}
         initialValues={
           editing
-            ? { code: editing.code, name: editing.name, periods: editing.periods, sortOrder: String(editing.sortOrder) }
+            ? {
+                code: editing.code,
+                name: editing.name,
+                periods: editing.periods,
+                appliesToStatus: editing.appliesToStatus,
+                sortOrder: String(editing.sortOrder),
+              }
             : undefined
         }
         onSubmit={editing ? handleEditSubmit : handleCreate}

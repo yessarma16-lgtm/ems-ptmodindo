@@ -44,7 +44,6 @@ export const LOOKUP_TYPES = [
   { type: "TYPE", label: "Employee Type" },
   { type: "SHED", label: "Shed (Work Schedule)" },
   { type: "CONTRACT_STATUS", label: "Contract Status" },
-  { type: "CONTRACT_CRITERIA", label: "Contract Criteria" },
   { type: "MARITAL_STATUS", label: "Marital Status" },
   { type: "GENDER", label: "Gender" },
   { type: "PTKP", label: "PTKP Status" },

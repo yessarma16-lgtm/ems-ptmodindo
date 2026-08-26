@@ -174,12 +174,18 @@ export interface ContractPeriodRule {
  * `periods` drives CONTRACT CLOSE-FIRST/SECOND/... auto-calc from JOIN DATE:
  * period 1 ends at joinDate + periods[0], period 2 (if present) ends at
  * period 1's end + periods[1], and so on. See lib/contract-dates.ts.
+ *
+ * `appliesToStatus` is a CONTRACT STATUS lookup NAME (e.g. "Probation",
+ * "Contract") — the Employee Form's CONTRACT CRITERIA dropdown only offers
+ * entries whose appliesToStatus matches the currently-selected CONTRACT
+ * STATUS, so a Probation employee only ever sees Probation-shaped criteria.
  */
 export interface ContractCriteriaItem {
   id: string;
   code: string;
   name: string;
   periods: ContractPeriodRule[];
+  appliesToStatus: string;
   status: string;
   sortOrder: number;
 }
@@ -188,6 +194,7 @@ export interface CreateContractCriteriaInput {
   code: string;
   name: string;
   periods: ContractPeriodRule[];
+  appliesToStatus: string;
   sortOrder?: number;
 }
 
@@ -195,6 +202,7 @@ export interface UpdateContractCriteriaInput {
   code?: string;
   name?: string;
   periods?: ContractPeriodRule[];
+  appliesToStatus?: string;
   status?: string;
   sortOrder?: number;
 }

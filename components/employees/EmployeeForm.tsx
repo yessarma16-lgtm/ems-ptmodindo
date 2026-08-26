@@ -402,7 +402,19 @@ export function EmployeeForm({
   }
 
   function setField(key: string, value: string) {
-    setValues((prev) => ({ ...prev, [key]: value }));
+    // Switching CONTRACT STATUS can leave the currently-picked CONTRACT
+    // CRITERIA no longer valid for it (each criteria only "applies to" one
+    // status) — clear it rather than silently keep a mismatched selection.
+    const criteriaStillValid =
+      key !== "contractStatus" ||
+      contractCriteria.some((c) => c.name === values.contractCriteria && c.appliesToStatus === value);
+    const nextCriteria = criteriaStillValid ? values.contractCriteria : "";
+
+    setValues((prev) => ({
+      ...prev,
+      [key]: value,
+      ...(criteriaStillValid ? {} : { contractCriteria: "" }),
+    }));
     setErrors((prev) => {
       if (!prev[key]) return prev;
       const next = { ...prev };
@@ -420,7 +432,7 @@ export function EmployeeForm({
     if (key === "joinDate" && contractSyncAllowed) {
       syncAutoContractPeriods(value, values.contractStatus, values.contractCriteria);
     } else if (key === "contractStatus" && contractSyncAllowed) {
-      syncAutoContractPeriods(values.joinDate, value, values.contractCriteria);
+      syncAutoContractPeriods(values.joinDate, value, nextCriteria);
     } else if (key === "contractCriteria" && contractSyncAllowed) {
       syncAutoContractPeriods(values.joinDate, values.contractStatus, value);
     }
@@ -596,7 +608,9 @@ export function EmployeeForm({
                         locked
                           ? []
                           : field.key === "contractCriteria"
-                            ? contractCriteria.map((c) => ({ value: c.name, label: c.name }))
+                            ? contractCriteria
+                                .filter((c) => !values.contractStatus || c.appliesToStatus === values.contractStatus)
+                                .map((c) => ({ value: c.name, label: c.name }))
                             : getOptionsForField(field, masterData)
                       }
                       onChange={(v) => setField(field.key, v)}

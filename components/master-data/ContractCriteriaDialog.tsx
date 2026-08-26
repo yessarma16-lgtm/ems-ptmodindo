@@ -16,11 +16,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import type { ContractPeriodRule } from "@/lib/database/types";
+import type { MasterDataItem } from "@/lib/master-data-service";
 
 export interface ContractCriteriaFormValues {
   code: string;
   name: string;
   periods: ContractPeriodRule[];
+  appliesToStatus: string;
   sortOrder: string;
 }
 
@@ -28,6 +30,8 @@ interface ContractCriteriaDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
+  /** Active CONTRACT_STATUS lookup entries — options for "Applies to Contract Status". */
+  statusOptions: MasterDataItem[];
   initialValues?: Partial<ContractCriteriaFormValues>;
   onSubmit: (values: ContractCriteriaFormValues) => Promise<void>;
 }
@@ -48,11 +52,13 @@ export function ContractCriteriaDialog({
   open,
   onOpenChange,
   mode,
+  statusOptions,
   initialValues,
   onSubmit,
 }: ContractCriteriaDialogProps) {
   const [code, setCode] = useState(initialValues?.code ?? "");
   const [name, setName] = useState(initialValues?.name ?? "");
+  const [appliesToStatus, setAppliesToStatus] = useState(initialValues?.appliesToStatus ?? "");
   const [sortOrder, setSortOrder] = useState(initialValues?.sortOrder ?? "");
   const [periods, setPeriods] = useState<{ key: number; value: string; unit: "month" | "year" }[]>(
     () =>
@@ -79,6 +85,7 @@ export function ContractCriteriaDialog({
     const nextErrors: Record<string, string> = {};
     if (!code.trim()) nextErrors.code = "Code is required.";
     if (!name.trim()) nextErrors.name = "Name is required.";
+    if (!appliesToStatus.trim()) nextErrors.appliesToStatus = "Applies-to Contract Status is required.";
     const parsedPeriods: ContractPeriodRule[] = [];
     for (const p of periods) {
       const n = Number(p.value);
@@ -95,7 +102,7 @@ export function ContractCriteriaDialog({
 
     setSubmitting(true);
     try {
-      await onSubmit({ code, name, periods: parsedPeriods, sortOrder });
+      await onSubmit({ code, name, periods: parsedPeriods, appliesToStatus, sortOrder });
     } finally {
       setSubmitting(false);
     }
@@ -132,6 +139,28 @@ export function ContractCriteriaDialog({
             </Label>
             <Input id="cc-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Contract 3+2 years" />
             {errors.name && <p className="mt-1 text-xs text-destructive">{errors.name}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="cc-status" className="mb-1.5 block">
+              Applies to Contract Status <span className="text-destructive">*</span>
+            </Label>
+            <Select value={appliesToStatus} onValueChange={setAppliesToStatus}>
+              <SelectTrigger id="cc-status">
+                <SelectValue placeholder="Select a Contract Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((s) => (
+                  <SelectItem key={s.id} value={s.name}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Only offered on the Employee Form when this Contract Status is selected.
+            </p>
+            {errors.appliesToStatus && <p className="mt-1 text-xs text-destructive">{errors.appliesToStatus}</p>}
           </div>
 
           <div>

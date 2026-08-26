@@ -21,7 +21,10 @@ export const FIELD_MASTER_DATA_SOURCE: Record<string, MasterDataSource> = {
   type: { kind: "lookup", type: "TYPE" },
   shed: { kind: "lookup", type: "SHED" },
   contractStatus: { kind: "lookup", type: "CONTRACT_STATUS" },
-  contractCriteria: { kind: "lookup", type: "CONTRACT_CRITERIA" },
+  // contractCriteria is intentionally absent — its dropdown options and
+  // period-calc data come from Settings > Master Data > Contract Criteria
+  // (lib/contract-criteria-service.ts), a dedicated table, not this generic
+  // Lookup mechanism. See EmployeeForm.tsx's `contractCriteria` prop.
   maritalStatus: { kind: "lookup", type: "MARITAL_STATUS" },
   gender: { kind: "lookup", type: "GENDER" },
   ptkpStatus: { kind: "lookup", type: "PTKP" },

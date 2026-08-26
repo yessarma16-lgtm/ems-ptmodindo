@@ -12,8 +12,8 @@ const TABS: { value: string; label: string }[] = [
   { value: "levels", label: "Levels" },
   { value: "skills", label: "Skills" },
   { value: "banks", label: "Banks" },
-  { value: "lookup", label: "Lookup" },
   { value: "contract-criteria", label: "Contract Criteria" },
+  { value: "lookup", label: "Lookup" },
 ];
 
 export default function MasterDataPage() {

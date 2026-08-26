@@ -269,10 +269,12 @@ export async function ensureSchema(client: Client): Promise<void> {
       code TEXT NOT NULL,
       name TEXT NOT NULL,
       periods JSONB NOT NULL DEFAULT '[]',
+      applies_to_status TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'Active',
       sort_order INTEGER NOT NULL DEFAULT 0
     );
   `);
+  await client.query("ALTER TABLE contract_criteria ADD COLUMN IF NOT EXISTS applies_to_status TEXT NOT NULL DEFAULT '';");
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS contract_history (

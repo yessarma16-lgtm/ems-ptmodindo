@@ -32,6 +32,7 @@ export function ContractCriteriaTable({ items, onEdit, onToggleStatus, pendingId
           <TableRow>
             <TableHead>Code</TableHead>
             <TableHead>Name</TableHead>
+            <TableHead>Applies To</TableHead>
             <TableHead>Periods</TableHead>
             <TableHead className="w-24">Sort Order</TableHead>
             <TableHead className="w-28">Status</TableHead>
@@ -45,6 +46,9 @@ export function ContractCriteriaTable({ items, onEdit, onToggleStatus, pendingId
               <TableRow key={item.id}>
                 <TableCell className="font-medium">{item.code}</TableCell>
                 <TableCell>{item.name}</TableCell>
+                <TableCell>
+                  {item.appliesToStatus ? <Badge variant="outline">{item.appliesToStatus}</Badge> : <span className="text-muted-foreground">—</span>}
+                </TableCell>
                 <TableCell className="text-muted-foreground">{formatPeriods(item)}</TableCell>
                 <TableCell className="text-muted-foreground">{item.sortOrder}</TableCell>
                 <TableCell>

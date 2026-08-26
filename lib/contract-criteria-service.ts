@@ -26,6 +26,7 @@ function rowToItem(row: SqlRow): ContractCriteriaItem {
     code: String(row.code ?? ""),
     name: String(row.name ?? ""),
     periods: Array.isArray(row.periods) ? (row.periods as ContractPeriodRule[]) : [],
+    appliesToStatus: String(row.applies_to_status ?? ""),
     status: String(row.status ?? "Active"),
     sortOrder: Number(row.sort_order ?? 0),
   };
@@ -53,7 +54,14 @@ export async function createContractCriteriaItem(input: CreateContractCriteriaIn
 
     const { data, error } = await client
       .from(TABLE)
-      .insert({ code: input.code, name: input.name, periods: input.periods, status: "Active", sort_order: sortOrder })
+      .insert({
+        code: input.code,
+        name: input.name,
+        periods: input.periods,
+        applies_to_status: input.appliesToStatus,
+        status: "Active",
+        sort_order: sortOrder,
+      })
       .select()
       .single();
     if (error) throw error;
@@ -71,6 +79,7 @@ export async function updateContractCriteriaItem(
     if (input.code !== undefined) patch.code = input.code;
     if (input.name !== undefined) patch.name = input.name;
     if (input.periods !== undefined) patch.periods = input.periods;
+    if (input.appliesToStatus !== undefined) patch.applies_to_status = input.appliesToStatus;
     if (input.status !== undefined) patch.status = input.status;
     if (input.sortOrder !== undefined) patch.sort_order = input.sortOrder;
 
