@@ -38,15 +38,21 @@ export interface SheetRejectedRow {
 
 const DATE_FIELD_KEYS = new Set(EMPLOYEE_SYNC_FIELDS.filter((f) => f.type === "date").map((f) => f.key));
 
+const MONTH_ABBREVIATIONS: Record<string, string> = {
+  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+};
+
 /**
  * The Sheets API returns each cell as its FORMATTED display string, not a
  * typed date — so a JOIN DATE cell shown as "18-08-2026" arrives as that
  * literal text, in whatever day/month order the sheet's locale displays
- * (Indonesian sheets: DD-MM-YYYY or DD/MM/YYYY). The rest of the app expects
- * ISO "YYYY-MM-DD" (native `<input type="date">` silently blanks anything
- * else). Recognized shapes are converted; anything else is left as-is rather
- * than silently discarded, so an unrecognized format still fails validation
- * visibly instead of vanishing.
+ * (Indonesian sheets: DD-MM-YYYY or DD/MM/YYYY), or with a month name when
+ * the cell is formatted like "29-Mar-2022"/"5 Apr 2022". The rest of the app
+ * expects ISO "YYYY-MM-DD" (native `<input type="date">` silently blanks
+ * anything else). Recognized shapes are converted; anything else is left
+ * as-is rather than silently discarded, so an unrecognized format still
+ * fails validation visibly instead of vanishing.
  */
 export function normalizeSheetDate(raw: string): string {
   const trimmed = raw.trim();
@@ -55,6 +61,12 @@ export function normalizeSheetDate(raw: string): string {
   if (dmy) {
     const [, d, m, y] = dmy;
     return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  const dMonY = /^(\d{1,2})[-\s]([A-Za-z]{3,9})[-\s](\d{4})$/.exec(trimmed);
+  if (dMonY) {
+    const [, d, monRaw, y] = dMonY;
+    const month = MONTH_ABBREVIATIONS[monRaw.slice(0, 3).toLowerCase()];
+    if (month) return `${y}-${month}-${d.padStart(2, "0")}`;
   }
   return trimmed;
 }
