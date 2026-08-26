@@ -2,7 +2,11 @@ import "server-only";
 
 import { readSheet } from "@/lib/google-sheets";
 import { EMPLOYEES_LAST_COLUMN } from "@/config/employee-fields";
-import { EMPLOYEE_SYNC_FIELDS, type EmployeeSyncFieldKey } from "@/config/employee-sync-fields";
+import {
+  EMPLOYEE_SYNC_FIELDS,
+  EMPLOYEE_SYNC_UNMAPPED_COLUMN_KEYS,
+  type EmployeeSyncFieldKey,
+} from "@/config/employee-sync-fields";
 
 /**
  * Narrow reader for the dedicated sync tab — separate from the legacy
@@ -27,6 +31,8 @@ export interface SheetEmployeeRow {
 
 export interface SheetRejectedRow {
   rowNumber: number;
+  /** Best-effort — blank if the NAME cell itself was also empty. Lets the UI show who a rejection belongs to instead of just a row number. */
+  name: string;
   reason: string;
 }
 
@@ -69,7 +75,9 @@ export async function readEmployeeSyncSheet(): Promise<{ rows: SheetEmployeeRow[
   header.forEach((label, index) => {
     const normalized = String(label ?? "").trim().toLowerCase();
     const field = EMPLOYEE_SYNC_FIELDS.find((f) => f.label.toLowerCase() === normalized);
-    if (field) columnKeyByIndex.set(index, field.key as EmployeeSyncFieldKey);
+    if (field && !EMPLOYEE_SYNC_UNMAPPED_COLUMN_KEYS.has(field.key)) {
+      columnKeyByIndex.set(index, field.key as EmployeeSyncFieldKey);
+    }
   });
 
   const rows: SheetEmployeeRow[] = [];
@@ -89,7 +97,11 @@ export async function readEmployeeSyncSheet(): Promise<{ rows: SheetEmployeeRow[
     });
 
     if (!values.nik) {
-      rejected.push({ rowNumber, reason: "NIK (EMPLOYEE ID) is blank — can't match or create a row without it." });
+      rejected.push({
+        rowNumber,
+        name: values.name ?? "",
+        reason: "NIK (EMPLOYEE ID) is blank — can't match or create a row without it.",
+      });
       continue;
     }
 

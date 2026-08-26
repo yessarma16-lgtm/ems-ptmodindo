@@ -12,13 +12,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 interface SyncFieldDiff { field: string; label: string; oldValue: string; newValue: string }
 interface SyncNewRow { rowNumber: number; nik: string; incoming: Record<string, string> }
 interface SyncMatchedRow { rowNumber: number; nik: string; recordId: string; incoming: Record<string, string>; diffs: SyncFieldDiff[] }
-interface SyncRejectedRow { rowNumber: number; reason: string }
+interface SyncRejectedRow { rowNumber: number; name: string; reason: string }
+interface SyncUnchangedRow { nik: string; name: string }
 interface EmployeeSyncPreview {
   newRows: SyncNewRow[];
   changedRows: SyncMatchedRow[];
   inactivatedRows: SyncMatchedRow[];
   rejected: SyncRejectedRow[];
-  unchangedCount: number;
+  unchangedRows: SyncUnchangedRow[];
   warnings: string[];
 }
 type Decision = "apply" | "skip";
@@ -207,7 +208,7 @@ export function EmployeeSyncPanel() {
                 {preview.changedRows.length > 0 && <Badge variant="warning">{preview.changedRows.length} changed</Badge>}
                 {preview.inactivatedRows.length > 0 && <Badge variant="destructive">{preview.inactivatedRows.length} moving to inactive</Badge>}
                 {preview.rejected.length > 0 && <Badge variant="outline">{preview.rejected.length} rejected</Badge>}
-                <Badge variant="secondary">{preview.unchangedCount} already in sync</Badge>
+                <Badge variant="secondary">{preview.unchangedRows.length} already in sync</Badge>
               </div>
 
               {preview.warnings.length > 0 && (
@@ -290,7 +291,24 @@ export function EmployeeSyncPanel() {
                     Rejected rows
                   </div>
                   <ul className="ml-6 list-disc space-y-0.5 text-xs text-muted-foreground">
-                    {preview.rejected.map((r, idx) => <li key={idx}>Row {r.rowNumber}: {r.reason}</li>)}
+                    {preview.rejected.map((r, idx) => (
+                      <li key={idx}>
+                        Row {r.rowNumber} ({r.name || "no name"}): {r.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {preview.unchangedRows.length > 0 && (
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <div className="mb-1 text-sm font-medium text-muted-foreground">Already in sync</div>
+                  <ul className="ml-6 list-disc space-y-0.5 text-xs text-muted-foreground">
+                    {preview.unchangedRows.map((r) => (
+                      <li key={r.nik}>
+                        {r.name || "(no name)"} ({r.nik})
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}

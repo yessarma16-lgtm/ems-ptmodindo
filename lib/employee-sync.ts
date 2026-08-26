@@ -49,7 +49,15 @@ export type SyncInactivatedRow = SyncChangedRow;
 
 export interface SyncRejectedRow {
   rowNumber: number;
+  /** Best-effort — blank if the NAME cell itself was also empty/unreadable. */
+  name: string;
   reason: string;
+}
+
+/** One row matched by NIK with no differing field — listed (not just counted) so the admin can see who's already in sync. */
+export interface SyncUnchangedRow {
+  nik: string;
+  name: string;
 }
 
 export interface EmployeeSyncPreview {
@@ -57,8 +65,7 @@ export interface EmployeeSyncPreview {
   changedRows: SyncChangedRow[];
   inactivatedRows: SyncInactivatedRow[];
   rejected: SyncRejectedRow[];
-  /** Rows matched by NIK with no differing field — not returned individually, just counted. */
-  unchangedCount: number;
+  unchangedRows: SyncUnchangedRow[];
   /** Non-fatal data-quality notices (e.g. duplicate NIK already in the dashboard) shown as a banner, not blocking. */
   warnings: string[];
 }
@@ -173,12 +180,17 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
   const newRows: SyncNewRow[] = [];
   const changedRows: SyncChangedRow[] = [];
   const inactivatedRows: SyncInactivatedRow[] = [];
-  let unchangedCount = 0;
+  const unchangedRows: SyncUnchangedRow[] = [];
 
   for (const row of sheetRows) {
     const nik = norm(row.values.nik);
+    const sheetName = norm(row.values.name);
     if (seenSheetNiks.has(nik)) {
-      rejected.push({ rowNumber: row.rowNumber, reason: `Duplicate NIK "${nik}" in the sheet — a previous row already used this NIK.` });
+      rejected.push({
+        rowNumber: row.rowNumber,
+        name: sheetName,
+        reason: `Duplicate NIK "${nik}" in the sheet — a previous row already used this NIK.`,
+      });
       continue;
     }
     seenSheetNiks.add(nik);
@@ -186,7 +198,7 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
     const parsed = employeeSyncRowSchema.safeParse(row.values);
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
-      rejected.push({ rowNumber: row.rowNumber, reason: issue?.message ?? "Invalid row." });
+      rejected.push({ rowNumber: row.rowNumber, name: sheetName, reason: issue?.message ?? "Invalid row." });
       continue;
     }
 
@@ -229,7 +241,7 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
     }
 
     if (diffs.length === 0) {
-      unchangedCount += 1;
+      unchangedRows.push({ nik, name: norm(existing.name) || norm(incoming.name) });
       continue;
     }
 
@@ -241,7 +253,7 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
     else changedRows.push(entry);
   }
 
-  return { newRows, changedRows, inactivatedRows, rejected, unchangedCount, warnings };
+  return { newRows, changedRows, inactivatedRows, rejected, unchangedRows, warnings };
 }
 
 export interface EmployeeSyncCommitSummary {
