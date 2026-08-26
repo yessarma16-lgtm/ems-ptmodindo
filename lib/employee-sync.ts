@@ -1,7 +1,8 @@
 import "server-only";
 
 import { EMPLOYEE_SYNC_FIELD_KEYS, EMPLOYEE_SYNC_FIELDS, type EmployeeSyncFieldKey } from "@/config/employee-sync-fields";
-import { readEmployeeSyncSheet } from "@/lib/employee-sync-sheet";
+import { FIELD_MASTER_DATA_SOURCE } from "@/config/field-master-data-map";
+import { readEmployeeSyncSheet, normalizeSheetDate } from "@/lib/employee-sync-sheet";
 import { readEmployeeMovementSyncSheet } from "@/lib/employee-movement-sync-sheet";
 import { employeeSyncRowSchema } from "@/schemas/employee-sync.schema";
 import { buildMasterDataCasingMap, normalizeToMasterDataCasing } from "@/lib/employee-import";
@@ -77,13 +78,42 @@ function norm(value: string | undefined | null): string {
 }
 
 /**
- * Every select-type sync field whose value doesn't match anything in Master
- * Data (case-insensitively — same lookup normalizeToMasterDataCasing already
- * ran), so the row gets rejected instead of silently saving an unrecognized
- * value (e.g. a POSITION typo, or one that was never added to Master Data).
- * A blank cell is exempt — same "sheet isn't managing this field" convention
- * used elsewhere in this file — only a genuinely present-but-unmatched value
- * counts as a mismatch.
+ * BPJS KTK / BPJS KES are declared as "select" fields (config/employee-fields.ts,
+ * FIELD_MASTER_DATA_SOURCE) but real production data has always held a date
+ * (the BPJS enrollment date, e.g. "2022-04-05") — no Master Data list
+ * meaningfully describes them. Validated as dates here instead of matched
+ * against Master Data, and normalized to ISO like a real date field.
+ */
+const DATE_ONLY_SYNC_FIELDS = new Set(["bpjsKtk", "bpjsKes"]);
+
+function isValidIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(value).getTime());
+}
+
+/**
+ * CONTRACT STATUS is the one "lookup"-backed field kept strict despite the
+ * general lookup-fields-are-loose rule below — its exact value drives real
+ * downstream logic (PERMANEN DATE requirement, Contract Criteria period
+ * calculation via .toLowerCase() === "probation"/"permanent" comparisons in
+ * this file), so a typo silently passing through would quietly break those,
+ * not just leave a cosmetic mismatch.
+ */
+const STRICT_LOOKUP_SYNC_FIELDS = new Set(["contractStatus"]);
+
+/**
+ * Only select-type sync fields backed by a "sheet" Master Data source
+ * (Department, Position, Level, Skill, Bank Name) — plus CONTRACT STATUS,
+ * see STRICT_LOOKUP_SYNC_FIELDS above — are checked against Master Data.
+ * Sheet-backed sources are the actively-curated lists with hundreds of real
+ * entries, where a typo (e.g. a POSITION not yet added to Master Data)
+ * should block the row. Other fields backed by the generic "lookup" table
+ * (Category, Gender, Religion, Seragam, ...) are small admin lists that
+ * don't necessarily cover every legitimate value in use — a mismatch there
+ * is left as plain text instead of rejected. BPJS KTK/KES are the one
+ * exception: validated as dates (see DATE_ONLY_SYNC_FIELDS) since that's
+ * what they actually hold, mismatch or not. A blank cell is always exempt —
+ * same "sheet isn't managing this field" convention used elsewhere in this
+ * file.
  */
 function findMasterDataMismatches(
   incoming: EmployeeInput,
@@ -92,6 +122,22 @@ function findMasterDataMismatches(
   const mismatches: { field: string; label: string; value: string }[] = [];
   for (const [fieldKey, casingMap] of casingByField) {
     if (!EMPLOYEE_SYNC_FIELD_KEYS.includes(fieldKey)) continue;
+
+    if (DATE_ONLY_SYNC_FIELDS.has(fieldKey)) {
+      const normalized = normalizeSheetDate(norm(incoming[fieldKey]));
+      if (!normalized) continue; // blank — sheet isn't managing this field
+      if (!isValidIsoDate(normalized)) {
+        const fieldMeta = EMPLOYEE_SYNC_FIELDS.find((f) => f.key === fieldKey);
+        mismatches.push({ field: fieldKey, label: fieldMeta?.label ?? fieldKey, value: incoming[fieldKey] ?? "" });
+      } else {
+        incoming[fieldKey] = normalized;
+      }
+      continue;
+    }
+
+    const isStrict = FIELD_MASTER_DATA_SOURCE[fieldKey]?.kind === "sheet" || STRICT_LOOKUP_SYNC_FIELDS.has(fieldKey);
+    if (!isStrict) continue;
+
     const raw = norm(incoming[fieldKey]);
     if (!raw || casingMap.has(raw.toLowerCase())) continue;
     const fieldMeta = EMPLOYEE_SYNC_FIELDS.find((f) => f.key === fieldKey);
@@ -236,7 +282,13 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
       rejected.push({
         rowNumber: row.rowNumber,
         name: sheetName,
-        reason: mismatches.map((m) => `${m.label} "${m.value}" is not in Master Data.`).join(" "),
+        reason: mismatches
+          .map((m) =>
+            DATE_ONLY_SYNC_FIELDS.has(m.field)
+              ? `${m.label} "${m.value}" is not a valid date.`
+              : `${m.label} "${m.value}" is not in Master Data.`,
+          )
+          .join(" "),
       });
       continue;
     }
