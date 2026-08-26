@@ -136,8 +136,8 @@ export async function loadDashboardData(filter: DashboardFilter): Promise<Dashbo
   const cards = computeCards(items, latestContractEnd, contractEnds, filter);
   const newVsResignByMonth = computeNewVsResignByMonth(items, activeYear);
   const monthlyHeadcount = computeMonthlyHeadcount(items, activeYear);
-  const resignByDepartment = computeResignBreakdown(items, activeYear, (e) => e.department, 5);
-  const resignByMaritalStatus = computeResignBreakdown(items, activeYear, (e) => e.maritalStatus, 6);
+  const resignByDepartment = computeResignBreakdown(items, activeYear, (e) => e.department, topNSeries(5));
+  const resignByMaritalStatus = computeResignBreakdown(items, activeYear, (e) => e.maritalStatus, fixedSeries(MARITAL_STATUS_SERIES));
   const walkinApplicantsByMonth = computeWalkinApplicantsByMonth(registrations, activeYear);
   const topDepartments = computeTopDepartments(items, filter);
   const employeeTypes = computeEmployeeTypes(items);
@@ -278,19 +278,35 @@ function computeMonthlyHeadcount(items: EmployeeListItem[], year: number): Month
   return points;
 }
 
+/** The only two Marital Status values ResignLineChart's Marital Status breakdown shows — Divorced/Widowed/blank are dropped entirely, no "Other" bucket. */
+const MARITAL_STATUS_SERIES = ["Belum Kawin (Single)", "Kawin (Married)"];
+
+function topNSeries(topN: number) {
+  return (totals: Map<string, number>): string[] =>
+    Array.from(totals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, topN)
+      .map(([key]) => key);
+}
+
+function fixedSeries(labels: string[]) {
+  return (): string[] => labels;
+}
+
 /**
  * Resignations (by Exit Date) for the given year, split into monthly line
  * series by whatever `groupOf` extracts (Department or Marital Status) —
- * shared by both breakdowns ResignLineChart toggles between. Capped to the
- * `topN` series with the most resignations in the year (the rest bucketed
- * into "Other") so a high-cardinality dimension like Department doesn't turn
- * the chart into unreadable spaghetti.
+ * shared by both breakdowns ResignLineChart toggles between. `selectSeries`
+ * decides which series actually get a line (e.g. topNSeries(5) for the
+ * highest-resign departments, or fixedSeries([...]) for a fixed allow-list
+ * like Marital Status) — anything not selected is dropped from the chart
+ * entirely rather than bucketed into an "Other" line.
  */
 function computeResignBreakdown(
   items: EmployeeListItem[],
   year: number,
   groupOf: (e: EmployeeListItem) => string,
-  topN: number,
+  selectSeries: (totals: Map<string, number>) => string[],
 ): ResignBreakdownData {
   const resignedThisYear = items.filter((e) => e.exitDate && yearOf(e.exitDate) === String(year));
 
@@ -300,22 +316,17 @@ function computeResignBreakdown(
     totals.set(key, (totals.get(key) ?? 0) + 1);
   }
 
-  const topKeys = Array.from(totals.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, topN)
-    .map(([key]) => key);
-  const topKeySet = new Set(topKeys);
-  const hasOther = totals.size > topKeys.length;
-  const series = hasOther ? [...topKeys, "Other"] : topKeys;
+  const series = selectSeries(totals);
+  const seriesSet = new Set(series);
 
   const countsByMonth: Record<string, number[]> = {};
   for (const key of series) countsByMonth[key] = new Array(12).fill(0);
 
   for (const e of resignedThisYear) {
     const key = groupOf(e).trim() || "(None)";
-    const seriesKey = topKeySet.has(key) ? key : "Other";
+    if (!seriesSet.has(key)) continue;
     const m = Number(e.exitDate.slice(5, 7)) - 1;
-    if (m >= 0 && m < 12) countsByMonth[seriesKey][m]++;
+    if (m >= 0 && m < 12) countsByMonth[key][m]++;
   }
 
   const points: ResignBreakdownMonthPoint[] = MONTH_NAMES_SHORT.map((month, i) => {
