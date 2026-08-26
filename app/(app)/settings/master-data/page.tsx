@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { MasterDataManager } from "@/components/master-data/MasterDataManager";
+import { ContractCriteriaManager } from "@/components/master-data/ContractCriteriaManager";
 
 const TABS: { value: string; label: string }[] = [
   { value: "departments", label: "Departments" },
@@ -12,6 +13,7 @@ const TABS: { value: string; label: string }[] = [
   { value: "skills", label: "Skills" },
   { value: "banks", label: "Banks" },
   { value: "lookup", label: "Lookup" },
+  { value: "contract-criteria", label: "Contract Criteria" },
 ];
 
 export default function MasterDataPage() {
@@ -38,7 +40,11 @@ export default function MasterDataPage() {
             </TabsList>
             {TABS.map((tab) => (
               <TabsContent key={tab.value} value={tab.value}>
-                <MasterDataManager category={tab.value} title={tab.label} />
+                {tab.value === "contract-criteria" ? (
+                  <ContractCriteriaManager />
+                ) : (
+                  <MasterDataManager category={tab.value} title={tab.label} />
+                )}
               </TabsContent>
             ))}
           </Tabs>

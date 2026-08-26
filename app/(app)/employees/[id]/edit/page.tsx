@@ -5,9 +5,11 @@ import { EmployeeForm } from "@/components/employees/EmployeeForm";
 import { NotConfiguredNotice, ConnectionErrorNotice } from "@/components/layout/ConnectionNotice";
 import { getEmployeeById, type EmployeeRecord } from "@/lib/employee-service";
 import { getAllMasterData } from "@/lib/master-data-service";
+import { getContractCriteria } from "@/lib/contract-criteria-service";
 import { toEmployeeFormMasterData, type EmployeeFormMasterData } from "@/lib/master-data-options";
 import { isDatabaseConfigured } from "@/lib/database/database";
 import { DatabaseConnectionError } from "@/lib/database/errors";
+import type { ContractCriteriaItem } from "@/lib/database/types";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,7 @@ export default async function EditEmployeePage({
   let connectionError: string | null = null;
   let masterData: EmployeeFormMasterData | null = null;
   let masterDataError: string | null = null;
+  let contractCriteria: ContractCriteriaItem[] = [];
 
   if (configured) {
     try {
@@ -37,6 +40,12 @@ export default async function EditEmployeePage({
     } catch (err) {
       masterDataError =
         err instanceof DatabaseConnectionError ? err.message : "Unable to load master data.";
+    }
+
+    try {
+      contractCriteria = await getContractCriteria({ activeOnly: true });
+    } catch {
+      // Non-critical — the CONTRACT CRITERIA dropdown just falls back to empty; the rest of the form still works.
     }
   }
 
@@ -64,6 +73,7 @@ export default async function EditEmployeePage({
           initialValues={employee}
           masterData={masterData}
           masterDataError={masterDataError}
+          contractCriteria={contractCriteria}
           excludeFields={["positionApplied"]}
           deleteConfig={{
             url: `/api/employees/${employee.recordId}`,

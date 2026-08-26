@@ -15,11 +15,11 @@ import {
 import { getOptionsForField, type EmployeeFormMasterData, type SelectOption } from "@/lib/master-data-options";
 import { employeeSchema, publicApplySchema } from "@/schemas/employee.schema";
 import { calculateAge, calculateMasaKerja } from "@/lib/calculations";
-import { calculateProbationEndDate } from "@/lib/contract-dates";
+import { calculateProbationEndDate, calculateContractPeriodDates } from "@/lib/contract-dates";
 import { formatDateDMY } from "@/lib/date-format";
 import { cn } from "@/lib/utils";
 import { ContractHistoryEditor, type ContractPeriodRow } from "@/components/employees/ContractHistoryEditor";
-import type { ContractHistoryEntry } from "@/lib/database/types";
+import type { ContractHistoryEntry, ContractCriteriaItem } from "@/lib/database/types";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -84,6 +84,8 @@ interface EmployeeFormProps {
    * record. Defaults to whatever `isInternalAdminForm` already is.
    */
   showContractPeriods?: boolean;
+  /** Active Settings > Master Data > Contract Criteria entries — drives auto-filling CONTRACT CLOSE-FIRST/SECOND/... from JOIN DATE + CONTRACT CRITERIA. Only needed where contract periods auto-sync (see contractSyncAllowed below); omit elsewhere. */
+  contractCriteria?: ContractCriteriaItem[];
   /** Field keys that render read-only regardless of `mode` — e.g. Name/HP Number/Position locked on the public /apply form. */
   lockedFields?: string[];
   /** Field keys omitted from rendering entirely — e.g. FINGER CODE on the public apply/walk-in forms, which applicants never see or fill in. */
@@ -135,6 +137,7 @@ export function EmployeeForm({
   sectionOrder = EMPLOYEE_SECTIONS,
   deleteConfig,
   showContractPeriods,
+  contractCriteria = [],
   stayOnPage = false,
   hrReview = false,
 }: EmployeeFormProps) {
@@ -156,6 +159,8 @@ export function EmployeeForm({
 
   const [contractEntries, setContractEntries] = useState<ContractPeriodRow[]>([]);
   const [originalContractIds, setOriginalContractIds] = useState<string[]>([]);
+  /** How many LEADING contractEntries rows are auto-managed by syncAutoContractPeriods — anything after that index was added manually via "+" and must never be touched by a re-sync. */
+  const autoManagedCountRef = useRef(0);
   const [workExperiences, setWorkExperiences] = useState<WorkExperienceRow[]>([]);
   const [originalWorkExperienceIds, setOriginalWorkExperienceIds] = useState<string[]>([]);
 
@@ -321,21 +326,47 @@ export function EmployeeForm({
   const masaKerja = calculateMasaKerja(values.joinDate);
 
   /**
-   * The FIRST contract period always mirrors CONTRACT STATUS: "Probation" ->
-   * a "Probation" row with an auto-computed End Date; "Contract" -> a
-   * "Contract 1" row with a blank, freely-picked End Date. Any other status
-   * (Permanent, etc.) leaves periods alone — nothing auto-created. Re-run on
-   * every JOIN DATE or CONTRACT STATUS change so switching either one keeps
-   * this first slot in sync; periods added afterward via "+" are untouched.
+   * Auto-manages the LEADING contractEntries rows from JOIN DATE + CONTRACT
+   * STATUS + CONTRACT CRITERIA — re-run whenever any of the three changes so
+   * they stay in sync; rows added afterward via "+" (tracked past
+   * `autoManagedCountRef.current`) are never touched by a re-sync.
+   *
+   * With a matching, configured CONTRACT CRITERIA (Settings > Master Data >
+   * Contract Criteria): every one of its periods is computed sequentially
+   * from JOIN DATE (see calculateContractPeriodDates) and replaces the whole
+   * auto-managed block — e.g. "3 + 2" fills CONTRACT CLOSE-FIRST (Join Date +
+   * 3y) and CONTRACT CLOSE-SECOND (+2y more). Without one (no CONTRACT
+   * CRITERIA selected yet, or it has no periods configured), falls back to
+   * the original single-period defaults: Probation -> Join Date + 3 months
+   * (auto End Date); Contract -> a "Contract 1" row with a blank,
+   * freely-picked End Date; any other status leaves periods alone.
    */
-  function syncFirstContractPeriod(rawJoinDate: string, nextStatus: string) {
+  function syncAutoContractPeriods(rawJoinDate: string, nextStatus: string, criteriaName: string) {
     // Native date inputs can briefly emit a malformed intermediate value
     // while a segment is still being typed — treat anything that isn't a
     // genuinely complete date as "not entered yet" rather than writing it in.
     const nextJoinDate = /^(19|20)\d{2}-\d{2}-\d{2}$/.test(rawJoinDate) ? rawJoinDate : "";
     const statusNorm = nextStatus.trim().toLowerCase();
+    const criteria = contractCriteria.find((c) => c.name === criteriaName && c.periods.length > 0);
+
     setContractEntries((prev) => {
-      const hasAutoFirst = prev.length > 0 && (prev[0].contractType === "Probation" || prev[0].contractType === "Contract 1");
+      const autoCount = autoManagedCountRef.current;
+      const manual = prev.slice(autoCount);
+
+      if (criteria && nextJoinDate) {
+        const computed = calculateContractPeriodDates(nextJoinDate, criteria.periods);
+        let contractNum = 0;
+        const generated: ContractPeriodRow[] = computed.map((period, idx) => ({
+          key: idx < autoCount ? prev[idx].key : randomClientKey(),
+          contractType: idx === 0 && statusNorm === "probation" ? "Probation" : `Contract ${(contractNum += 1)}`,
+          startDate: period.startDate,
+          endDate: period.endDate,
+        }));
+        autoManagedCountRef.current = generated.length;
+        return [...generated, ...manual];
+      }
+
+      const hasAutoFirst = autoCount > 0;
 
       if (statusNorm === "probation") {
         const first: ContractPeriodRow = {
@@ -344,7 +375,8 @@ export function EmployeeForm({
           startDate: nextJoinDate,
           endDate: nextJoinDate ? calculateProbationEndDate(nextJoinDate) : "",
         };
-        return [first, ...(hasAutoFirst ? prev.slice(1) : prev)];
+        autoManagedCountRef.current = 1;
+        return [first, ...manual];
       }
 
       if (statusNorm === "contract") {
@@ -354,12 +386,17 @@ export function EmployeeForm({
           startDate: nextJoinDate,
           endDate: hasAutoFirst && prev[0].contractType === "Contract 1" ? prev[0].endDate : "",
         };
-        return [first, ...(hasAutoFirst ? prev.slice(1) : prev)];
+        autoManagedCountRef.current = 1;
+        return [first, ...manual];
       }
 
       // Any other status: keep an existing auto-managed first slot's Start
       // Date current, but don't fabricate one that was never chosen.
-      if (hasAutoFirst) return [{ ...prev[0], startDate: nextJoinDate }, ...prev.slice(1)];
+      if (hasAutoFirst) {
+        autoManagedCountRef.current = 1;
+        return [{ ...prev[0], startDate: nextJoinDate }, ...prev.slice(1)];
+      }
+      autoManagedCountRef.current = 0;
       return prev;
     });
   }
@@ -381,9 +418,11 @@ export function EmployeeForm({
     // way; this is purely a live preview of what approval will create.
     const contractSyncAllowed = showContractPeriodsResolved && (!isInternalAdminForm || mode === "create");
     if (key === "joinDate" && contractSyncAllowed) {
-      syncFirstContractPeriod(value, values.contractStatus);
+      syncAutoContractPeriods(value, values.contractStatus, values.contractCriteria);
     } else if (key === "contractStatus" && contractSyncAllowed) {
-      syncFirstContractPeriod(values.joinDate, value);
+      syncAutoContractPeriods(values.joinDate, value, values.contractCriteria);
+    } else if (key === "contractCriteria" && contractSyncAllowed) {
+      syncAutoContractPeriods(values.joinDate, values.contractStatus, value);
     }
   }
 
@@ -553,7 +592,13 @@ export function EmployeeForm({
                       value={displayValue(field)}
                       error={errors[field.key]}
                       disabled={locked}
-                      options={locked ? [] : getOptionsForField(field, masterData)}
+                      options={
+                        locked
+                          ? []
+                          : field.key === "contractCriteria"
+                            ? contractCriteria.map((c) => ({ value: c.name, label: c.name }))
+                            : getOptionsForField(field, masterData)
+                      }
                       onChange={(v) => setField(field.key, v)}
                       mode={mode}
                     />

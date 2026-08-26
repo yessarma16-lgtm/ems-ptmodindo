@@ -163,6 +163,42 @@ export interface UpdateLookupInput {
   sortOrder?: number;
 }
 
+/** One sequential span in a CONTRACT CRITERIA rule, e.g. { value: 3, unit: "year" }. */
+export interface ContractPeriodRule {
+  value: number;
+  unit: "month" | "year";
+}
+
+/**
+ * A CONTRACT CRITERIA entry (Settings > Master Data > Contract Criteria) —
+ * `periods` drives CONTRACT CLOSE-FIRST/SECOND/... auto-calc from JOIN DATE:
+ * period 1 ends at joinDate + periods[0], period 2 (if present) ends at
+ * period 1's end + periods[1], and so on. See lib/contract-dates.ts.
+ */
+export interface ContractCriteriaItem {
+  id: string;
+  code: string;
+  name: string;
+  periods: ContractPeriodRule[];
+  status: string;
+  sortOrder: number;
+}
+
+export interface CreateContractCriteriaInput {
+  code: string;
+  name: string;
+  periods: ContractPeriodRule[];
+  sortOrder?: number;
+}
+
+export interface UpdateContractCriteriaInput {
+  code?: string;
+  name?: string;
+  periods?: ContractPeriodRule[];
+  status?: string;
+  sortOrder?: number;
+}
+
 export interface AllMasterData {
   departments: MasterDataItem[];
   positions: MasterDataItem[];

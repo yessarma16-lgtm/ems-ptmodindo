@@ -259,6 +259,21 @@ export async function ensureSchema(client: Client): Promise<void> {
   await client.query("CREATE INDEX IF NOT EXISTS idx_lookup_type ON lookup(type);");
   await ensureLookupSeedsExist(client);
 
+  // Settings > Master Data > Contract Criteria — each row's `periods` (JSON
+  // array of { value, unit }) drives CONTRACT CLOSE-FIRST/SECOND/... auto-calc
+  // from JOIN DATE. See lib/contract-dates.ts (calculateContractPeriodDates)
+  // and lib/contract-criteria-service.ts.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS contract_criteria (
+      id SERIAL PRIMARY KEY,
+      code TEXT NOT NULL,
+      name TEXT NOT NULL,
+      periods JSONB NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'Active',
+      sort_order INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+
   await client.query(`
     CREATE TABLE IF NOT EXISTS contract_history (
       id BIGSERIAL PRIMARY KEY,

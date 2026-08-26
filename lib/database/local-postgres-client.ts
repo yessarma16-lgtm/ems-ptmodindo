@@ -7,6 +7,21 @@ type Result = { data: Row[] | Row | null; error: Error | null; count?: number };
 const IDENT = /^[A-Za-z_][A-Za-z0-9_.]*$/;
 const id = (value: string) => value.split(".").every((part) => IDENT.test(part)) ? value : (() => { throw new Error("Invalid database identifier"); })();
 
+/**
+ * `pg` serializes a bare JS array as a Postgres ARRAY literal ("{a,b}"), not
+ * JSON — wrong for a JSONB column holding an array value (e.g. Contract
+ * Criteria's `periods`), which produces "invalid input syntax for type json"
+ * on insert/update. Plain arrays/objects are JSON.stringify'd before being
+ * sent as a param; Date/Buffer/null and everything else pass through
+ * unchanged (no real table column here is a native Postgres ARRAY type).
+ */
+function serializeValue(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return JSON.stringify(value);
+  if (typeof value === "object" && !(value instanceof Date) && !Buffer.isBuffer(value)) return JSON.stringify(value);
+  return value;
+}
+
 let pool: Pool | null = null;
 function getPool(): Pool {
   const url = process.env.DATABASE_URL;
@@ -110,11 +125,11 @@ class QueryBuilder implements PromiseLike<Result> {
       const keys = Object.keys(rows[0]);
       const params = [...this.values];
       if (this.action === "insert") {
-        const tuples = rows.map((row) => `(${keys.map((key) => { params.push(row[key]); return `$${params.length}`; }).join(",")})`);
+        const tuples = rows.map((row) => `(${keys.map((key) => { params.push(serializeValue(row[key])); return `$${params.length}`; }).join(",")})`);
         const conflict = this.conflict ? ` ON CONFLICT (${this.conflict.split(",").map(id).join(",")}) DO UPDATE SET ${keys.map((key) => `${id(key)} = EXCLUDED.${id(key)}`).join(",")}` : "";
         result = await client.query(`INSERT INTO ${id(this.table)} (${keys.map(id).join(",")}) VALUES ${tuples.join(",")}${conflict} RETURNING *`, params);
       } else if (this.action === "update") {
-        const set = keys.map((key) => { params.push((this.payload as Row)[key]); return `${id(key)} = $${params.length}`; }).join(",");
+        const set = keys.map((key) => { params.push(serializeValue((this.payload as Row)[key])); return `${id(key)} = $${params.length}`; }).join(",");
         result = await client.query(`UPDATE ${id(this.table)} SET ${set}${where} RETURNING *`, params);
       } else {
         result = await client.query(`DELETE FROM ${id(this.table)}${where} RETURNING *`, this.values);

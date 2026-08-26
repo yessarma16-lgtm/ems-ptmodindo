@@ -6,9 +6,11 @@ import { RegistrationDecisionCard } from "@/components/employees/RegistrationDec
 import { NotConfiguredNotice, ConnectionErrorNotice } from "@/components/layout/ConnectionNotice";
 import { getOnlineRegistrationById, type OnlineRegistration } from "@/lib/online-register-service";
 import { getAllMasterData } from "@/lib/master-data-service";
+import { getContractCriteria } from "@/lib/contract-criteria-service";
 import { toEmployeeFormMasterData, type EmployeeFormMasterData } from "@/lib/master-data-options";
 import { isDatabaseConfigured } from "@/lib/database/database";
 import { DatabaseConnectionError } from "@/lib/database/errors";
+import type { ContractCriteriaItem } from "@/lib/database/types";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,7 @@ export default async function EditOnlineRegistrationPage({
   let connectionError: string | null = null;
   let masterData: EmployeeFormMasterData | null = null;
   let masterDataError: string | null = null;
+  let contractCriteria: ContractCriteriaItem[] = [];
 
   if (configured) {
     try {
@@ -36,6 +39,11 @@ export default async function EditOnlineRegistrationPage({
       masterData = toEmployeeFormMasterData(await getAllMasterData());
     } catch (err) {
       masterDataError = err instanceof DatabaseConnectionError ? err.message : "Unable to load master data.";
+    }
+    try {
+      contractCriteria = await getContractCriteria({ activeOnly: true });
+    } catch {
+      // Non-critical — the CONTRACT CRITERIA dropdown just falls back to empty; the rest of the form still works.
     }
   }
 
@@ -63,6 +71,7 @@ export default async function EditOnlineRegistrationPage({
             initialValues={registration}
             masterData={masterData}
             masterDataError={masterDataError}
+            contractCriteria={contractCriteria}
             submitUrl={`/api/online-register/${registration.recordId}`}
             successMessage="Registration updated."
             showContractPeriods
