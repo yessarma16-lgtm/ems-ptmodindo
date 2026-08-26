@@ -120,21 +120,24 @@ function findMasterDataMismatches(
   casingByField: Map<string, Map<string, string>>,
 ): { field: string; label: string; value: string }[] {
   const mismatches: { field: string; label: string; value: string }[] = [];
+
+  // Checked independently of casingByField — BPJS KTK/KES are plain "date"
+  // fields now (config/employee-fields.ts), not backed by any Master Data
+  // source, so they're never in that map.
+  for (const fieldKey of DATE_ONLY_SYNC_FIELDS) {
+    if (!EMPLOYEE_SYNC_FIELD_KEYS.includes(fieldKey)) continue;
+    const normalized = normalizeSheetDate(norm(incoming[fieldKey]));
+    if (!normalized) continue; // blank — sheet isn't managing this field
+    if (!isValidIsoDate(normalized)) {
+      const fieldMeta = EMPLOYEE_SYNC_FIELDS.find((f) => f.key === fieldKey);
+      mismatches.push({ field: fieldKey, label: fieldMeta?.label ?? fieldKey, value: incoming[fieldKey] ?? "" });
+    } else {
+      incoming[fieldKey] = normalized;
+    }
+  }
+
   for (const [fieldKey, casingMap] of casingByField) {
     if (!EMPLOYEE_SYNC_FIELD_KEYS.includes(fieldKey)) continue;
-
-    if (DATE_ONLY_SYNC_FIELDS.has(fieldKey)) {
-      const normalized = normalizeSheetDate(norm(incoming[fieldKey]));
-      if (!normalized) continue; // blank — sheet isn't managing this field
-      if (!isValidIsoDate(normalized)) {
-        const fieldMeta = EMPLOYEE_SYNC_FIELDS.find((f) => f.key === fieldKey);
-        mismatches.push({ field: fieldKey, label: fieldMeta?.label ?? fieldKey, value: incoming[fieldKey] ?? "" });
-      } else {
-        incoming[fieldKey] = normalized;
-      }
-      continue;
-    }
-
     const isStrict = FIELD_MASTER_DATA_SOURCE[fieldKey]?.kind === "sheet" || STRICT_LOOKUP_SYNC_FIELDS.has(fieldKey);
     if (!isStrict) continue;
 

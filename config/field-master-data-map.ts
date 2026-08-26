@@ -32,8 +32,11 @@ export const FIELD_MASTER_DATA_SOURCE: Record<string, MasterDataSource> = {
   education: { kind: "lookup", type: "EDUCATION" },
   religion: { kind: "lookup", type: "RELIGION" },
   status: { kind: "lookup", type: "EMPLOYEE_STATUS" },
-  bpjsKtk: { kind: "lookup", type: "BPJS_KTK" },
-  bpjsKes: { kind: "lookup", type: "BPJS_KES" },
   seragam: { kind: "lookup", type: "SERAGAM" },
   blood: { kind: "lookup", type: "BLOOD_TYPE" },
+
+  // bpjsKtk / bpjsKes are intentionally absent — real data has always held a
+  // date (BPJS enrollment date), not a status pick from a list, so the field
+  // is typed "date" (config/employee-fields.ts) and needs no Master Data
+  // source. See DATE_ONLY_SYNC_FIELDS in lib/employee-sync.ts.
 };
