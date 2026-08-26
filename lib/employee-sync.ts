@@ -5,7 +5,9 @@ import { readEmployeeSyncSheet } from "@/lib/employee-sync-sheet";
 import { employeeSyncRowSchema } from "@/schemas/employee-sync.schema";
 import { buildMasterDataCasingMap, normalizeToMasterDataCasing } from "@/lib/employee-import";
 import { getEmployees, createEmployee, updateEmployee, deactivateEmployee } from "@/lib/employee-service";
-import type { EmployeeInput, EmployeeRecord } from "@/lib/database/types";
+import { getContractCriteria } from "@/lib/contract-criteria-service";
+import { calculateContractPeriodDates } from "@/lib/contract-dates";
+import type { EmployeeInput, EmployeeRecord, ContractCriteriaItem } from "@/lib/database/types";
 
 /**
  * Diff/sync engine for the "Employee Sync" Google Sheet tab (Phase 1: NIK is
@@ -61,11 +63,48 @@ function norm(value: string | undefined | null): string {
 /** Fields never diffed against the dashboard for an EXISTING employee: NIK is the match key itself, FINGER CODE is generated once at creation and immutable afterward (updateEmployee silently ignores it), STATUS gets its own blank-means-"don't touch" handling below. */
 const DIFF_EXCLUDED_FOR_EXISTING = new Set<EmployeeSyncFieldKey>(["nik", "fingerCode", "status"]);
 
+const CONTRACT_CLOSE_KEYS = [
+  "contractCloseFirst",
+  "contractCloseSecond",
+  "contractCloseThird",
+  "contractCloseFourth",
+  "contractCloseFiveth",
+] as const;
+
+/**
+ * Mirrors EmployeeForm.tsx's syncAutoContractPeriods for the sync path (the
+ * form's version only runs client-side on user keystrokes — a row committed
+ * straight from the sheet never goes through it). Fills CONTRACT
+ * CLOSE-FIRST/SECOND/... from JOIN DATE + CONTRACT CRITERIA's periods
+ * (lib/contract-dates.ts), but only into slots that are genuinely empty —
+ * a value already on the sheet row (admin typed one explicitly) or already
+ * on the existing employee record (manual dashboard edit, or a prior
+ * calc/sync) is left untouched, never silently overwritten.
+ */
+function applyContractCriteriaCalc(
+  incoming: EmployeeInput,
+  existing: EmployeeRecord | undefined,
+  criteriaList: ContractCriteriaItem[],
+): void {
+  const criteria = criteriaList.find((c) => c.name === norm(incoming.contractCriteria) && c.periods.length > 0);
+  if (!criteria || !norm(incoming.joinDate)) return;
+
+  const computed = calculateContractPeriodDates(incoming.joinDate, criteria.periods);
+  computed.forEach((period, idx) => {
+    const key = CONTRACT_CLOSE_KEYS[idx];
+    if (!key) return;
+    if (norm(incoming[key])) return; // sheet explicitly set this slot
+    if (existing && norm(existing[key])) return; // already set on the dashboard record
+    incoming[key] = period.endDate;
+  });
+}
+
 export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
   const { rows: sheetRows, rejected: sheetRejected } = await readEmployeeSyncSheet();
   const rejected: SyncRejectedRow[] = [...sheetRejected];
 
   const employees = await getEmployees();
+  const criteriaList = await getContractCriteria({ activeOnly: true });
   const nikMap = new Map<string, EmployeeRecord>();
   const warnings: string[] = [];
   for (const emp of employees) {
@@ -110,6 +149,7 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
       // Brand-new employee: a blank STATUS cell defaults to Active (there's no
       // prior status to accidentally clear here, unlike the existing-row case below).
       if (!norm(incoming.status)) incoming.status = "Active";
+      applyContractCriteriaCalc(incoming, undefined, criteriaList);
       newRows.push({ rowNumber: row.rowNumber, nik, incoming });
       continue;
     }
@@ -119,6 +159,8 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
     // diff that would clear it, and never send it to updateEmployee.
     const sheetStatusRaw = norm(incoming.status);
     if (!sheetStatusRaw) delete incoming.status;
+
+    applyContractCriteriaCalc(incoming, existing, criteriaList);
 
     const diffs: SyncFieldDiff[] = [];
     for (const key of EMPLOYEE_SYNC_FIELD_KEYS) {
