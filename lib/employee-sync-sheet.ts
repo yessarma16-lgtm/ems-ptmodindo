@@ -5,13 +5,19 @@ import { EMPLOYEES_LAST_COLUMN } from "@/config/employee-fields";
 import { EMPLOYEE_SYNC_FIELDS, type EmployeeSyncFieldKey } from "@/config/employee-sync-fields";
 
 /**
- * Narrow reader for the dedicated "Employee Sync" tab — separate from the
- * legacy `lib/database/google-sheets-adapter.ts` (that implements the old
+ * Narrow reader for the dedicated sync tab — separate from the legacy
+ * `lib/database/google-sheets-adapter.ts` (that implements the old
  * full-database `DatabaseAdapter` interface and is no longer wired into the
  * app). Only reads via `lib/google-sheets.ts`, the sole module allowed to
  * talk to the Sheets API directly.
+ *
+ * Tab name is "Employee Database ModIndo", not "Employee Sync" — the
+ * spreadsheet was reorganized down to this one tab (every other legacy tab
+ * was deleted; their data already lives in Postgres and the app never reads
+ * them). If this tab ever gets renamed again, sync breaks with "Unable to
+ * connect to Employee Database" until this constant is updated to match.
  */
-export const EMPLOYEE_SYNC_SHEET_NAME = "Employee Sync";
+export const EMPLOYEE_SYNC_SHEET_NAME = "Employee Database ModIndo";
 
 export interface SheetEmployeeRow {
   /** 1-indexed spreadsheet row, including the header row (row 1) — data starts at row 2. */
