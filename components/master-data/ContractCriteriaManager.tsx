@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ContractCriteriaTable } from "@/components/master-data/ContractCriteriaTable";
 import { ContractCriteriaDialog, type ContractCriteriaFormValues } from "@/components/master-data/ContractCriteriaDialog";
+import { DeleteConfirmDialog } from "@/components/master-data/DeleteConfirmDialog";
 import type { ContractCriteriaItem } from "@/lib/database/types";
 import type { MasterDataItem } from "@/lib/master-data-service";
 
@@ -20,6 +21,7 @@ export function ContractCriteriaManager() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ContractCriteriaItem | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ContractCriteriaItem | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -123,6 +125,19 @@ export function ContractCriteriaManager() {
     setDialogOpen(true);
   }
 
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/master-data/contract-criteria/${deleteTarget.id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error ?? "Failed to delete entry.");
+      return;
+    }
+    toast.success(`${deleteTarget.name} deleted.`);
+    setDeleteTarget(null);
+    load();
+  }
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -151,7 +166,13 @@ export function ContractCriteriaManager() {
           <Skeleton className="h-10 w-full" />
         </div>
       ) : (
-        <ContractCriteriaTable items={items} onEdit={openEditDialog} onToggleStatus={handleToggleStatus} pendingId={pendingId} />
+        <ContractCriteriaTable
+          items={items}
+          onEdit={openEditDialog}
+          onToggleStatus={handleToggleStatus}
+          onDelete={setDeleteTarget}
+          pendingId={pendingId}
+        />
       )}
 
       <ContractCriteriaDialog
@@ -172,6 +193,13 @@ export function ContractCriteriaManager() {
             : undefined
         }
         onSubmit={editing ? handleEditSubmit : handleCreate}
+      />
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        itemLabel={deleteTarget?.name ?? ""}
+        onConfirm={handleDeleteConfirm}
       />
     </div>
   );

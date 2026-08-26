@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { contractCriteriaInputSchema } from "@/schemas/contract-criteria.schema";
-import { updateContractCriteriaItem } from "@/lib/contract-criteria-service";
+import { updateContractCriteriaItem, deleteContractCriteriaItem } from "@/lib/contract-criteria-service";
 import { toApiErrorResponse } from "@/lib/api-error";
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -17,6 +17,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
     const item = await updateContractCriteriaItem(id, parsed.data);
     return NextResponse.json({ item });
+  } catch (err) {
+    return toApiErrorResponse(err);
+  }
+}
+
+/** Permanently removes a Contract Criteria entry. Irreversible — unlike toggle-status's soft deactivate. */
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  try {
+    await deleteContractCriteriaItem(id);
+    return NextResponse.json({ ok: true });
   } catch (err) {
     return toApiErrorResponse(err);
   }

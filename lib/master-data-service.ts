@@ -92,6 +92,14 @@ export async function toggleSimpleMasterDataStatus(
   }
 }
 
+export async function deleteSimpleMasterDataItem(category: SimpleMasterCategory, id: string): Promise<void> {
+  try {
+    await getDatabaseAdapter().deleteSimpleMasterDataItem(category, id);
+  } catch (err) {
+    rethrowAsMasterDataNotFound(err, category, id);
+  }
+}
+
 export async function getLookup(
   type: string,
   options?: { activeOnly?: boolean },
@@ -122,6 +130,14 @@ export async function updateLookupItem(id: string, input: UpdateLookupInput): Pr
 export async function toggleLookupStatus(id: string): Promise<LookupItem> {
   try {
     return await getDatabaseAdapter().toggleLookupStatus(id);
+  } catch (err) {
+    rethrowAsMasterDataNotFound(err, "lookup", id);
+  }
+}
+
+export async function deleteLookupItem(id: string): Promise<void> {
+  try {
+    await getDatabaseAdapter().deleteLookupItem(id);
   } catch (err) {
     rethrowAsMasterDataNotFound(err, "lookup", id);
   }

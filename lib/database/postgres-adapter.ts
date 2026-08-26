@@ -590,6 +590,19 @@ async function toggleSimpleMasterDataStatus(
   });
 }
 
+async function deleteSimpleMasterDataItem(category: SimpleMasterCategory, id: string): Promise<void> {
+  return supabaseGuarded(async () => {
+    const client = getSupabaseClient();
+    const table = simpleTableName(category);
+    const { data: existing, error: findError } = await client.from(table).select("id").eq("id", id).maybeSingle();
+    if (findError) throw findError;
+    if (!existing) throw new RecordNotFoundError(category, id);
+
+    const { error } = await client.from(table).delete().eq("id", id);
+    if (error) throw error;
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Lookup (Category, Type, Shed, Gender, Religion, ...)                       */
 /* -------------------------------------------------------------------------- */
@@ -702,6 +715,18 @@ async function toggleLookupStatus(id: string): Promise<LookupItem> {
   });
 }
 
+async function deleteLookupItem(id: string): Promise<void> {
+  return supabaseGuarded(async () => {
+    const client = getSupabaseClient();
+    const { data: existing, error: findError } = await client.from("lookup").select("id").eq("id", id).maybeSingle();
+    if (findError) throw findError;
+    if (!existing) throw new RecordNotFoundError("lookup", id);
+
+    const { error } = await client.from("lookup").delete().eq("id", id);
+    if (error) throw error;
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Aggregate + lifecycle                                                      */
 /* -------------------------------------------------------------------------- */
@@ -762,6 +787,7 @@ export const postgresAdapter: DatabaseAdapter = {
   createSimpleMasterDataItem,
   updateSimpleMasterDataItem,
   toggleSimpleMasterDataStatus,
+  deleteSimpleMasterDataItem,
 
   getLookup,
   getAllLookup,
@@ -769,6 +795,7 @@ export const postgresAdapter: DatabaseAdapter = {
   createLookupItem,
   updateLookupItem,
   toggleLookupStatus,
+  deleteLookupItem,
 
   getAllMasterData,
 };

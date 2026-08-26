@@ -95,6 +95,18 @@ export async function updateContractCriteriaItem(
   });
 }
 
+export async function deleteContractCriteriaItem(id: string): Promise<void> {
+  return supabaseGuarded(async () => {
+    const client = getSupabaseClient();
+    const { data: existing, error: findError } = await client.from(TABLE).select("id").eq("id", id).maybeSingle();
+    if (findError) throw findError;
+    if (!existing) throw new RecordNotFoundError(TABLE, id);
+
+    const { error } = await client.from(TABLE).delete().eq("id", id);
+    if (error) throw error;
+  });
+}
+
 export async function toggleContractCriteriaStatus(id: string): Promise<ContractCriteriaItem> {
   return supabaseGuarded(async () => {
     const client = getSupabaseClient();

@@ -434,6 +434,14 @@ async function toggleSimpleMasterDataStatus(
   return updateSimpleMasterDataItem(category, id, { status: nextStatus });
 }
 
+async function deleteSimpleMasterDataItem(category: SimpleMasterCategory, id: string): Promise<void> {
+  const db = getDb();
+  const table = simpleTableName(category);
+  const existing = db.prepare(`SELECT id FROM ${table} WHERE id = ?`).get(id);
+  if (!existing) throw new RecordNotFoundError(category, id);
+  db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Lookup (Category, Type, Shed, Gender, Religion, ...)                       */
 /* -------------------------------------------------------------------------- */
@@ -514,6 +522,13 @@ async function toggleLookupStatus(id: string): Promise<LookupItem> {
   return updateLookupItem(id, { status: nextStatus });
 }
 
+async function deleteLookupItem(id: string): Promise<void> {
+  const db = getDb();
+  const existing = db.prepare("SELECT id FROM lookup WHERE id = ?").get(id);
+  if (!existing) throw new RecordNotFoundError("lookup", id);
+  db.prepare("DELETE FROM lookup WHERE id = ?").run(id);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Aggregate + lifecycle                                                      */
 /* -------------------------------------------------------------------------- */
@@ -571,6 +586,7 @@ export const sqliteAdapter: DatabaseAdapter = {
   createSimpleMasterDataItem,
   updateSimpleMasterDataItem,
   toggleSimpleMasterDataStatus,
+  deleteSimpleMasterDataItem,
 
   getLookup,
   getAllLookup,
@@ -578,6 +594,7 @@ export const sqliteAdapter: DatabaseAdapter = {
   createLookupItem,
   updateLookupItem,
   toggleLookupStatus,
+  deleteLookupItem,
 
   getAllMasterData,
 };

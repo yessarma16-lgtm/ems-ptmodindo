@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { MasterDataTable } from "@/components/master-data/MasterDataTable";
 import { MasterDataDialog, type MasterDataFormValues } from "@/components/master-data/MasterDataDialog";
+import { DeleteConfirmDialog } from "@/components/master-data/DeleteConfirmDialog";
 import { LOOKUP_TYPES } from "@/config/master-data-sheets";
 import type { MasterDataItem } from "@/lib/master-data-service";
 
@@ -33,6 +34,7 @@ export function MasterDataManager({ category, title }: MasterDataManagerProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MasterDataItem | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MasterDataItem | null>(null);
 
   const currentTypeLabel = LOOKUP_TYPES.find((t) => t.type === selectedType)?.label ?? title;
 
@@ -143,6 +145,19 @@ export function MasterDataManager({ category, title }: MasterDataManagerProps) {
     setDialogOpen(true);
   }
 
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+    const res = await fetch(`/api/master-data/${category}/${deleteTarget.id}`, { method: "DELETE" });
+    const data = await res.json();
+    if (!res.ok) {
+      toast.error(data.error ?? "Failed to delete entry.");
+      return;
+    }
+    toast.success(`${deleteTarget.name} deleted.`);
+    setDeleteTarget(null);
+    load();
+  }
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -191,6 +206,7 @@ export function MasterDataManager({ category, title }: MasterDataManagerProps) {
           items={items}
           onEdit={openEditDialog}
           onToggleStatus={handleToggleStatus}
+          onDelete={setDeleteTarget}
           pendingId={pendingId}
           emptyMessage={`No ${(isLookup ? currentTypeLabel : title).toLowerCase()} available.`}
         />
@@ -208,6 +224,13 @@ export function MasterDataManager({ category, title }: MasterDataManagerProps) {
             : undefined
         }
         onSubmit={editing ? handleEditSubmit : handleCreate}
+      />
+
+      <DeleteConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        itemLabel={deleteTarget?.name ?? ""}
+        onConfirm={handleDeleteConfirm}
       />
     </div>
   );

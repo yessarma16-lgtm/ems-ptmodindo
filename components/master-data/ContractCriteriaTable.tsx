@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Power } from "lucide-react";
+import { Pencil, Power, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ interface ContractCriteriaTableProps {
   items: ContractCriteriaItem[];
   onEdit: (item: ContractCriteriaItem) => void;
   onToggleStatus: (item: ContractCriteriaItem) => void;
+  onDelete: (item: ContractCriteriaItem) => void;
   pendingId?: string | null;
 }
 
@@ -20,7 +21,7 @@ function formatPeriods(item: ContractCriteriaItem): string {
   return item.periods.map((p) => `${p.value} ${p.unit === "year" ? "Tahun" : "Bulan"}`).join(" + ");
 }
 
-export function ContractCriteriaTable({ items, onEdit, onToggleStatus, pendingId }: ContractCriteriaTableProps) {
+export function ContractCriteriaTable({ items, onEdit, onToggleStatus, onDelete, pendingId }: ContractCriteriaTableProps) {
   if (items.length === 0) {
     return <p className="py-10 text-center text-sm text-muted-foreground">No contract criteria available.</p>;
   }
@@ -68,6 +69,16 @@ export function ContractCriteriaTable({ items, onEdit, onToggleStatus, pendingId
                       className={active ? "text-destructive hover:text-destructive" : "text-success hover:text-success"}
                     >
                       <Power className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onDelete(item)}
+                      disabled={pendingId === item.id}
+                      title="Delete"
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="size-4" />
                     </Button>
                   </div>
                 </TableCell>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Power } from "lucide-react";
+import { Pencil, Power, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ interface MasterDataTableProps {
   items: MasterDataItem[];
   onEdit: (item: MasterDataItem) => void;
   onToggleStatus: (item: MasterDataItem) => void;
+  onDelete: (item: MasterDataItem) => void;
   pendingId?: string | null;
   emptyMessage: string;
 }
@@ -19,6 +20,7 @@ export function MasterDataTable({
   items,
   onEdit,
   onToggleStatus,
+  onDelete,
   pendingId,
   emptyMessage,
 }: MasterDataTableProps) {
@@ -63,6 +65,16 @@ export function MasterDataTable({
                       className={active ? "text-destructive hover:text-destructive" : "text-success hover:text-success"}
                     >
                       <Power className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => onDelete(item)}
+                      disabled={pendingId === item.id}
+                      title="Delete"
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="size-4" />
                     </Button>
                   </div>
                 </TableCell>

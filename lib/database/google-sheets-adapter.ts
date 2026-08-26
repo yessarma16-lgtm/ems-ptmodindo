@@ -396,6 +396,13 @@ async function toggleSimpleMasterDataStatus(
   return updateSimpleMasterDataItem(category, id, { status: nextStatus });
 }
 
+async function deleteSimpleMasterDataItem(category: SimpleMasterCategory, id: string): Promise<void> {
+  const sheetName = SIMPLE_MASTER_SHEETS[category];
+  const found = await findSimpleRow(category, id);
+  if (!found) throw new RecordNotFoundError(category, id);
+  await deleteRow(sheetName, found.rowNumber);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Lookup sheet (Category, Type, Shed, Gender, Religion, ...)                 */
 /* -------------------------------------------------------------------------- */
@@ -490,6 +497,12 @@ async function toggleLookupStatus(id: string): Promise<LookupItem> {
   return updateLookupItem(id, { status: nextStatus });
 }
 
+async function deleteLookupItem(id: string): Promise<void> {
+  const found = await findLookupRow(id);
+  if (!found) throw new RecordNotFoundError("lookup", id);
+  await deleteRow(LOOKUP_SHEET_NAME, found.rowNumber);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Aggregate + lifecycle                                                      */
 /* -------------------------------------------------------------------------- */
@@ -551,6 +564,7 @@ export const googleSheetsAdapter: DatabaseAdapter = {
   createSimpleMasterDataItem,
   updateSimpleMasterDataItem,
   toggleSimpleMasterDataStatus,
+  deleteSimpleMasterDataItem,
 
   getLookup,
   getAllLookup,
@@ -558,6 +572,7 @@ export const googleSheetsAdapter: DatabaseAdapter = {
   createLookupItem,
   updateLookupItem,
   toggleLookupStatus,
+  deleteLookupItem,
 
   getAllMasterData,
 };

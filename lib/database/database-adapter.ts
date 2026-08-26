@@ -76,6 +76,7 @@ export interface DatabaseAdapter {
     input: UpdateMasterDataInput,
   ): Promise<MasterDataItem>;
   toggleSimpleMasterDataStatus(category: SimpleMasterCategory, id: string): Promise<MasterDataItem>;
+  deleteSimpleMasterDataItem(category: SimpleMasterCategory, id: string): Promise<void>;
 
   // Master data — Lookup (Category, Type, Shed, Gender, Religion, ...)
   getLookup(type: string, options?: { activeOnly?: boolean }): Promise<LookupItem[]>;
@@ -84,6 +85,7 @@ export interface DatabaseAdapter {
   createLookupItem(input: CreateLookupInput): Promise<LookupItem>;
   updateLookupItem(id: string, input: UpdateLookupInput): Promise<LookupItem>;
   toggleLookupStatus(id: string): Promise<LookupItem>;
+  deleteLookupItem(id: string): Promise<void>;
 
   getAllMasterData(): Promise<AllMasterData>;
 }
