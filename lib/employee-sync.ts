@@ -2,6 +2,7 @@ import "server-only";
 
 import { EMPLOYEE_SYNC_FIELD_KEYS, EMPLOYEE_SYNC_FIELDS, type EmployeeSyncFieldKey } from "@/config/employee-sync-fields";
 import { readEmployeeSyncSheet } from "@/lib/employee-sync-sheet";
+import { readEmployeeMovementSyncSheet } from "@/lib/employee-movement-sync-sheet";
 import { employeeSyncRowSchema } from "@/schemas/employee-sync.schema";
 import { buildMasterDataCasingMap, normalizeToMasterDataCasing } from "@/lib/employee-import";
 import {
@@ -13,7 +14,7 @@ import {
   createContractHistoryEntry,
 } from "@/lib/employee-service";
 import { getContractCriteria } from "@/lib/contract-criteria-service";
-import { autoLogPermanentMovement } from "@/lib/employee-movement-service";
+import { autoLogPermanentMovement, getMovementHistory, createMovementEntry } from "@/lib/employee-movement-service";
 import { calculateContractPeriodDates } from "@/lib/contract-dates";
 import type { EmployeeInput, EmployeeRecord, ContractCriteriaItem } from "@/lib/database/types";
 
@@ -73,6 +74,30 @@ export interface EmployeeSyncPreview {
 
 function norm(value: string | undefined | null): string {
   return (value ?? "").trim();
+}
+
+/**
+ * Every select-type sync field whose value doesn't match anything in Master
+ * Data (case-insensitively — same lookup normalizeToMasterDataCasing already
+ * ran), so the row gets rejected instead of silently saving an unrecognized
+ * value (e.g. a POSITION typo, or one that was never added to Master Data).
+ * A blank cell is exempt — same "sheet isn't managing this field" convention
+ * used elsewhere in this file — only a genuinely present-but-unmatched value
+ * counts as a mismatch.
+ */
+function findMasterDataMismatches(
+  incoming: EmployeeInput,
+  casingByField: Map<string, Map<string, string>>,
+): { field: string; label: string; value: string }[] {
+  const mismatches: { field: string; label: string; value: string }[] = [];
+  for (const [fieldKey, casingMap] of casingByField) {
+    if (!EMPLOYEE_SYNC_FIELD_KEYS.includes(fieldKey)) continue;
+    const raw = norm(incoming[fieldKey]);
+    if (!raw || casingMap.has(raw.toLowerCase())) continue;
+    const fieldMeta = EMPLOYEE_SYNC_FIELDS.find((f) => f.key === fieldKey);
+    mismatches.push({ field: fieldKey, label: fieldMeta?.label ?? fieldKey, value: raw });
+  }
+  return mismatches;
 }
 
 /** Fields never diffed against the dashboard for an EXISTING employee: NIK is the match key itself, FINGER CODE is generated once at creation and immutable afterward (updateEmployee silently ignores it), STATUS gets its own blank-means-"don't touch" handling below. */
@@ -206,6 +231,16 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
     const incoming: EmployeeInput = { ...parsed.data };
     normalizeToMasterDataCasing(incoming, casingByField);
 
+    const mismatches = findMasterDataMismatches(incoming, casingByField);
+    if (mismatches.length > 0) {
+      rejected.push({
+        rowNumber: row.rowNumber,
+        name: sheetName,
+        reason: mismatches.map((m) => `${m.label} "${m.value}" is not in Master Data.`).join(" "),
+      });
+      continue;
+    }
+
     const existing = nikMap.get(nik);
 
     if (!existing) {
@@ -213,15 +248,13 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
       // prior status to accidentally clear here, unlike the existing-row case below).
       if (!norm(incoming.status)) incoming.status = "Active";
       applyContractCriteriaCalc(incoming, undefined, criteriaList);
-      if (norm(incoming.contractStatus).toLowerCase() === "permanent") {
-        // PERMANEN DATE isn't a sync-managed field (see EMPLOYEE_SYNC_EXCLUDED_KEYS)
-        // and there's no existing record to fall back on for a new row, so this
-        // combination can never be satisfied from the sheet alone.
+      if (norm(incoming.contractStatus).toLowerCase() === "permanent" && !norm(incoming.permanenDate)) {
+        // No existing record to fall back on for a brand-new row — the sheet
+        // itself has to supply PERMANEN DATE for this combination.
         rejected.push({
           rowNumber: row.rowNumber,
           name: sheetName,
-          reason:
-            "CONTRACT STATUS is Permanent but this employee doesn't exist yet, so there's no PERMANEN DATE to use — create the employee with another status first, then set it to Permanent on the dashboard.",
+          reason: "CONTRACT STATUS is Permanent but PERMANEN DATE is blank in the sheet.",
         });
         continue;
       }
@@ -229,20 +262,24 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
       continue;
     }
 
-    // A blank STATUS cell on an existing row means "admin isn't managing
-    // status from the sheet for this row" — treat as no-op rather than a
-    // diff that would clear it, and never send it to updateEmployee.
+    // A blank STATUS/PERMANEN DATE cell on an existing row means "admin isn't
+    // managing this from the sheet for this row" — treat as no-op rather
+    // than a diff that would clear it, and never send it to updateEmployee.
     const sheetStatusRaw = norm(incoming.status);
     if (!sheetStatusRaw) delete incoming.status;
+    if (!norm(incoming.permanenDate)) delete incoming.permanenDate;
 
     applyContractCriteriaCalc(incoming, existing, criteriaList);
 
-    if (norm(incoming.contractStatus).toLowerCase() === "permanent" && !norm(existing.permanenDate)) {
+    if (
+      norm(incoming.contractStatus).toLowerCase() === "permanent" &&
+      !norm(incoming.permanenDate) &&
+      !norm(existing.permanenDate)
+    ) {
       rejected.push({
         rowNumber: row.rowNumber,
         name: sheetName,
-        reason:
-          "CONTRACT STATUS is Permanent but PERMANEN DATE isn't set on the dashboard yet — set it there first (PERMANEN DATE isn't a sync-managed field), then re-run sync.",
+        reason: "CONTRACT STATUS is Permanent but PERMANEN DATE is blank both in the sheet and on the dashboard.",
       });
       continue;
     }
@@ -279,12 +316,168 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
   return { newRows, changedRows, inactivatedRows, rejected, unchangedRows, warnings };
 }
 
+interface MovementRowSummary {
+  rowNumber: number;
+  name: string;
+  movementType: string;
+  lastDepartment: string;
+  newDepartment: string;
+  effectiveDate: string;
+}
+
 export interface EmployeeSyncCommitSummary {
   createdCount: number;
   updatedCount: number;
   movedToInactiveCount: number;
   skippedCount: number;
+  /** How many rows caused a "Permanent" Employee Movement History entry to be auto-logged (CONTRACT STATUS -> Permanent + PERMANEN DATE set). */
+  permanentMovementsLoggedCount: number;
+  /** New Promosi/Demosi/Mutasi entries created from the "Employee Movement History" sheet tab during this commit — named + typed so the admin sees exactly who moved and how, not just a bare count. */
+  movementRowsAdded: MovementRowSummary[];
+  /** Sheet rows that matched an identical existing entry (same employee, type, effective date, new department/position) — reported by name + type too, not silently skipped, so re-running sync still confirms what's already recorded instead of just going quiet. */
+  movementRowsAlreadySynced: MovementRowSummary[];
+  /** Movement History sheet rows that couldn't be applied — unknown NIK, invalid/blank MOVEMENT TYPE, or a Department/Position not in Master Data. Reported so the admin knows what to fix in the sheet. */
+  movementRowsRejected: { rowNumber: number; name: string; reason: string }[];
   errors: { rowNumber: number; nik: string; message: string }[];
+}
+
+/**
+ * Movement Type values accepted from the "Employee Movement History" sheet
+ * — "Permanent" is deliberately excluded: that entry is exclusively
+ * auto-logged from CONTRACT STATUS + PERMANEN DATE (see
+ * autoLogPermanentMovement above) and must never be hand-entered from this
+ * sheet, or the two mechanisms could create conflicting/duplicate rows.
+ */
+const SHEET_MOVEMENT_TYPES = new Map([
+  ["promosi", "Promosi"],
+  ["demosi", "Demosi"],
+  ["mutasi", "Mutasi"],
+]);
+
+/**
+ * Reads the "Employee Movement History" sheet tab and creates any
+ * Promosi/Demosi/Mutasi entries not already recorded — runs automatically as
+ * part of every Employee Sync commit (see commitEmployeeSync below), with no
+ * separate preview/apply step of its own (unlike the main Employee rows).
+ * Idempotent: a sheet row already represented by an identical existing entry
+ * (same employee, movement type, effective date, new department/position) is
+ * reported as "already synced" (not duplicated) — named + typed just like a
+ * newly-added row, so re-running sync still visibly confirms the movement
+ * instead of silently going quiet. If the sheet tab itself doesn't exist (or
+ * the connection isn't configured), this is treated as "nothing to sync"
+ * rather than failing the whole commit — this feature is additive, so a
+ * missing/misnamed tab shouldn't block the main Employee sync.
+ */
+async function syncEmployeeMovementSheet(): Promise<{
+  added: MovementRowSummary[];
+  alreadySynced: MovementRowSummary[];
+  rejected: { rowNumber: number; name: string; reason: string }[];
+}> {
+  let rows: Awaited<ReturnType<typeof readEmployeeMovementSyncSheet>>;
+  try {
+    rows = await readEmployeeMovementSyncSheet();
+  } catch {
+    return { added: [], alreadySynced: [], rejected: [] };
+  }
+  if (rows.length === 0) return { added: [], alreadySynced: [], rejected: [] };
+
+  const [employees, casingByField] = await Promise.all([getEmployees(), buildMasterDataCasingMap()]);
+  const nikMap = new Map<string, EmployeeRecord>();
+  for (const emp of employees) {
+    const nik = norm(emp.nik);
+    if (nik && !nikMap.has(nik)) nikMap.set(nik, emp);
+  }
+  const deptCasing = casingByField.get("department");
+  const posCasing = casingByField.get("position");
+
+  const rejected: { rowNumber: number; name: string; reason: string }[] = [];
+  const added: MovementRowSummary[] = [];
+  const alreadySynced: MovementRowSummary[] = [];
+
+  for (const row of rows) {
+    const nik = norm(row.nik);
+    const employee = nik ? nikMap.get(nik) : undefined;
+    if (!employee) {
+      rejected.push({ rowNumber: row.rowNumber, name: row.name, reason: `NIK "${nik}" does not match any employee on the dashboard.` });
+      continue;
+    }
+    const displayName = row.name || employee.name;
+
+    const movementType = SHEET_MOVEMENT_TYPES.get(norm(row.movementType).toLowerCase());
+    if (!movementType) {
+      rejected.push({
+        rowNumber: row.rowNumber,
+        name: displayName,
+        reason: `MOVEMENT TYPE "${row.movementType}" must be one of Promosi, Demosi, or Mutasi.`,
+      });
+      continue;
+    }
+
+    const effectiveDate = norm(row.effectiveDate);
+    if (!effectiveDate) {
+      rejected.push({ rowNumber: row.rowNumber, name: displayName, reason: "EFECTIVE DATE is blank." });
+      continue;
+    }
+
+    const newDeptRaw = norm(row.newDepartment);
+    const newPosRaw = norm(row.newPosition);
+    if (!newDeptRaw || !newPosRaw) {
+      rejected.push({ rowNumber: row.rowNumber, name: displayName, reason: "New DEPARTMENT/POSITION is blank." });
+      continue;
+    }
+    if (!deptCasing?.has(newDeptRaw.toLowerCase())) {
+      rejected.push({ rowNumber: row.rowNumber, name: displayName, reason: `New DEPARTMENT "${newDeptRaw}" is not in Master Data.` });
+      continue;
+    }
+    if (!posCasing?.has(newPosRaw.toLowerCase())) {
+      rejected.push({ rowNumber: row.rowNumber, name: displayName, reason: `New POSITION "${newPosRaw}" is not in Master Data.` });
+      continue;
+    }
+
+    // Last Department/Position default to the employee's current values when
+    // the sheet leaves them blank (mirrors the dashboard's "Add Movement",
+    // which auto-fills Last from the employee's current record).
+    const lastDeptRaw = norm(row.lastDepartment) || norm(employee.department);
+    const lastPosRaw = norm(row.lastPosition) || norm(employee.position);
+    if (lastDeptRaw && !deptCasing?.has(lastDeptRaw.toLowerCase())) {
+      rejected.push({ rowNumber: row.rowNumber, name: displayName, reason: `Last DEPARTMENT "${lastDeptRaw}" is not in Master Data.` });
+      continue;
+    }
+    if (lastPosRaw && !posCasing?.has(lastPosRaw.toLowerCase())) {
+      rejected.push({ rowNumber: row.rowNumber, name: displayName, reason: `Last POSITION "${lastPosRaw}" is not in Master Data.` });
+      continue;
+    }
+
+    const newDepartment = deptCasing!.get(newDeptRaw.toLowerCase())!;
+    const newPosition = posCasing!.get(newPosRaw.toLowerCase())!;
+    const lastDepartment = (lastDeptRaw && deptCasing!.get(lastDeptRaw.toLowerCase())) || lastDeptRaw;
+    const lastPosition = (lastPosRaw && posCasing!.get(lastPosRaw.toLowerCase())) || lastPosRaw;
+
+    const existingHistory = await getMovementHistory(employee.recordId);
+    const alreadyExists = existingHistory.some(
+      (m) =>
+        m.movementType === movementType &&
+        m.effectiveDate === effectiveDate &&
+        m.newDepartment === newDepartment &&
+        m.newPosition === newPosition,
+    );
+    if (alreadyExists) {
+      alreadySynced.push({ rowNumber: row.rowNumber, name: displayName, movementType, lastDepartment, newDepartment, effectiveDate });
+      continue;
+    }
+
+    await createMovementEntry(employee.recordId, {
+      movementType,
+      effectiveDate,
+      lastDepartment,
+      lastPosition,
+      newDepartment,
+      newPosition,
+    });
+    added.push({ rowNumber: row.rowNumber, name: displayName, movementType, lastDepartment, newDepartment, effectiveDate });
+  }
+
+  return { added, alreadySynced, rejected };
 }
 
 export interface CommitRowGroups {
@@ -301,7 +494,17 @@ export async function commitEmployeeSync(
 ): Promise<EmployeeSyncCommitSummary> {
   const total = rows.newRows.length + rows.changedRows.length + rows.inactivatedRows.length;
   let processed = 0;
-  const summary: EmployeeSyncCommitSummary = { createdCount: 0, updatedCount: 0, movedToInactiveCount: 0, skippedCount: 0, errors: [] };
+  const summary: EmployeeSyncCommitSummary = {
+    createdCount: 0,
+    updatedCount: 0,
+    movedToInactiveCount: 0,
+    skippedCount: 0,
+    permanentMovementsLoggedCount: 0,
+    movementRowsAdded: [],
+    movementRowsAlreadySynced: [],
+    movementRowsRejected: [],
+    errors: [],
+  };
   const criteriaList = await getContractCriteria({ activeOnly: true });
 
   function tick() {
@@ -318,6 +521,15 @@ export async function commitEmployeeSync(
     try {
       const created = await createEmployee(row.incoming);
       await seedContractHistoryIfEmpty(created.recordId, row.incoming, criteriaList);
+      const loggedPermanent = await autoLogPermanentMovement(
+        created.recordId,
+        "",
+        created.contractStatus,
+        created.department,
+        created.position,
+        created.permanenDate,
+      );
+      if (loggedPermanent) summary.permanentMovementsLoggedCount += 1;
       summary.createdCount += 1;
     } catch (err) {
       summary.errors.push({ rowNumber: row.rowNumber, nik: row.nik, message: err instanceof Error ? err.message : "Failed to create employee." });
@@ -337,7 +549,15 @@ export async function commitEmployeeSync(
       // previousContractStatus is passed blank ("") rather than tracked precisely —
       // autoLogPermanentMovement's own "already logged?" check (by movementType,
       // not by this flag) is what actually prevents a duplicate entry on repeat syncs.
-      await autoLogPermanentMovement(row.recordId, "", updated.contractStatus, updated.department, updated.position, updated.permanenDate);
+      const loggedPermanent = await autoLogPermanentMovement(
+        row.recordId,
+        "",
+        updated.contractStatus,
+        updated.department,
+        updated.position,
+        updated.permanenDate,
+      );
+      if (loggedPermanent) summary.permanentMovementsLoggedCount += 1;
       summary.updatedCount += 1;
     } catch (err) {
       summary.errors.push({ rowNumber: row.rowNumber, nik: row.nik, message: err instanceof Error ? err.message : "Failed to update employee." });
@@ -364,6 +584,11 @@ export async function commitEmployeeSync(
     }
     tick();
   }
+
+  const movementSync = await syncEmployeeMovementSheet();
+  summary.movementRowsAdded = movementSync.added;
+  summary.movementRowsAlreadySynced = movementSync.alreadySynced;
+  summary.movementRowsRejected = movementSync.rejected;
 
   return summary;
 }

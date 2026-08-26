@@ -64,12 +64,23 @@ export function EmployeeMovementHistoryEditor({
       )}
 
       <div className="space-y-3">
-        {entries.map((entry) => (
+        {entries.map((entry) => {
+          // The auto-logged "Permanent" entry mirrors Contract Status +
+          // Permanen Date — it must stay read-only here so it can't drift
+          // from those fields; edit Contract Information instead.
+          const isAutoPermanent = entry.movementType === "Permanent";
+          const rowReadOnly = readOnly || isAutoPermanent;
+          return (
           <div key={entry.key} className="space-y-3 rounded-lg border border-border p-3">
+            {isAutoPermanent && !readOnly && (
+              <p className="text-xs text-muted-foreground">
+                Auto-logged from Contract Information (Contract Status + Permanen Date). To change it, edit those fields instead.
+              </p>
+            )}
             <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
               <div>
                 <Label className="mb-1.5 block text-xs text-muted-foreground">Movement Type</Label>
-                {readOnly ? (
+                {rowReadOnly ? (
                   <p className="text-sm font-medium">{entry.movementType}</p>
                 ) : (
                   <Select value={entry.movementType} onValueChange={(v) => onChangeField(entry.key, "movementType", v)}>
@@ -88,7 +99,7 @@ export function EmployeeMovementHistoryEditor({
               </div>
               <div>
                 <Label className="mb-1.5 block text-xs text-muted-foreground">Effective Date</Label>
-                {readOnly ? (
+                {rowReadOnly ? (
                   <p className="text-sm">{formatDateDMY(entry.effectiveDate)}</p>
                 ) : (
                   <Input
@@ -103,7 +114,7 @@ export function EmployeeMovementHistoryEditor({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  title="Remove this movement"
+                  title={isAutoPermanent ? "Remove this auto-logged entry (it will be re-logged on the next save if Contract Status is still Permanent)" : "Remove this movement"}
                   onClick={() => onRemove(entry.key)}
                 >
                   <Trash2 className="size-4" />
@@ -116,7 +127,7 @@ export function EmployeeMovementHistoryEditor({
                 <p className="text-xs font-medium text-muted-foreground">Last</p>
                 <div>
                   <Label className="mb-1.5 block text-xs text-muted-foreground">Department</Label>
-                  {readOnly ? (
+                  {rowReadOnly ? (
                     <p className="text-sm">{entry.lastDepartment || "—"}</p>
                   ) : (
                     <Select value={entry.lastDepartment} onValueChange={(v) => onChangeField(entry.key, "lastDepartment", v)}>
@@ -135,7 +146,7 @@ export function EmployeeMovementHistoryEditor({
                 </div>
                 <div>
                   <Label className="mb-1.5 block text-xs text-muted-foreground">Position</Label>
-                  {readOnly ? (
+                  {rowReadOnly ? (
                     <p className="text-sm">{entry.lastPosition || "—"}</p>
                   ) : (
                     <Select value={entry.lastPosition} onValueChange={(v) => onChangeField(entry.key, "lastPosition", v)}>
@@ -158,7 +169,7 @@ export function EmployeeMovementHistoryEditor({
                 <p className="text-xs font-medium text-muted-foreground">New</p>
                 <div>
                   <Label className="mb-1.5 block text-xs text-muted-foreground">Department</Label>
-                  {readOnly ? (
+                  {rowReadOnly ? (
                     <p className="text-sm">{entry.newDepartment || "—"}</p>
                   ) : (
                     <Select value={entry.newDepartment} onValueChange={(v) => onChangeField(entry.key, "newDepartment", v)}>
@@ -177,7 +188,7 @@ export function EmployeeMovementHistoryEditor({
                 </div>
                 <div>
                   <Label className="mb-1.5 block text-xs text-muted-foreground">Position</Label>
-                  {readOnly ? (
+                  {rowReadOnly ? (
                     <p className="text-sm">{entry.newPosition || "—"}</p>
                   ) : (
                     <Select value={entry.newPosition} onValueChange={(v) => onChangeField(entry.key, "newPosition", v)}>
@@ -197,7 +208,8 @@ export function EmployeeMovementHistoryEditor({
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

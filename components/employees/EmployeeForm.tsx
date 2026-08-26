@@ -391,6 +391,32 @@ export function EmployeeForm({
         }),
       ...removedIds.map((id) => fetch(`/api/employees/${employeeId}/movements/${id}`, { method: "DELETE" })),
     ]);
+
+    // Re-pull from the server rather than trust local state: the save that
+    // just happened may have server-side auto-logged a "Permanent" entry
+    // (see autoLogPermanentMovement) that this client never knew about.
+    await refreshMovementHistory(employeeId);
+  }
+
+  async function refreshMovementHistory(employeeId: string) {
+    try {
+      const res = await fetch(`/api/employees/${employeeId}/movements`);
+      const data: { entries?: EmployeeMovementEntry[] } = await res.json();
+      const rows: EmployeeMovementRow[] = (data.entries ?? []).map((e) => ({
+        key: e.id,
+        movementType: e.movementType,
+        effectiveDate: e.effectiveDate,
+        lastDepartment: e.lastDepartment,
+        lastPosition: e.lastPosition,
+        newDepartment: e.newDepartment,
+        newPosition: e.newPosition,
+      }));
+      setMovementEntries(rows);
+      setOriginalMovementIds(rows.map((r) => r.key));
+    } catch {
+      // Non-fatal — the employee record itself already saved successfully;
+      // the box just won't reflect the very latest state until next reload.
+    }
   }
 
   async function handleDelete() {
@@ -592,7 +618,15 @@ export function EmployeeForm({
 
       if (!parsed.success || Object.keys(flat).length > 0) {
         setErrors(flat);
-        toast.error("Please fix the highlighted fields before saving.");
+        const errorLabels = Object.keys(flat).map((key) => {
+          const fieldMeta = ALL_EMPLOYEE_FORM_FIELDS.find((f) => f.key === key);
+          return fieldMeta?.label ?? key;
+        });
+        toast.error(
+          errorLabels.length > 0
+            ? `Please fix: ${errorLabels.join(", ")}.`
+            : "Please fix the highlighted fields before saving.",
+        );
         const firstErrorKey = Object.keys(flat)[0];
         if (firstErrorKey) {
           document

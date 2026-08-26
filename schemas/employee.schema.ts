@@ -20,14 +20,13 @@ import { ALL_EMPLOYEE_FORM_FIELDS } from "@/config/employee-fields";
  * exclude it — this override only relaxes the schema-level requirement so
  * the walk-in submission isn't blocked by a field it never shows.
  *
- * POSITION APPLIED is also here for the mirror-image reason: it's required
- * ON the Applicant Pool walk-in form, but excluded (hidden) on New Hiring and
- * the invite-link flow — since a single schema is shared by all public
- * forms, it can't be "required" only where shown, so it's relaxed here and
- * enforced instead as a targeted client-side check in EmployeeForm.tsx
- * (only when the field isn't in `excludeFields` — i.e. walk-in only).
+ * POSITION APPLIED is never required at the schema level on any form (see
+ * the dedicated `field.key === "positionApplied"` branch in
+ * buildEmployeeSchema below) — it's required only where actually shown
+ * (Applicant Pool walk-in), enforced there by a targeted client-side check
+ * in EmployeeForm.tsx instead.
  */
-const PUBLIC_APPLY_OPTIONAL_OVERRIDES = new Set(["nik", "department", "joinDate", "position", "positionApplied"]);
+const PUBLIC_APPLY_OPTIONAL_OVERRIDES = new Set(["nik", "department", "joinDate", "position"]);
 
 /**
  * Zod schema built dynamically from `config/employee-fields.ts`, the single
@@ -73,6 +72,19 @@ function buildEmployeeSchema(optionalOverrides: Set<string>) {
 
     if (field.key === "ktpNo" && optionalOverrides.has("ktpNo")) {
       shape[field.key] = z.string({ required_error: `${field.label} wajib diisi` }).trim().min(1, `${field.label} wajib diisi`);
+      continue;
+    }
+
+    if (field.key === "positionApplied") {
+      // Never enforced here, on EITHER schema — it's recruitment-flow data,
+      // shown only on the Applicant Pool walk-in form (excluded everywhere
+      // else, including the internal admin Employees Edit form, via
+      // `excludeFields`). Requiring it at the schema level would block saves
+      // on any form that hides the field, with no visible red field to
+      // explain why (nothing renders its error text). Enforced instead as a
+      // targeted client-side check in EmployeeForm.tsx, gated on the field
+      // actually being shown (`!excludeFields?.includes("positionApplied")`).
+      shape[field.key] = z.string().trim().optional().or(z.literal(""));
       continue;
     }
 

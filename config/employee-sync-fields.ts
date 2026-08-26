@@ -9,11 +9,16 @@ import { ALL_EMPLOYEE_FORM_FIELDS, type EmployeeField } from "@/config/employee-
  */
 /**
  * Fields dropped from sync entirely — never read from the sheet, never
- * validated, never diffed. PERMANEN DATE is a manual HR decision; POSITION
- * APPLIED / INTERVIEW EVALUATION belong to the recruitment flow, not
- * ongoing employee lifecycle management.
+ * validated, never diffed. POSITION APPLIED / INTERVIEW EVALUATION belong to
+ * the recruitment flow, not ongoing employee lifecycle management.
+ *
+ * PERMANEN DATE is deliberately NOT here (it used to be) — an admin setting
+ * CONTRACT STATUS to "Permanent" + PERMANEN DATE in the sheet is exactly how
+ * the "Permanent" Employee Movement History entry gets triggered on sync
+ * (see autoLogPermanentMovement in lib/employee-movement-service.ts, called
+ * from lib/employee-sync.ts's commitEmployeeSync).
  */
-const SYNC_EXCLUDED_KEYS = new Set(["permanenDate", "positionApplied", "interviewEvaluation"]);
+const SYNC_EXCLUDED_KEYS = new Set(["positionApplied", "interviewEvaluation"]);
 
 /** Excludes readOnly fields (SN, AGE, MASA KERJA) — same convention as Import's WRITABLE_FIELDS; these are system-calculated, never admin input. */
 export const EMPLOYEE_SYNC_FIELDS: EmployeeField[] = ALL_EMPLOYEE_FORM_FIELDS.filter(

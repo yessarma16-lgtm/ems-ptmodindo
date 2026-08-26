@@ -23,11 +23,24 @@ interface EmployeeSyncPreview {
   warnings: string[];
 }
 type Decision = "apply" | "skip";
+interface MovementRowSummary {
+  rowNumber: number;
+  name: string;
+  movementType: string;
+  lastDepartment: string;
+  newDepartment: string;
+  effectiveDate: string;
+}
+
 interface CommitSummary {
   createdCount: number;
   updatedCount: number;
   movedToInactiveCount: number;
   skippedCount: number;
+  permanentMovementsLoggedCount: number;
+  movementRowsAdded: MovementRowSummary[];
+  movementRowsAlreadySynced: MovementRowSummary[];
+  movementRowsRejected: { rowNumber: number; name: string; reason: string }[];
   errors: { rowNumber: number; nik: string; message: string }[];
 }
 
@@ -143,7 +156,10 @@ export function EmployeeSyncPanel() {
       if (!finalSummary) { toast.error("Sync did not return a result."); return; }
       setSummary(finalSummary);
       setPreview(null);
-      if (finalSummary.createdCount + finalSummary.updatedCount + finalSummary.movedToInactiveCount > 0) {
+      if (
+        finalSummary.createdCount + finalSummary.updatedCount + finalSummary.movedToInactiveCount + finalSummary.movementRowsAdded.length >
+        0
+      ) {
         toast.success("Employee sync completed.");
         router.refresh();
       }
@@ -321,12 +337,42 @@ export function EmployeeSyncPanel() {
                 <CheckCircle2 className="size-4" />
                 Sync completed
               </div>
+              {summary.movementRowsAdded.length > 0 && (
+                <div className="mb-3 rounded-md border border-border bg-muted/30 p-3">
+                  <div className="mb-1 text-xs font-medium text-muted-foreground">Movement History added</div>
+                  <ul className="ml-5 list-disc space-y-0.5 text-xs text-muted-foreground">
+                    {summary.movementRowsAdded.map((m, idx) => (
+                      <li key={idx}>
+                        {m.name} — {m.movementType} ({m.lastDepartment} → {m.newDepartment}), effective {m.effectiveDate}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <ul className="space-y-1 text-muted-foreground">
                 <li>{summary.createdCount} new employees created</li>
                 <li>{summary.updatedCount} employees updated</li>
                 <li>{summary.movedToInactiveCount} moved to Inactive</li>
                 <li>{summary.skippedCount} rows skipped</li>
+                {summary.permanentMovementsLoggedCount > 0 && (
+                  <li>{summary.permanentMovementsLoggedCount} employee(s) logged as Permanent in Movement History</li>
+                )}
+                {summary.movementRowsAdded.length > 0 && (
+                  <li>{summary.movementRowsAdded.length} movement(s) added from the Employee Movement History sheet</li>
+                )}
               </ul>
+              {summary.movementRowsAlreadySynced.length > 0 && (
+                <div className="mt-3 rounded-md border border-border bg-muted/30 p-3">
+                  <div className="mb-1 text-xs font-medium text-muted-foreground">Movement History already in sync</div>
+                  <ul className="ml-5 list-disc space-y-0.5 text-xs text-muted-foreground">
+                    {summary.movementRowsAlreadySynced.map((m, idx) => (
+                      <li key={idx}>
+                        {m.name} — {m.movementType} ({m.lastDepartment} → {m.newDepartment}), effective {m.effectiveDate}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {summary.errors.length > 0 && (
                 <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
                   <div className="mb-1 flex items-center gap-2 text-xs font-medium text-destructive"><AlertTriangle className="size-3.5" />Errors</div>
@@ -335,12 +381,20 @@ export function EmployeeSyncPanel() {
                   </ul>
                 </div>
               )}
+              {summary.movementRowsRejected.length > 0 && (
+                <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                  <div className="mb-1 flex items-center gap-2 text-xs font-medium text-destructive"><AlertTriangle className="size-3.5" />Movement History sheet rows rejected</div>
+                  <ul className="ml-5 list-disc space-y-0.5 text-xs text-muted-foreground">
+                    {summary.movementRowsRejected.map((r, idx) => <li key={idx}>Row {r.rowNumber} ({r.name}): {r.reason}</li>)}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={committing}>Close</Button>
-            {preview && totalRows > 0 && (
+            {preview && (
               <Button type="button" onClick={handleCommit} disabled={committing || hasUndecidedRow}>
                 {committing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
                 {committing && progress ? `${progress.processed}/${progress.total} applied` : "Confirm Sync"}

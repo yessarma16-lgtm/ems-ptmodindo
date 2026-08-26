@@ -142,7 +142,9 @@ export async function deleteMovementEntry(id: string): Promise<void> {
  * doesn't change the job, just the contract status), effective on
  * PERMANEN DATE. No-ops if the transition already happened for this
  * employee (checked by movementType, not just "any row exists") or if
- * this call isn't actually a transition INTO Permanent.
+ * this call isn't actually a transition INTO Permanent. Returns true when it
+ * actually created an entry, so callers (Employee Sync's commit summary) can
+ * surface "N employee(s) logged as Permanent" instead of this happening silently.
  */
 export async function autoLogPermanentMovement(
   employeeId: string,
@@ -151,13 +153,13 @@ export async function autoLogPermanentMovement(
   department: string,
   position: string,
   permanenDate: string,
-): Promise<void> {
+): Promise<boolean> {
   const wasPermanent = previousContractStatus.trim().toLowerCase() === "permanent";
   const isNowPermanent = nextContractStatus.trim().toLowerCase() === "permanent";
-  if (wasPermanent || !isNowPermanent || !permanenDate.trim()) return;
+  if (wasPermanent || !isNowPermanent || !permanenDate.trim()) return false;
 
   const existing = await getMovementHistory(employeeId);
-  if (existing.some((m) => m.movementType === "Permanent")) return;
+  if (existing.some((m) => m.movementType === "Permanent")) return false;
 
   await createMovementEntry(employeeId, {
     movementType: "Permanent",
@@ -167,4 +169,5 @@ export async function autoLogPermanentMovement(
     newDepartment: department,
     newPosition: position,
   });
+  return true;
 }

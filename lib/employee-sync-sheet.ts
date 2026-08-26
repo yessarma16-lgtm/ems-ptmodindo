@@ -48,7 +48,7 @@ const DATE_FIELD_KEYS = new Set(EMPLOYEE_SYNC_FIELDS.filter((f) => f.type === "d
  * than silently discarded, so an unrecognized format still fails validation
  * visibly instead of vanishing.
  */
-function normalizeSheetDate(raw: string): string {
+export function normalizeSheetDate(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed || /^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
   const dmy = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(trimmed);
