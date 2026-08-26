@@ -1,6 +1,7 @@
 import "server-only";
 
 import { readSheet } from "@/lib/google-sheets";
+import { EMPLOYEES_LAST_COLUMN } from "@/config/employee-fields";
 import { EMPLOYEE_SYNC_FIELDS, type EmployeeSyncFieldKey } from "@/config/employee-sync-fields";
 
 /**
@@ -23,6 +24,29 @@ export interface SheetRejectedRow {
   reason: string;
 }
 
+const DATE_FIELD_KEYS = new Set(EMPLOYEE_SYNC_FIELDS.filter((f) => f.type === "date").map((f) => f.key));
+
+/**
+ * The Sheets API returns each cell as its FORMATTED display string, not a
+ * typed date — so a JOIN DATE cell shown as "18-08-2026" arrives as that
+ * literal text, in whatever day/month order the sheet's locale displays
+ * (Indonesian sheets: DD-MM-YYYY or DD/MM/YYYY). The rest of the app expects
+ * ISO "YYYY-MM-DD" (native `<input type="date">` silently blanks anything
+ * else). Recognized shapes are converted; anything else is left as-is rather
+ * than silently discarded, so an unrecognized format still fails validation
+ * visibly instead of vanishing.
+ */
+function normalizeSheetDate(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed || /^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const dmy = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(trimmed);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  return trimmed;
+}
+
 /**
  * Reads the "Employee Sync" tab. The header row (row 1) is matched to field
  * keys by label text, case-insensitively — the same lookup pattern
@@ -31,7 +55,7 @@ export interface SheetRejectedRow {
  * the mapping.
  */
 export async function readEmployeeSyncSheet(): Promise<{ rows: SheetEmployeeRow[]; rejected: SheetRejectedRow[] }> {
-  const grid = await readSheet(EMPLOYEE_SYNC_SHEET_NAME, "A:Z");
+  const grid = await readSheet(EMPLOYEE_SYNC_SHEET_NAME, `A:${EMPLOYEES_LAST_COLUMN}`);
   if (grid.length === 0) return { rows: [], rejected: [] };
 
   const header = grid[0] ?? [];
@@ -54,7 +78,8 @@ export async function readEmployeeSyncSheet(): Promise<{ rows: SheetEmployeeRow[
     const values = {} as Record<EmployeeSyncFieldKey, string>;
     for (const field of EMPLOYEE_SYNC_FIELDS) values[field.key as EmployeeSyncFieldKey] = "";
     columnKeyByIndex.forEach((key, index) => {
-      values[key] = String(rawRow[index] ?? "").trim();
+      const raw = String(rawRow[index] ?? "").trim();
+      values[key] = DATE_FIELD_KEYS.has(key) ? normalizeSheetDate(raw) : raw;
     });
 
     if (!values.nik) {
