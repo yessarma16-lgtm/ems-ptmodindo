@@ -5,6 +5,7 @@ import { getEmployees } from "@/lib/employee-service";
 import { ALL_EMPLOYEE_FORM_FIELDS } from "@/config/employee-fields";
 import { toApiErrorResponse } from "@/lib/api-error";
 import { formatDateDMY } from "@/lib/date-format";
+import { parseEmployeeListSearchParams, matchesEmployeeListQuery } from "@/lib/employee-list-data";
 import type { EmployeeRecord, EmployeeListScope } from "@/lib/database/types";
 
 const SCOPES: EmployeeListScope[] = ["active", "inactive", "expatriate"];
@@ -24,9 +25,11 @@ function matchesScope(employee: EmployeeRecord, scope: EmployeeListScope): boole
 }
 
 /**
- * Dumps every employee matching the chosen scope — the FULL record (all ~60
- * Employee Form fields), not just the handful of columns the on-screen table
- * shows. Reads via getEmployees(), which already paginates past Supabase
+ * Dumps every employee matching the chosen scope AND the current list page's
+ * search/department/status/position/contract/date-range filters (same query
+ * params EmployeeTable's URL carries) — the FULL record (all ~60 Employee
+ * Form fields), not just the handful of columns the on-screen table shows.
+ * Reads via getEmployees(), which already paginates past Supabase
  * PostgREST's hard 1000-row-per-request cap (see fetchAllRowsParallel in
  * postgres-adapter.ts) — a single large .range() request silently truncates
  * at 1000, which is why an earlier version of this route under-exported.
@@ -36,8 +39,15 @@ export async function GET(request: NextRequest) {
     const scopeRaw = request.nextUrl.searchParams.get("scope") ?? "active";
     const scope = (SCOPES as string[]).includes(scopeRaw) ? (scopeRaw as EmployeeListScope) : "active";
 
+    const searchParams: Record<string, string | string[] | undefined> = {};
+    for (const key of request.nextUrl.searchParams.keys()) {
+      const values = request.nextUrl.searchParams.getAll(key);
+      searchParams[key] = values.length > 1 ? values : values[0];
+    }
+    const query = parseEmployeeListSearchParams(searchParams, scope);
+
     const allEmployees = await getEmployees();
-    const employees = allEmployees.filter((e) => matchesScope(e, scope));
+    const employees = allEmployees.filter((e) => matchesScope(e, scope) && matchesEmployeeListQuery(e, query));
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "Employee Management System";

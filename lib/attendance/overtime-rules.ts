@@ -16,7 +16,17 @@ export interface OvertimeInput {
   kategori: string;
 }
 
-const HARI_LIBUR_LEMBUR = "Hari Libur/Lembur";
+/**
+ * Kategori yang berarti "seluruh jam kerja hari itu = lembur" (tidak ada jam
+ * kerja normal untuk dibandingkan) — dihitung pakai rumus tanpa-bracket di
+ * bawah, bukan lookupBracket. "Hari Libur Pemerintah" & "Hari Libur/Minggu"
+ * ditambahkan setelah verifikasi manual terhadap OTH tercatat di Excel
+ * (rumus ini menghasilkan angka yang persis cocok, sedangkan rumus
+ * Senin-Jumat/Sabtu biasa — yang membandingkan OT1 vs OutTime — salah total
+ * untuk kategori-kategori ini karena OutTime pada hari libur BUKAN jam
+ * pulang normal untuk dibandingkan).
+ */
+export const NO_BRACKET_HOLIDAY_CATEGORIES = new Set(["Hari Libur/Lembur", "Hari Libur Pemerintah", "Hari Libur/Minggu"]);
 
 function toHours(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
@@ -35,16 +45,15 @@ function roundToHalfHour(hours: number): number {
 /**
  * `lookupBracket` diinject oleh caller (bukan diimpor global) supaya
  * function ini pure & bisa ditest tanpa database — lihat bracket-table.ts.
- * Untuk kategori "Hari Libur/Lembur" atau saat `selisih <= 0`,
+ * Untuk kategori di NO_BRACKET_HOLIDAY_CATEGORIES atau saat `selisih <= 0`,
  * `lookupBracket` sengaja TIDAK dipanggil sama sekali.
  */
 export async function calculateOvertime(input: OvertimeInput, lookupBracket: BracketLookupFn): Promise<number | null> {
   const dayType = getDayType(input.tanggal);
 
-  // 2. Kategori "Hari Libur/Lembur" (Sabtu ATAU Minggu, ditentukan dari
-  // kolom kategori — bukan hari kalender) pakai rumus khusus, tidak pakai
-  // tabel bracket sama sekali.
-  if (input.kategori === HARI_LIBUR_LEMBUR) {
+  // 2. Kategori hari libur (lihat NO_BRACKET_HOLIDAY_CATEGORIES di atas)
+  // pakai rumus khusus, tidak pakai tabel bracket sama sekali.
+  if (NO_BRACKET_HOLIDAY_CATEGORIES.has(input.kategori)) {
     const start = Math.max(toHours(input.intime), toHours(input.it1));
     const workingHour = toHours(input.ot1) - start;
     const roundedWh = roundToHalfHour(workingHour);
@@ -58,7 +67,7 @@ export async function calculateOvertime(input: OvertimeInput, lookupBracket: Bra
     return lookupBracket(selisih, dayType);
   }
 
-  // 4. day_type Minggu & kategori bukan "Hari Libur/Lembur" (jarang terjadi, tetap di-handle sebagai fallback).
+  // 4. day_type Minggu & kategori bukan hari libur no-bracket (jarang terjadi, tetap di-handle sebagai fallback).
   const selisih = toHours(input.ot1) - toHours(input.outtime);
   if (selisih <= 0) return 0;
   return lookupBracket(selisih, "Minggu");

@@ -5,7 +5,7 @@ import { getAllMasterData } from "@/lib/master-data-service";
 import { toEmployeeFormMasterData, type SelectOption } from "@/lib/master-data-options";
 import { isDatabaseConfigured } from "@/lib/database/database";
 import { DatabaseConnectionError } from "@/lib/database/errors";
-import type { EmployeeListItem, EmployeeListQuery, EmployeeListScope, EmployeeSortKey } from "@/lib/database/types";
+import type { EmployeeListItem, EmployeeListQuery, EmployeeListScope, EmployeeRecord, EmployeeSortKey } from "@/lib/database/types";
 
 export type { EmployeeListScope };
 
@@ -42,6 +42,38 @@ export function parseEmployeeListSearchParams(
     page,
     pageSize: PAGE_SIZE,
   };
+}
+
+/**
+ * In-memory equivalent of getEmployeeListPage's Supabase filter chain —
+ * used where the full record set is already loaded (e.g. Export, which reads
+ * via getEmployees() to get the full ~60-field record, not the trimmed
+ * EmployeeListItem projection getEmployeeListPage returns) and just needs to
+ * know which rows match the same search/department/status/position/contract
+ * /date-range filters the list page applied. Ignores sortKey/page — export
+ * doesn't paginate or need a particular row order.
+ */
+export function matchesEmployeeListQuery(employee: EmployeeRecord, query: EmployeeListQuery): boolean {
+  const search = query.search.trim().toLowerCase();
+  if (search) {
+    const hit =
+      (employee.nik ?? "").toLowerCase().includes(search) ||
+      (employee.name ?? "").toLowerCase().includes(search) ||
+      (employee.department ?? "").toLowerCase().includes(search);
+    if (!hit) return false;
+  }
+  if (query.department && employee.department !== query.department) return false;
+  if (query.status && employee.status !== query.status) return false;
+  if (query.position.length > 0 && !query.position.includes(employee.position)) return false;
+  if (query.contractStatus && employee.contractStatus !== query.contractStatus) return false;
+
+  // Join Date on active/expatriate scope, Exit Date on inactive scope — same
+  // column getEmployeeListPage filters by for each scope.
+  const dateValue = query.scope === "inactive" ? employee.exitDate : employee.joinDate;
+  if (query.dateFrom && (!dateValue || dateValue < query.dateFrom)) return false;
+  if (query.dateTo && (!dateValue || dateValue > query.dateTo)) return false;
+
+  return true;
 }
 
 export interface EmployeeListPageData {

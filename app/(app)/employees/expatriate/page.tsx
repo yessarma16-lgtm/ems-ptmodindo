@@ -32,7 +32,7 @@ export default async function ExpatriateEmployeesPage({ searchParams }: PageProp
         ]}
         actions={
           <div className="flex items-center gap-3">
-            <ExportEmployeesButton scope={query.scope} />
+            <ExportEmployeesButton scope={query.scope} query={query} />
             <Button asChild>
               <Link href="/employees/new">
                 <Plus />

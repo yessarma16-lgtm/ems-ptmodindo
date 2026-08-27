@@ -31,7 +31,7 @@ export default async function EmployeesPage({ searchParams }: PageProps) {
         actions={
           <div className="flex items-center gap-3">
             <EmployeeSyncPanel />
-            <ExportEmployeesButton scope={query.scope} />
+            <ExportEmployeesButton scope={query.scope} query={query} />
             <ImportEmployeesDialog />
             <Button asChild>
               <Link href="/employees/new">

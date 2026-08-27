@@ -3,7 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { getSqliteDb } from "@/lib/database/sqlite-connection";
 import { getDayType, type DayType } from "@/lib/attendance/day-type";
-import { calculateOvertime } from "@/lib/attendance/overtime-rules";
+import { calculateOvertime, NO_BRACKET_HOLIDAY_CATEGORIES } from "@/lib/attendance/overtime-rules";
 import type { BracketLookupFn } from "@/lib/attendance/bracket-table";
 import type { AttendanceDatabaseAdapter } from "@/lib/database/attendance-adapter";
 import { AttendanceValidationError } from "@/lib/database/attendance-errors";
@@ -424,7 +424,7 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
             { intime: raw.intime!, it1: raw.it1!, outtime: raw.outtime!, ot1: raw.ot1!, tanggal: raw.tanggal, kategori: raw.kategori },
             lookupBracket,
           );
-          bracketUsed = raw.kategori === "Hari Libur/Lembur" ? "Rumus Hari Libur/Lembur (tanpa bracket)" : `Bracket ${dayType}`;
+          bracketUsed = NO_BRACKET_HOLIDAY_CATEGORIES.has(raw.kategori) ? `Rumus ${raw.kategori} (tanpa bracket)` : `Bracket ${dayType}`;
         }
 
         if (existingRow && toStr(existingRow.status) === "Dikoreksi Manual") {
