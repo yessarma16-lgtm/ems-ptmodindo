@@ -57,7 +57,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
   return (
     <div>
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="sticky top-16 z-20 -mx-4 mb-6 flex flex-col gap-4 border-b border-border/60 bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:flex-row sm:items-end sm:justify-between sm:px-6 lg:-mx-8 lg:px-8">
         <DashboardGreeting name={user?.name ?? "there"} />
         {data && <DashboardFilterBar month={filter.month} year={filter.year} availableYears={data.availableYears} />}
       </div>
