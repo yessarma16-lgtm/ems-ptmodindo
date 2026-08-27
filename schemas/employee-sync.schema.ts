@@ -15,6 +15,25 @@ for (const field of EMPLOYEE_SYNC_FIELDS) {
 export const employeeSyncRowSchema = z.object(shape);
 export type EmployeeSyncRowValues = z.infer<typeof employeeSyncRowSchema>;
 
+/**
+ * Same shape, relaxed requirements — for a row whose STATUS cell marks it as
+ * exiting ("EXIT"/"Inactive"). Only NIK and EXIT DATE are required; every
+ * other column (name, department, position, join date, finger code, ...) is
+ * optional, since an admin marking someone as exited from the sheet
+ * shouldn't need the rest of that row filled in correctly first. See
+ * lib/employee-sync.ts's EXIT_STATUS_VALUES / previewEmployeeSync for how
+ * this gets selected and how blank cells are handled (existing data
+ * preserved, never cleared).
+ */
+const exitRequiredKeys = new Set<string>(["nik", "exitDate"]);
+const exitShape: Record<string, z.ZodTypeAny> = {};
+for (const field of EMPLOYEE_SYNC_FIELDS) {
+  exitShape[field.key] = exitRequiredKeys.has(field.key)
+    ? z.string({ required_error: `${field.label} is required` }).trim().min(1, `${field.label} is required`)
+    : z.string().trim().optional().or(z.literal(""));
+}
+export const employeeSyncExitRowSchema = z.object(exitShape);
+
 const syncRowRef = z.object({
   rowNumber: z.number(),
   nik: z.string(),

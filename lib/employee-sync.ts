@@ -4,7 +4,7 @@ import { EMPLOYEE_SYNC_FIELD_KEYS, EMPLOYEE_SYNC_FIELDS, type EmployeeSyncFieldK
 import { FIELD_MASTER_DATA_SOURCE } from "@/config/field-master-data-map";
 import { readEmployeeSyncSheet, normalizeSheetDate } from "@/lib/employee-sync-sheet";
 import { readEmployeeMovementSyncSheet } from "@/lib/employee-movement-sync-sheet";
-import { employeeSyncRowSchema } from "@/schemas/employee-sync.schema";
+import { employeeSyncRowSchema, employeeSyncExitRowSchema } from "@/schemas/employee-sync.schema";
 import { buildMasterDataCasingMap, normalizeToMasterDataCasing } from "@/lib/employee-import";
 import {
   getEmployees,
@@ -76,6 +76,9 @@ export interface EmployeeSyncPreview {
 function norm(value: string | undefined | null): string {
   return (value ?? "").trim();
 }
+
+/** STATUS values (case-insensitive) that mean "this row is exiting" — "EXIT" is an alias for "Inactive", both trigger the relaxed exit-row schema and the move-to-Inactive path. */
+const EXIT_STATUS_VALUES = new Set(["exit", "inactive"]);
 
 /**
  * BPJS KTK / BPJS KES are declared as "select" fields (config/employee-fields.ts,
@@ -270,7 +273,13 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
     }
     seenSheetNiks.add(nik);
 
-    const parsed = employeeSyncRowSchema.safeParse(row.values);
+    // A row whose STATUS cell says "EXIT" (or "Inactive") only needs NIK +
+    // EXIT DATE to be valid — everything else about that row can be
+    // incomplete, since the employee is leaving. Detected from the raw
+    // (unparsed) cell so the schema choice below can relax accordingly.
+    const isExitRow = EXIT_STATUS_VALUES.has(norm(row.values.status).toLowerCase());
+
+    const parsed = (isExitRow ? employeeSyncExitRowSchema : employeeSyncRowSchema).safeParse(row.values);
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
       rejected.push({ rowNumber: row.rowNumber, name: sheetName, reason: issue?.message ?? "Invalid row." });
@@ -298,9 +307,31 @@ export async function previewEmployeeSync(): Promise<EmployeeSyncPreview> {
 
     const existing = nikMap.get(nik);
 
+    if (isExitRow) {
+      // "EXIT" is an alias for "Inactive" — normalize it regardless of what
+      // the sheet literally wrote in the STATUS cell.
+      incoming.status = "Inactive";
+      if (existing) {
+        // The exit-row schema only requires NIK + EXIT DATE, so every other
+        // field can be blank here — but blank must mean "don't touch",
+        // never "clear this field" (same convention used for STATUS/PERMANEN
+        // DATE elsewhere in this file). Copying the existing value back in
+        // (rather than deleting the key) also keeps the diff preview from
+        // showing a false "existing -> blank" line for fields the sheet
+        // just didn't bother filling in for this exit.
+        for (const key of EMPLOYEE_SYNC_FIELD_KEYS) {
+          if (key === "status" || norm(incoming[key])) continue;
+          const existingValue = norm(existing[key]);
+          if (existingValue) incoming[key] = existingValue;
+          else delete incoming[key];
+        }
+      }
+    }
+
     if (!existing) {
       // Brand-new employee: a blank STATUS cell defaults to Active (there's no
-      // prior status to accidentally clear here, unlike the existing-row case below).
+      // prior status to accidentally clear here, unlike the existing-row case below) —
+      // unless this is already forced to Inactive above via an EXIT row.
       if (!norm(incoming.status)) incoming.status = "Active";
       applyContractCriteriaCalc(incoming, undefined, criteriaList);
       if (norm(incoming.contractStatus).toLowerCase() === "permanent" && !norm(incoming.permanenDate)) {
