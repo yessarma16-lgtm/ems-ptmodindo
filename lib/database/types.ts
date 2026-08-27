@@ -78,6 +78,8 @@ export interface EmployeeListQuery {
   search: string;
   department: string;
   status: string;
+  /** Multi-select — matches any of these Position values. Empty array = no filter. */
+  position: string[];
   contractStatus: string;
   /** Filters by JOIN DATE on "active"/"expatriate" scope, EXIT DATE on "inactive" scope. Empty string = no bound. */
   dateFrom: string;

@@ -28,10 +28,13 @@ interface EmployeeTableProps {
   departmentOptions: SelectOption[];
   contractStatusOptions: SelectOption[];
   statusOptions: SelectOption[];
+  positionOptions: SelectOption[];
   /** "inactive" swaps the Type/Join Date columns for Join Date/Resign Date — more relevant once someone has left. */
   variant?: "active" | "inactive";
   /** Label for the date range filter (e.g. "Join Date", "Resign Date") — omit to hide it (e.g. on the Expatriate page). */
   dateFilterLabel?: string;
+  /** Shows the Position checkbox filter instead of the Status dropdown — see EmployeeFilters. */
+  usePositionFilter?: boolean;
 }
 
 function statusVariant(status: string): "success" | "warning" | "destructive" | "secondary" {
@@ -51,8 +54,10 @@ export function EmployeeTable({
   departmentOptions,
   contractStatusOptions,
   statusOptions,
+  positionOptions,
   variant = "active",
   dateFilterLabel,
+  usePositionFilter = false,
 }: EmployeeTableProps) {
   const isInactiveView = variant === "inactive";
   const router = useRouter();
@@ -80,6 +85,7 @@ export function EmployeeTable({
     if (merged.search) params.set("q", merged.search);
     if (merged.department) params.set("dept", merged.department);
     if (merged.status) params.set("status", merged.status);
+    for (const p of merged.position) params.append("position", p);
     if (merged.contractStatus) params.set("contract", merged.contractStatus);
     if (merged.dateFrom) params.set("from", merged.dateFrom);
     if (merged.dateTo) params.set("to", merged.dateTo);
@@ -103,6 +109,7 @@ export function EmployeeTable({
         search: next.search,
         department: next.department,
         status: next.status,
+        position: next.position,
         contractStatus: next.contractStatus,
         dateFrom: next.dateFrom,
         dateTo: next.dateTo,
@@ -131,6 +138,7 @@ export function EmployeeTable({
       search: searchText,
       department: query.department,
       status: query.status,
+      position: query.position,
       contractStatus: query.contractStatus,
       dateFrom: query.dateFrom,
       dateTo: query.dateTo,
@@ -176,6 +184,7 @@ export function EmployeeTable({
           search: searchText,
           department: query.department,
           status: query.status,
+          position: query.position,
           contractStatus: query.contractStatus,
           dateFrom: query.dateFrom,
           dateTo: query.dateTo,
@@ -184,6 +193,8 @@ export function EmployeeTable({
         departmentOptions={departmentOptions}
         contractStatusOptions={contractStatusOptions}
         statusOptions={statusOptions}
+        positionOptions={positionOptions}
+        usePositionFilter={usePositionFilter}
       />
 
       <div

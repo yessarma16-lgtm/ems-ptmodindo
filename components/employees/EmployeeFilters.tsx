@@ -10,12 +10,14 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
+import { MultiSelectCheckboxFilter } from "@/components/employees/MultiSelectCheckboxFilter";
 import type { SelectOption } from "@/lib/master-data-options";
 
 export interface EmployeeFiltersState {
   search: string;
   department: string;
   status: string;
+  position: string[];
   contractStatus: string;
   dateFrom: string;
   dateTo: string;
@@ -27,6 +29,9 @@ interface EmployeeFiltersProps {
   departmentOptions: SelectOption[];
   contractStatusOptions: SelectOption[];
   statusOptions: SelectOption[];
+  positionOptions: SelectOption[];
+  /** Replaces the Status dropdown with a Position checkbox filter — used on the Active Employees page, where a Status filter is redundant (the page already scopes to Active). */
+  usePositionFilter?: boolean;
 }
 
 const ALL = "__all__";
@@ -37,6 +42,8 @@ export function EmployeeFilters({
   departmentOptions,
   contractStatusOptions,
   statusOptions,
+  positionOptions,
+  usePositionFilter = false,
 }: EmployeeFiltersProps) {
   return (
     <div className="mb-4 flex flex-col gap-3">
@@ -85,19 +92,28 @@ export function EmployeeFilters({
           </SelectContent>
         </Select>
 
-        <Select value={value.status || ALL} onValueChange={(v) => onChange({ ...value, status: v === ALL ? "" : v })}>
-          <SelectTrigger className="w-full sm:w-44">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL}>All Status</SelectItem>
-            {statusOptions.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {usePositionFilter ? (
+          <MultiSelectCheckboxFilter
+            label="Position"
+            options={positionOptions}
+            selected={value.position}
+            onChange={(next) => onChange({ ...value, position: next })}
+          />
+        ) : (
+          <Select value={value.status || ALL} onValueChange={(v) => onChange({ ...value, status: v === ALL ? "" : v })}>
+            <SelectTrigger className="w-full sm:w-44">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All Status</SelectItem>
+              {statusOptions.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
     </div>
   );

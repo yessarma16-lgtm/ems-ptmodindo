@@ -17,7 +17,7 @@ interface PageProps {
 export default async function ExpatriateEmployeesPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const query = parseEmployeeListSearchParams(sp, "expatriate");
-  const { configured, connectionError, items, total, departmentOptions, contractStatusOptions, statusOptions } =
+  const { configured, connectionError, items, total, departmentOptions, contractStatusOptions, statusOptions, positionOptions } =
     await loadEmployeeListPageData(query);
 
   return (
@@ -56,6 +56,7 @@ export default async function ExpatriateEmployeesPage({ searchParams }: PageProp
             departmentOptions={departmentOptions}
             contractStatusOptions={contractStatusOptions}
             statusOptions={statusOptions}
+            positionOptions={positionOptions}
           />
         </>
       )}

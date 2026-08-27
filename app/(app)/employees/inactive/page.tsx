@@ -14,7 +14,7 @@ interface PageProps {
 export default async function InactiveEmployeesPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const query = parseEmployeeListSearchParams(sp, "inactive");
-  const { configured, connectionError, items, total, departmentOptions, contractStatusOptions, statusOptions } =
+  const { configured, connectionError, items, total, departmentOptions, contractStatusOptions, statusOptions, positionOptions } =
     await loadEmployeeListPageData(query);
 
   return (
@@ -47,6 +47,7 @@ export default async function InactiveEmployeesPage({ searchParams }: PageProps)
             departmentOptions={departmentOptions}
             contractStatusOptions={contractStatusOptions}
             statusOptions={statusOptions}
+            positionOptions={positionOptions}
             variant="inactive"
             dateFilterLabel="Resign Date"
           />

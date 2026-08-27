@@ -19,7 +19,7 @@ interface PageProps {
 export default async function EmployeesPage({ searchParams }: PageProps) {
   const sp = await searchParams;
   const query = parseEmployeeListSearchParams(sp, "active");
-  const { configured, connectionError, items, total, departmentOptions, contractStatusOptions, statusOptions } =
+  const { configured, connectionError, items, total, departmentOptions, contractStatusOptions, statusOptions, positionOptions } =
     await loadEmployeeListPageData(query);
 
   return (
@@ -56,6 +56,8 @@ export default async function EmployeesPage({ searchParams }: PageProps) {
             departmentOptions={departmentOptions}
             contractStatusOptions={contractStatusOptions}
             statusOptions={statusOptions}
+            positionOptions={positionOptions}
+            usePositionFilter
             dateFilterLabel="Join Date"
           />
         </>

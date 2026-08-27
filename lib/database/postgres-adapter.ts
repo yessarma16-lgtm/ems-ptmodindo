@@ -191,6 +191,7 @@ async function getEmployeeListPage(query: EmployeeListQuery): Promise<EmployeeLi
     if (search) q = q.or(`nik.ilike.%${search}%,name.ilike.%${search}%,department.ilike.%${search}%`);
     if (query.department) q = q.eq("department", query.department);
     if (query.status) q = q.eq("status", query.status);
+    if (query.position.length > 0) q = q.in("position", query.position);
     if (query.contractStatus) q = q.eq("contract_status", query.contractStatus);
 
     // Join Date on active/expatriate scope, Exit Date on inactive scope —

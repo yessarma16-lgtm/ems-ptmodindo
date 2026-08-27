@@ -25,12 +25,15 @@ export function parseEmployeeListSearchParams(
   const sortKeyRaw = get("sort");
   const sortKey = (SORT_KEYS as string[]).includes(sortKeyRaw) ? (sortKeyRaw as EmployeeSortKey) : "name";
   const page = Math.max(1, parseInt(get("page"), 10) || 1);
+  const positionRaw = searchParams["position"];
+  const position = (Array.isArray(positionRaw) ? positionRaw : positionRaw ? [positionRaw] : []).filter(Boolean);
 
   return {
     scope,
     search: get("q"),
     department: get("dept"),
     status: get("status"),
+    position,
     contractStatus: get("contract"),
     dateFrom: get("from"),
     dateTo: get("to"),
@@ -50,6 +53,7 @@ export interface EmployeeListPageData {
   departmentOptions: SelectOption[];
   contractStatusOptions: SelectOption[];
   statusOptions: SelectOption[];
+  positionOptions: SelectOption[];
 }
 
 /**
@@ -67,6 +71,7 @@ export async function loadEmployeeListPageData(query: EmployeeListQuery): Promis
   let departmentOptions: SelectOption[] = [];
   let contractStatusOptions: SelectOption[] = [];
   let statusOptions: SelectOption[] = [];
+  let positionOptions: SelectOption[] = [];
 
   if (configured) {
     const [pageResult, masterDataResult] = await Promise.allSettled([getEmployeeListPage(query), getAllMasterData()]);
@@ -87,8 +92,19 @@ export async function loadEmployeeListPageData(query: EmployeeListQuery): Promis
       departmentOptions = masterData.departments;
       contractStatusOptions = masterData.lookup.CONTRACT_STATUS ?? [];
       statusOptions = masterData.lookup.EMPLOYEE_STATUS ?? [];
+      positionOptions = masterData.positions;
     }
   }
 
-  return { configured, connectionError, items, total, query, departmentOptions, contractStatusOptions, statusOptions };
+  return {
+    configured,
+    connectionError,
+    items,
+    total,
+    query,
+    departmentOptions,
+    contractStatusOptions,
+    statusOptions,
+    positionOptions,
+  };
 }
