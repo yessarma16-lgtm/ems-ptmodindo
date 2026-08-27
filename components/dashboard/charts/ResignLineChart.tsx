@@ -4,6 +4,7 @@ import { useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { ChartCard, LegendDot } from "@/components/dashboard/charts/ChartCard";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { ResignBreakdownData } from "@/lib/dashboard-service";
 
@@ -12,36 +13,53 @@ const COLORS = ["#f43f5e", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#0ea5e9"
 type GroupBy = "department" | "maritalStatus";
 
 export function ResignLineChart({
-  year,
-  byDepartment,
-  byMaritalStatus,
+  breakdownByYear,
+  years,
+  defaultYear,
 }: {
-  year: string;
-  byDepartment: ResignBreakdownData;
-  byMaritalStatus: ResignBreakdownData;
+  breakdownByYear: Record<string, { byDepartment: ResignBreakdownData; byMaritalStatus: ResignBreakdownData }>;
+  years: string[];
+  defaultYear: string;
 }) {
   const [groupBy, setGroupBy] = useState<GroupBy>("department");
-  const active = groupBy === "department" ? byDepartment : byMaritalStatus;
+  const [year, setYear] = useState(years.includes(defaultYear) ? defaultYear : (years[0] ?? defaultYear));
+
+  const forYear = breakdownByYear[year];
+  const active = forYear ? (groupBy === "department" ? forYear.byDepartment : forYear.byMaritalStatus) : { points: [], series: [] };
 
   return (
     <ChartCard
       title="Resignations"
       subtitle={`Year ${year}, by Exit Date — grouped by ${groupBy === "department" ? "Department" : "Marital Status"}`}
       legend={
-        <div className="flex items-center gap-1 rounded-lg border border-border p-0.5 text-xs">
-          {(["department", "maritalStatus"] as const).map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setGroupBy(key)}
-              className={cn(
-                "rounded-md px-2 py-1 font-medium transition-colors",
-                groupBy === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {key === "department" ? "Department" : "Marital Status"}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <Select value={year} onValueChange={setYear}>
+            <SelectTrigger className="h-8 w-[90px] rounded-lg bg-card text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {years.map((y) => (
+                <SelectItem key={y} value={y}>
+                  {y}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-1 rounded-lg border border-border p-0.5 text-xs">
+            {(["department", "maritalStatus"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setGroupBy(key)}
+                className={cn(
+                  "rounded-md px-2 py-1 font-medium transition-colors",
+                  groupBy === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {key === "department" ? "Department" : "Marital Status"}
+              </button>
+            ))}
+          </div>
         </div>
       }
     >
