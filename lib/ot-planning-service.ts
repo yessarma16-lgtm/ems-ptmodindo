@@ -16,6 +16,7 @@ export const DIVISIONS: Record<string, string[]> = {
 
 export type OtMapping = { id?: number; attendanceDepartment: string; shed: string; division: string; displayOrder: number };
 export type OtDivision = { id?: number; shed: string; division: string; displayOrder: number };
+export type OtConfigEntry = { id?: number; effectiveDate: string; umr: number; usdRate: number };
 
 const seedMappings: OtMapping[] = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((line, i) => ({ attendanceDepartment: `SEWING LINE ${String(line).padStart(2, "0")} SHED A.`, shed: "SHED A", division: `SEW L${line}`, displayOrder: i }));
 
@@ -53,7 +54,7 @@ export async function getOtPlanning(date: string, sheds: string[] = Object.keys(
 
     const [{ data: estimates, error: estimateError }, { data: configs, error: configError }, { data: mappings, error: mappingError }, { data: divisions, error: divisionError }, { data: multipliers, error: multiplierError }] = await Promise.all([
       dateFilter(client.from("ot_planning_estimates").select("shed,division,duration,person,tanggal")),
-      client.from("ot_planning_config_history").select("umr,usd_rate").lte("effective_date", endDate).order("effective_date", { ascending: false }).limit(1),
+      client.from("ot_planning_config_history").select("umr,usd_rate").lte("effective_date", endDate).order("effective_date", { ascending: false }).order("id", { ascending: false }).limit(1),
       client.from("ot_planning_mappings").select("id,attendance_department,shed,division,display_order").order("display_order"),
       client.from("ot_planning_divisions").select("id,shed,division,display_order").order("display_order"),
       client.from("ot_planning_duration_multipliers").select("duration,paid_hours").order("duration"),
@@ -104,11 +105,48 @@ export async function saveOtEstimates(date: string, values: Array<{ shed: string
   return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_estimates").upsert(values.map((x) => ({ ...x, tanggal: date, updated_at: new Date().toISOString() })), { onConflict: "tanggal,shed,division,duration" }); if (error) throw error; });
 }
 
-export async function saveOtConfig(effectiveDate: string, umr: number, usdRate: number) {
-  return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_config_history").insert({ effective_date: effectiveDate, umr, usd_rate: usdRate }); if (error) throw error; });
+export async function getOtConfigHistory(): Promise<OtConfigEntry[]> {
+  return supabaseGuarded(async () => {
+    const { data, error } = await getSupabaseClient()
+      .from("ot_planning_config_history")
+      .select("id,effective_date,umr,usd_rate")
+      .order("effective_date", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((x: any) => ({ id: Number(x.id), effectiveDate: String(x.effective_date), umr: Number(x.umr), usdRate: Number(x.usd_rate) }));
+  });
 }
 
-export async function getOtReferences() { return supabaseGuarded(async () => { const client = getSupabaseClient(); const [{ data: mappings, error: me }, { data: divisions, error: de }, { data: multipliers, error: be }] = await Promise.all([client.from("ot_planning_mappings").select("id,attendance_department,shed,division,display_order").order("display_order"), client.from("ot_planning_divisions").select("id,shed,division,display_order").order("display_order"), client.from("ot_planning_duration_multipliers").select("id,duration,paid_hours").order("duration")]); if (me) throw me; if (de) throw de; if (be) throw be; const mappingData = (mappings?.length ? mappings : seedMappings).map((x: any) => ({ id: x.id, attendance_department: String(x.attendance_department ?? x.attendanceDepartment), shed: String(x.shed), division: String(x.division), display_order: Number(x.display_order ?? x.displayOrder ?? 0) })); const multiplierData = multipliers?.length ? multipliers : Array.from({ length: 26 }, (_, i) => ({ duration: (i + 1) / 2, paid_hours: paidHours((i + 1) / 2) })); return { mappings: mappingData, divisions: divisions?.length ? divisions : Object.entries(DIVISIONS).flatMap(([shed, names]) => names.map((division, display_order) => ({ shed, division, display_order }))), multipliers: multiplierData }; }); }
+/**
+ * One UMR/USD-rate value can be effective per calendar date (effective_date
+ * has a UNIQUE constraint) — getOtPlanning picks whichever entry's
+ * effective_date is the latest one <= the date being calculated, so this is
+ * a real history: adding a new entry for a later date doesn't touch past
+ * calculations, it only takes over from its own effective_date onward.
+ * Editing (value.id set) must UPDATE by primary key — upserting by the
+ * natural key (effective_date) breaks the moment that key's value itself
+ * changes, same reasoning as saveOtMapping/saveOtDivision below. Only a
+ * fresh Add (no id) should dedupe via upsert-by-natural-key — re-saving for
+ * a date that already has an entry replaces that one value rather than
+ * creating an ambiguous second entry for the same date.
+ */
+export async function saveOtConfig(value: OtConfigEntry) {
+  return supabaseGuarded(async () => {
+    const client = getSupabaseClient();
+    const row = { effective_date: value.effectiveDate, umr: value.umr, usd_rate: value.usdRate };
+    if (value.id) {
+      const { error } = await client.from("ot_planning_config_history").update(row).eq("id", value.id);
+      if (error) throw error;
+    } else {
+      const { error } = await client.from("ot_planning_config_history").upsert(row, { onConflict: "effective_date" });
+      if (error) throw error;
+    }
+  });
+}
+export async function deleteOtConfig(id: number) {
+  return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_config_history").delete().eq("id", id); if (error) throw error; });
+}
+
+export async function getOtReferences() { return supabaseGuarded(async () => { const client = getSupabaseClient(); const [{ data: mappings, error: me }, { data: divisions, error: de }, { data: multipliers, error: be }, configHistory] = await Promise.all([client.from("ot_planning_mappings").select("id,attendance_department,shed,division,display_order").order("display_order"), client.from("ot_planning_divisions").select("id,shed,division,display_order").order("display_order"), client.from("ot_planning_duration_multipliers").select("id,duration,paid_hours").order("duration"), getOtConfigHistory()]); if (me) throw me; if (de) throw de; if (be) throw be; const mappingData = (mappings?.length ? mappings : seedMappings).map((x: any) => ({ id: x.id, attendance_department: String(x.attendance_department ?? x.attendanceDepartment), shed: String(x.shed), division: String(x.division), display_order: Number(x.display_order ?? x.displayOrder ?? 0) })); const multiplierData = multipliers?.length ? multipliers : Array.from({ length: 26 }, (_, i) => ({ duration: (i + 1) / 2, paid_hours: paidHours((i + 1) / 2) })); return { mappings: mappingData, divisions: divisions?.length ? divisions : Object.entries(DIVISIONS).flatMap(([shed, names]) => names.map((division, display_order) => ({ shed, division, display_order }))), multipliers: multiplierData, configHistory }; }); }
 /** Editing (value.id set) must UPDATE by primary key — upserting by the natural key (attendance_department) breaks the moment that key's value itself changes, since the row then no longer matches the ON CONFLICT target and Postgres falls through to a plain INSERT carrying the old id, colliding with the primary key. Only a fresh Add (no id) should dedupe via upsert-by-natural-key. */
 export async function saveOtMapping(value: OtMapping) {
   return supabaseGuarded(async () => {

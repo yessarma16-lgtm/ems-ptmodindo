@@ -2,7 +2,6 @@
 
 /* The reference editor receives dynamic rows from the API facade. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable react-hooks/exhaustive-deps */
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { CalendarCheck, FileSpreadsheet, FileText, GripVertical, Pencil, Play, Plus, Save, Trash2, X } from "lucide-react";
@@ -22,6 +21,7 @@ type Cell = { duration: number; estimated: number; actual: number };
 type Report = { shed: string; config: { umr: number; usdRate: number; divisor: number; multipliers?: Record<string, number> }; rows: { division: string; cells: Cell[] }[] };
 type Mapping = { id?: number; attendance_department: string; shed: string; division: string; display_order: number };
 type Division = { id?: number; shed: string; division: string; display_order: number };
+type ConfigEntry = { id?: number; effectiveDate: string; umr: number; usdRate: number };
 const DEPARTMENTS = ["SHED A", "SHED B", "SHED C", "COMMON"];
 const money = (n: number) => new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(n);
 const paidHours = (d: number) => 1.5 * Math.min(d, 1) + 2 * Math.max(d - 1, 0);
@@ -31,12 +31,13 @@ export default function OtPlanningPage() {
   const [tab, setTab] = useState<"report" | "reference">("report");
   const [dateFrom, setDateFrom] = useState(today); const [dateTo, setDateTo] = useState(today);
   const [sheds, setSheds] = useState(DEPARTMENTS); const [data, setData] = useState<Report[]>([]); const [loading, setLoading] = useState(false);
-  const [processedDates, setProcessedDates] = useState<string[]>([]); const [umr, setUmr] = useState(2954114); const [usdRate, setUsdRate] = useState(16000);
+  const [processedDates, setProcessedDates] = useState<string[]>([]);
   const [mappings, setMappings] = useState<Mapping[]>([]); const [divisions, setDivisions] = useState<Division[]>([]); const [multipliers, setMultipliers] = useState<{ duration: number; paid_hours: number }[]>([]);
+  const [configHistory, setConfigHistory] = useState<ConfigEntry[]>([]);
   const [allSelected, setAllSelected] = useState(true);
   const [hasRun, setHasRun] = useState(false);
-  async function load() { if (!dateFrom || !dateTo || dateFrom > dateTo) { toast.error("Pilih tanggal mulai dan tanggal akhir yang valid."); return; } setHasRun(true); setLoading(true); try { const q = new URLSearchParams({ dateFrom, dateTo }); sheds.forEach((s) => q.append("shed", s)); const r = await fetch(`/api/reports/ot-planning?${q}`, { cache: "no-store" }); if (!r.ok) throw new Error("Failed to load report."); const v = await r.json(); setData(v); if (v[0]) { setUmr(v[0].config.umr); setUsdRate(v[0].config.usdRate); } } catch (e) { toast.error(e instanceof Error ? e.message : "Failed to load report."); } finally { setLoading(false); } }
-  async function loadReferences() { const r = await fetch("/api/reports/ot-planning?references=1", { cache: "no-store" }); if (r.ok) { const v = await r.json(); setMappings(v.mappings ?? []); setDivisions(v.divisions ?? []); setMultipliers(v.multipliers ?? []); } }
+  async function load() { if (!dateFrom || !dateTo || dateFrom > dateTo) { toast.error("Pilih tanggal mulai dan tanggal akhir yang valid."); return; } setHasRun(true); setLoading(true); try { const q = new URLSearchParams({ dateFrom, dateTo }); sheds.forEach((s) => q.append("shed", s)); const r = await fetch(`/api/reports/ot-planning?${q}`, { cache: "no-store" }); if (!r.ok) throw new Error("Failed to load report."); const v = await r.json(); setData(v); } catch (e) { toast.error(e instanceof Error ? e.message : "Failed to load report."); } finally { setLoading(false); } }
+  async function loadReferences() { const r = await fetch("/api/reports/ot-planning?references=1", { cache: "no-store" }); if (r.ok) { const v = await r.json(); setMappings(v.mappings ?? []); setDivisions(v.divisions ?? []); setMultipliers(v.multipliers ?? []); setConfigHistory(v.configHistory ?? []); } }
   useEffect(() => { fetch("/api/attendance/status", { cache: "no-store" }).then((r) => r.json()).then((v) => setProcessedDates(v.processedDates ?? [])).catch(() => undefined); }, []);
   useEffect(() => { if (tab !== "reference") return; const timeoutId = window.setTimeout(() => { void loadReferences(); }, 0); return () => window.clearTimeout(timeoutId); }, [tab]);
   const toggleShed = (shed: string, checked: boolean) => setSheds((current) => checked ? Array.from(new Set([...current, shed])) : current.filter((x) => x !== shed));
@@ -55,7 +56,7 @@ export default function OtPlanningPage() {
       toast.error("Failed to update unit order.");
     }
   };
-  return <div className="space-y-5"><PageHeader title="OT Planning" description="Overtime planning and budget realization by department." breadcrumb={[{ label: "Dashboard", href: "/dashboard" }, { label: "Reports" }, { label: "OT Planning" }]} /><div className="flex gap-2"><Button variant={tab === "report" ? "default" : "outline"} onClick={() => setTab("report")}>OT Planning Report</Button><Button variant={tab === "reference" ? "default" : "outline"} onClick={() => setTab("reference")}>Reference</Button></div>{tab === "reference" ? <References mappings={mappings} divisions={divisions} multipliers={multipliers} umr={umr} usdRate={usdRate} setUmr={setUmr} setUsdRate={setUsdRate} date={dateFrom} post={post} del={del} reorderDivisions={reorderDivisions} /> : <><Card><CardContent className="pt-6"><h2 className="mb-4 text-lg font-semibold">Selected Report</h2><div className="flex flex-wrap items-end gap-5"><div><label className="mb-1 block text-xs font-medium">From</label><AttendanceDatePicker value={dateFrom} onChange={setDateFrom} processedDates={processedDates} /></div><div><label className="mb-1 block text-xs font-medium">To</label><AttendanceDatePicker value={dateTo} onChange={setDateTo} processedDates={processedDates} /></div><Button size="icon" className="rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-md transition-all hover:shadow-lg hover:from-violet-600 hover:to-violet-700" title="Run" aria-label="Run" onClick={() => void load()} disabled={loading}><Play className="size-[18px]" /></Button><div className="flex flex-wrap gap-4 pb-2"><label className="flex items-center gap-2 text-sm"><Checkbox checked={allSelected} onCheckedChange={(checked) => { setAllSelected(checked === true); setSheds(checked ? DEPARTMENTS : []); }} />All Departments</label>{DEPARTMENTS.map((shed) => <label className="flex items-center gap-2 text-sm" key={shed}><Checkbox checked={sheds.includes(shed)} onCheckedChange={(checked) => toggleShed(shed, checked === true)} />{shed}</label>)}</div><div className="ml-auto flex flex-wrap gap-2 rounded-2xl border border-border bg-muted/30 p-1.5 shadow-sm"><Button size="icon" className="rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md transition-all hover:shadow-lg hover:from-emerald-600 hover:to-emerald-700" title="Save estimates" aria-label="Save estimates" onClick={() => void save()} disabled={loading}><Save className="size-[18px]" /></Button><Button size="icon" className="rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 text-white shadow-md transition-all hover:shadow-lg hover:from-sky-600 hover:to-sky-700" title="Export Excel" aria-label="Export Excel" onClick={() => window.open(`/api/reports/ot-planning/export?${exportQuery()}`, "_blank")}><FileSpreadsheet className="size-[18px]" /></Button><Button size="icon" className="rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-md transition-all hover:shadow-lg hover:from-rose-600 hover:to-rose-700" title="Export PDF" aria-label="Export PDF" onClick={() => window.open(`/api/reports/ot-planning/pdf?${exportQuery()}`, "_blank")}><FileText className="size-[18px]" /></Button></div></div><p className="mt-3 text-xs text-muted-foreground"><CalendarCheck className="mr-1 inline size-3" />Green ring indicates a date with completed MPP Calculation.</p></CardContent></Card><div><h2 className="mb-3 text-lg font-semibold">Report Preview</h2>{!hasRun ? <p className="text-sm text-muted-foreground">Select a date range, then click Run to load the report.</p> : loading ? <p>Loading...</p> : data.length ? data.map((g) => <ReportTable key={g.shed} group={g} update={update} />) : <p className="text-sm text-muted-foreground">No report data for the selected filters.</p>}</div></>}</div>;
+  return <div className="space-y-5"><PageHeader title="OT Planning" description="Overtime planning and budget realization by department." breadcrumb={[{ label: "Dashboard", href: "/dashboard" }, { label: "Reports" }, { label: "OT Planning" }]} /><div className="flex gap-2"><Button variant={tab === "report" ? "default" : "outline"} onClick={() => setTab("report")}>OT Planning Report</Button><Button variant={tab === "reference" ? "default" : "outline"} onClick={() => setTab("reference")}>Reference</Button></div>{tab === "reference" ? <References mappings={mappings} divisions={divisions} multipliers={multipliers} configHistory={configHistory} date={dateFrom} post={post} del={del} reorderDivisions={reorderDivisions} /> : <><Card><CardContent className="pt-6"><h2 className="mb-4 text-lg font-semibold">Selected Report</h2><div className="flex flex-wrap items-end gap-5"><div><label className="mb-1 block text-xs font-medium">From</label><AttendanceDatePicker value={dateFrom} onChange={setDateFrom} processedDates={processedDates} /></div><div><label className="mb-1 block text-xs font-medium">To</label><AttendanceDatePicker value={dateTo} onChange={setDateTo} processedDates={processedDates} /></div><Button size="icon" className="rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-md transition-all hover:shadow-lg hover:from-violet-600 hover:to-violet-700" title="Run" aria-label="Run" onClick={() => void load()} disabled={loading}><Play className="size-[18px]" /></Button><div className="flex flex-wrap gap-4 pb-2"><label className="flex items-center gap-2 text-sm"><Checkbox checked={allSelected} onCheckedChange={(checked) => { setAllSelected(checked === true); setSheds(checked ? DEPARTMENTS : []); }} />All Departments</label>{DEPARTMENTS.map((shed) => <label className="flex items-center gap-2 text-sm" key={shed}><Checkbox checked={sheds.includes(shed)} onCheckedChange={(checked) => toggleShed(shed, checked === true)} />{shed}</label>)}</div><div className="ml-auto flex flex-wrap gap-2 rounded-2xl border border-border bg-muted/30 p-1.5 shadow-sm"><Button size="icon" className="rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md transition-all hover:shadow-lg hover:from-emerald-600 hover:to-emerald-700" title="Save estimates" aria-label="Save estimates" onClick={() => void save()} disabled={loading}><Save className="size-[18px]" /></Button><Button size="icon" className="rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 text-white shadow-md transition-all hover:shadow-lg hover:from-sky-600 hover:to-sky-700" title="Export Excel" aria-label="Export Excel" onClick={() => window.open(`/api/reports/ot-planning/export?${exportQuery()}`, "_blank")}><FileSpreadsheet className="size-[18px]" /></Button><Button size="icon" className="rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-md transition-all hover:shadow-lg hover:from-rose-600 hover:to-rose-700" title="Export PDF" aria-label="Export PDF" onClick={() => window.open(`/api/reports/ot-planning/pdf?${exportQuery()}`, "_blank")}><FileText className="size-[18px]" /></Button></div></div><p className="mt-3 text-xs text-muted-foreground"><CalendarCheck className="mr-1 inline size-3" />Green ring indicates a date with completed MPP Calculation.</p></CardContent></Card><div><h2 className="mb-3 text-lg font-semibold">Report Preview</h2>{!hasRun ? <p className="text-sm text-muted-foreground">Select a date range, then click Run to load the report.</p> : loading ? <p>Loading...</p> : data.length ? data.map((g) => <ReportTable key={g.shed} group={g} update={update} />) : <p className="text-sm text-muted-foreground">No report data for the selected filters.</p>}</div></>}</div>;
 }
 
 function ReportTable({ group, update }: { group: Report; update: (shed: string, division: string, duration: number, person: number) => void }) {
@@ -80,10 +81,12 @@ const SHED_ORDER = ["SHED A", "SHED B", "SHED C", "COMMON"];
 
 const EMPTY_MAPPING = { attendanceDepartment: "", shed: "SHED A", division: "", displayOrder: 0 };
 const EMPTY_DIVISION = { shed: "SHED A", division: "", displayOrder: 0 };
+const EMPTY_CONFIG = { effectiveDate: "", umr: 2954114, usdRate: 16000 };
 
-function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, setUsdRate, date, post, del, reorderDivisions }: any) {
+function References({ mappings, divisions, multipliers, configHistory, date, post, del, reorderDivisions }: any) {
   const [m, setM] = useState<any>(EMPTY_MAPPING);
   const [d, setD] = useState<any>(EMPTY_DIVISION);
+  const [c, setC] = useState<ConfigEntry>({ ...EMPTY_CONFIG, effectiveDate: date });
   const mappingGroups = useMemo(() => groupByShed(mappings as Mapping[]), [mappings]);
   const divisionGroups = useMemo(() => groupByShed(divisions as Division[]), [divisions]);
   const divisionOptionsForShed = useMemo(() => (divisions as Division[]).filter((x) => x.shed === m.shed), [divisions, m.shed]);
@@ -96,9 +99,32 @@ function References({ mappings, divisions, multipliers, umr, usdRate, setUmr, se
   const deleteMapping = (x: Mapping) => void del({ kind: "mapping", id: x.id });
   /** Inline reassignment straight from the table cell — saves immediately, no need to load the row into the top form first. */
   const updateMappingUnit = (x: Mapping, division: string) => void post({ kind: "mapping", value: { id: x.id, attendanceDepartment: x.attendance_department, shed: x.shed, division, displayOrder: x.display_order } });
+  const saveConfig = async () => { if (!c.effectiveDate) return; await post({ kind: "config", value: c }); setC({ ...EMPTY_CONFIG, effectiveDate: date }); };
+  const editConfig = (x: ConfigEntry) => setC({ id: x.id, effectiveDate: x.effectiveDate, umr: x.umr, usdRate: x.usdRate });
+  const cancelEditConfig = () => setC({ ...EMPTY_CONFIG, effectiveDate: date });
+  const deleteConfig = (x: ConfigEntry) => void del({ kind: "config", id: x.id });
 
   return <div className="grid gap-5">
-    <Card><CardContent className="grid max-w-xl gap-4 pt-6"><label>UMR (IDR)<Input type="number" value={umr} onChange={(e) => setUmr(Number(e.target.value))} /></label><label>USD Rate (IDR)<Input type="number" value={usdRate} onChange={(e) => setUsdRate(Number(e.target.value))} /></label><p className="text-xs text-muted-foreground">Effective snapshot for {date}. Divisor is fixed at 173.</p><Button onClick={() => void post({ kind: "config", effectiveDate: date, umr, usdRate })}>Save Reference</Button></CardContent></Card>
+    <Card><CardContent className="pt-6">
+      <h2 className="mb-3 font-semibold">UMR / USD Rate History</h2>
+      <div className="mb-2 flex flex-wrap items-end gap-2">
+        <div><label className="mb-1 block text-xs font-medium">Effective Date</label><Input type="date" className="w-40" value={c.effectiveDate} onChange={(e) => setC({ ...c, effectiveDate: e.target.value })} /></div>
+        <div><label className="mb-1 block text-xs font-medium">UMR (IDR)</label><Input type="number" className="w-40" value={c.umr} onChange={(e) => setC({ ...c, umr: Number(e.target.value) })} /></div>
+        <div><label className="mb-1 block text-xs font-medium">USD Rate (IDR)</label><Input type="number" className="w-40" value={c.usdRate} onChange={(e) => setC({ ...c, usdRate: Number(e.target.value) })} /></div>
+        <Button onClick={() => void saveConfig()}>{c.id ? <><Pencil className="size-4" />Update</> : <><Plus className="size-4" />Add</>}</Button>
+        {c.id ? <Button variant="outline" onClick={cancelEditConfig}><X className="size-4" />Cancel</Button> : null}
+      </div>
+      <p className="mb-3 text-xs text-muted-foreground">Divisor is fixed at 173. Each entry applies from its Effective Date onward until a later entry takes over — add a new entry when UMR changes (e.g. yearly); past calculations keep using whichever value was effective at the time.</p>
+      <div className="overflow-auto">
+        <table className="w-full min-w-[420px] border-collapse text-sm">
+          <thead><tr className="bg-muted"><th className="border p-2 text-left">Effective Date</th><th className="border p-2 text-left">UMR</th><th className="border p-2 text-left">USD Rate</th><th className="border p-2 text-right">Action</th></tr></thead>
+          <tbody>
+            {(configHistory as ConfigEntry[]).length === 0 && <tr><td colSpan={4} className="border p-3 text-center text-muted-foreground">No UMR history yet.</td></tr>}
+            {(configHistory as ConfigEntry[]).map((x) => <tr key={x.id}><td className="border p-2">{x.effectiveDate}</td><td className="border p-2">{money(x.umr)}</td><td className="border p-2">{money(x.usdRate)}</td><td className="border p-2 text-right"><Button variant="ghost" size="icon" onClick={() => editConfig(x)} title="Edit"><Pencil className="size-4" /></Button><Button variant="ghost" size="icon" onClick={() => deleteConfig(x)} title="Delete"><Trash2 className="size-4" /></Button></td></tr>)}
+          </tbody>
+        </table>
+      </div>
+    </CardContent></Card>
     <Card><CardContent className="pt-6"><h2 className="mb-3 font-semibold">Duration & Paid Hours</h2><div className="grid grid-cols-2 gap-2 text-sm">{multipliers.map((x: any) => <div className="border-b p-1" key={x.duration}>{x.duration} hours → {x.paid_hours} paid hours</div>)}</div></CardContent></Card>
 
     <Card><CardContent className="pt-6">

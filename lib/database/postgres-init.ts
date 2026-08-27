@@ -547,7 +547,7 @@ export async function ensureSchema(client: Client): Promise<void> {
     );
     CREATE TABLE IF NOT EXISTS ot_planning_config_history (
       id BIGSERIAL PRIMARY KEY,
-      effective_date DATE NOT NULL,
+      effective_date DATE NOT NULL UNIQUE,
       umr REAL NOT NULL,
       usd_rate REAL NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
