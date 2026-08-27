@@ -80,10 +80,8 @@ export interface DashboardData {
   cards: DashboardCards;
   newVsResignByMonth: MonthPoint[];
   monthlyHeadcount: MonthlyHeadcountPoint[];
-  /** Keyed by year string (e.g. "2026") — one entry per year in `availableYears`. */
-  resignBreakdownByYear: Record<string, { byDepartment: ResignBreakdownData; byMaritalStatus: ResignBreakdownData }>;
-  /** Year ResignLineChart's own selector starts on — the page-wide filter's year, or the current year. */
-  defaultResignYear: string;
+  resignByDepartment: ResignBreakdownData;
+  resignByMaritalStatus: ResignBreakdownData;
   walkinApplicantsByMonth: WalkinApplicantsMonthPoint[];
   topDepartments: CountPoint[];
   employeeTypes: CountPoint[];
@@ -138,13 +136,17 @@ export async function loadDashboardData(filter: DashboardFilter): Promise<Dashbo
   const cards = computeCards(items, latestContractEnd, contractEnds, filter);
   const newVsResignByMonth = computeNewVsResignByMonth(items, activeYear);
   const monthlyHeadcount = computeMonthlyHeadcount(items, activeYear);
+  // Follows the same page-wide Year filter as the Inactive/Resigned card and
+  // every other by-month chart here (activeYear) — not an independent
+  // selector of its own.
+  const resignByDepartment = computeResignBreakdown(items, activeYear, (e) => e.department, topNSeries(5));
+  const resignByMaritalStatus = computeResignBreakdown(items, activeYear, (e) => e.maritalStatus, fixedSeries(MARITAL_STATUS_SERIES));
   const walkinApplicantsByMonth = computeWalkinApplicantsByMonth(registrations, activeYear);
   const topDepartments = computeTopDepartments(items, filter);
   const employeeTypes = computeEmployeeTypes(items);
 
-  // Exit Date years are unioned in too (not just Join Date), so a resignation
-  // in a year nobody joined in still gets a year option in ResignLineChart's
-  // own selector.
+  // Exit Date years are unioned in too (not just Join Date), so picking a
+  // year in which nobody joined but people resigned still works.
   const yearsFromData = new Set<string>();
   for (const e of items) {
     const jy = yearOf(e.joinDate);
@@ -155,24 +157,12 @@ export async function loadDashboardData(filter: DashboardFilter): Promise<Dashbo
   yearsFromData.add(String(new Date().getFullYear()));
   const availableYears = Array.from(yearsFromData).sort((a, b) => Number(b) - Number(a));
 
-  // Resignations by Department/Marital Status are computed for every
-  // available year up front — ResignLineChart switches between them
-  // entirely client-side (its own year selector, independent of the
-  // page-wide filter above) since this dataset is small.
-  const resignBreakdownByYear: Record<string, { byDepartment: ResignBreakdownData; byMaritalStatus: ResignBreakdownData }> = {};
-  for (const y of availableYears) {
-    resignBreakdownByYear[y] = {
-      byDepartment: computeResignBreakdown(items, Number(y), (e) => e.department, topNSeries(5)),
-      byMaritalStatus: computeResignBreakdown(items, Number(y), (e) => e.maritalStatus, fixedSeries(MARITAL_STATUS_SERIES)),
-    };
-  }
-
   return {
     cards,
     newVsResignByMonth,
     monthlyHeadcount,
-    resignBreakdownByYear,
-    defaultResignYear: String(activeYear),
+    resignByDepartment,
+    resignByMaritalStatus,
     walkinApplicantsByMonth,
     topDepartments,
     employeeTypes,

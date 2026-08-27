@@ -125,7 +125,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             <NewVsResignChart data={data.newVsResignByMonth} year={monthlyHeadcountYear} />
             <MonthlyHeadcountChart data={data.monthlyHeadcount} year={monthlyHeadcountYear} />
             <WalkinApplicantsChart data={data.walkinApplicantsByMonth} year={monthlyHeadcountYear} />
-            <ResignLineChart breakdownByYear={data.resignBreakdownByYear} years={data.availableYears} defaultYear={data.defaultResignYear} />
+            <ResignLineChart byDepartment={data.resignByDepartment} byMaritalStatus={data.resignByMaritalStatus} year={monthlyHeadcountYear} />
             <TopDepartmentsChart data={data.topDepartments} periodLabel={departmentAsOfLabel} />
             <EmployeeTypeChart data={data.employeeTypes} />
           </div>
