@@ -17,8 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AttendanceDatePicker } from "@/components/attendance/AttendanceDatePicker";
 import { toast } from "sonner";
 
-type Cell = { duration: number; estimated: number; actual: number };
-type Report = { shed: string; config: { umr: number; usdRate: number; divisor: number; multipliers?: Record<string, number> }; rows: { division: string; cells: Cell[] }[] };
+type Cell = { duration: number; estimated: number; actual: number; holiday?: boolean };
+type Report = { shed: string; config: { umr: number; usdRate: number; divisor: number; multipliers?: Record<string, number>; multipliersHoliday?: Record<string, number> }; rows: { division: string; cells: Cell[] }[] };
+type Multiplier = { id?: number; duration: number; paid_hours: number; paid_hours_holiday: number };
 type Mapping = { id?: number; attendance_department: string; shed: string; division: string; display_order: number };
 type Division = { id?: number; shed: string; division: string; display_order: number };
 type ConfigEntry = { id?: number; effectiveDate: string; umr: number; usdRate: number };
@@ -32,7 +33,7 @@ export default function OtPlanningPage() {
   const [dateFrom, setDateFrom] = useState(today); const [dateTo, setDateTo] = useState(today);
   const [sheds, setSheds] = useState(DEPARTMENTS); const [data, setData] = useState<Report[]>([]); const [loading, setLoading] = useState(false);
   const [processedDates, setProcessedDates] = useState<string[]>([]);
-  const [mappings, setMappings] = useState<Mapping[]>([]); const [divisions, setDivisions] = useState<Division[]>([]); const [multipliers, setMultipliers] = useState<{ duration: number; paid_hours: number }[]>([]);
+  const [mappings, setMappings] = useState<Mapping[]>([]); const [divisions, setDivisions] = useState<Division[]>([]); const [multipliers, setMultipliers] = useState<Multiplier[]>([]);
   const [configHistory, setConfigHistory] = useState<ConfigEntry[]>([]);
   const [allSelected, setAllSelected] = useState(true);
   const [hasRun, setHasRun] = useState(false);
@@ -61,14 +62,17 @@ export default function OtPlanningPage() {
 
 function ReportTable({ group, update }: { group: Report; update: (shed: string, division: string, duration: number, person: number) => void }) {
   const durations = useMemo(() => Array.from(new Set(group.rows.flatMap((r) => r.cells.map((c) => c.duration)))).sort((a, b) => a - b), [group]);
-  const rate = (d: number) => group.config.umr / group.config.divisor * (group.config.multipliers?.[String(d)] ?? paidHours(d));
+  const holidayByDuration = (d: number) => group.rows.some((r) => r.cells.find((c) => c.duration === d)?.holiday);
+  // National Holiday cells price on multipliersHoliday (missing duration -> 0, no
+  // fallback formula); everything else keeps the regular bracket + 1.5/2h formula.
+  const rate = (d: number, holiday = holidayByDuration(d)) => group.config.umr / group.config.divisor * (holiday ? (group.config.multipliersHoliday?.[String(d)] ?? 0) : (group.config.multipliers?.[String(d)] ?? paidHours(d)));
   const totals = durations.map((duration) => group.rows.reduce((total, row) => {
     const cell = row.cells.find((item) => item.duration === duration);
     return { estimated: total.estimated + (cell?.estimated ?? 0), actual: total.actual + (cell?.actual ?? 0) };
   }, { estimated: 0, actual: 0 }));
   const totalEstimatedIdr = totals.reduce((sum, total, index) => sum + total.estimated * rate(durations[index]), 0);
   const totalActualIdr = totals.reduce((sum, total, index) => sum + total.actual * rate(durations[index]), 0);
-  return <Card className="mb-5 overflow-auto"><CardContent className="pt-6"><h3 className="mb-3 text-base font-semibold">{group.shed}</h3><table className="w-full min-w-[1000px] border-collapse text-sm"><thead><tr className="bg-muted"><th className="border p-2 text-left">Unit</th>{durations.map((d) => <th colSpan={4} className="border p-2" key={d}>{d} hours<br /><span className="font-normal">Estimated People / IDR · Actual People / IDR</span></th>)}<th className="border p-2">Total Estimated IDR</th><th className="border p-2">Total Actual IDR</th></tr></thead><tbody>{group.rows.map((row) => <tr key={row.division}><td className="border p-2 font-medium">{row.division}</td>{durations.map((d) => { const c = row.cells.find((x) => x.duration === d) ?? { duration: d, estimated: 0, actual: 0 }; return <>{<td className="border p-1"><Input className="h-8 w-16" type="number" min="0" value={c.estimated} onChange={(e) => update(group.shed, row.division, d, Number(e.target.value))} /></td>}<td className="border p-1">{money(c.estimated * rate(d))}</td><td className="border p-1">{c.actual}</td><td className="border p-1">{money(c.actual * rate(d))}</td></>; })}<td className="border p-2">{money(row.cells.reduce((s, c) => s + c.estimated * rate(c.duration), 0))}</td><td className="border p-2">{money(row.cells.reduce((s, c) => s + c.actual * rate(c.duration), 0))}</td></tr>)}</tbody><tfoot><tr className="bg-primary/10 font-bold"><td className="border p-2">TOTAL {group.shed}</td>{totals.map((total, index) => <Fragment key={durations[index]}><td className="border p-2">{money(total.estimated)}</td><td className="border p-2">{money(total.estimated * rate(durations[index]))}</td><td className="border p-2">{money(total.actual)}</td><td className="border p-2">{money(total.actual * rate(durations[index]))}</td></Fragment>)}<td className="border p-2">{money(totalEstimatedIdr)}</td><td className="border p-2">{money(totalActualIdr)}</td></tr></tfoot></table></CardContent></Card>;
+  return <Card className="mb-5 overflow-auto"><CardContent className="pt-6"><h3 className="mb-3 text-base font-semibold">{group.shed}</h3><table className="w-full min-w-[1000px] border-collapse text-sm"><thead><tr className="bg-muted"><th className="border p-2 text-left">Unit</th>{durations.map((d) => <th colSpan={4} className="border p-2" key={d}>{d} hours{holidayByDuration(d) ? <span className="ml-1 rounded bg-amber-500/15 px-1 text-[10px] font-semibold uppercase text-amber-700">Libur</span> : null}<br /><span className="font-normal">Estimated People / IDR · Actual People / IDR</span></th>)}<th className="border p-2">Total Estimated IDR</th><th className="border p-2">Total Actual IDR</th></tr></thead><tbody>{group.rows.map((row) => <tr key={row.division}><td className="border p-2 font-medium">{row.division}</td>{durations.map((d) => { const c = row.cells.find((x) => x.duration === d) ?? { duration: d, estimated: 0, actual: 0, holiday: false }; return <Fragment key={d}><td className="border p-1"><Input className="h-8 w-16" type="number" min="0" value={c.estimated} onChange={(e) => update(group.shed, row.division, d, Number(e.target.value))} /></td><td className="border p-1">{money(c.estimated * rate(d, c.holiday))}</td><td className="border p-1">{c.actual}</td><td className="border p-1">{money(c.actual * rate(d, c.holiday))}</td></Fragment>; })}<td className="border p-2">{money(row.cells.reduce((s, c) => s + c.estimated * rate(c.duration, c.holiday), 0))}</td><td className="border p-2">{money(row.cells.reduce((s, c) => s + c.actual * rate(c.duration, c.holiday), 0))}</td></tr>)}</tbody><tfoot><tr className="bg-primary/10 font-bold"><td className="border p-2">TOTAL {group.shed}</td>{totals.map((total, index) => <Fragment key={durations[index]}><td className="border p-2">{money(total.estimated)}</td><td className="border p-2">{money(total.estimated * rate(durations[index]))}</td><td className="border p-2">{money(total.actual)}</td><td className="border p-2">{money(total.actual * rate(durations[index]))}</td></Fragment>)}<td className="border p-2">{money(totalEstimatedIdr)}</td><td className="border p-2">{money(totalActualIdr)}</td></tr></tfoot></table></CardContent></Card>;
 }
 
 function groupByShed<T extends { shed: string }>(rows: T[]): [string, T[]][] {
@@ -82,6 +86,7 @@ const SHED_ORDER = ["SHED A", "SHED B", "SHED C", "COMMON"];
 const EMPTY_MAPPING = { attendanceDepartment: "", shed: "SHED A", division: "", displayOrder: 0 };
 const EMPTY_DIVISION = { shed: "SHED A", division: "", displayOrder: 0 };
 const EMPTY_CONFIG = { effectiveDate: "", umr: 2954114, usdRate: 16000 };
+const EMPTY_MULTIPLIER = { duration: "", paidHours: "", paidHoursHoliday: "" };
 
 /** Card section yang bisa di-minimize/maximize — klik header judul untuk toggle kontennya. Default minimized. */
 function CollapsibleCard({ title, children }: { title: string; children: ReactNode }) {
@@ -118,6 +123,11 @@ function References({ mappings, divisions, multipliers, configHistory, date, pos
   const cancelEditConfig = () => setC({ ...EMPTY_CONFIG, effectiveDate: date });
   const deleteConfig = (x: ConfigEntry) => void del({ kind: "config", id: x.id });
 
+  const [mul, setMul] = useState<any>(EMPTY_MULTIPLIER);
+  const saveMultiplier = async () => { if (mul.duration === "" || mul.paidHours === "") return; await post({ kind: "multiplier", value: { id: mul.id, duration: Number(mul.duration), paidHours: Number(mul.paidHours), paidHoursHoliday: Number(mul.paidHoursHoliday || 0) } }); setMul(EMPTY_MULTIPLIER); };
+  const editMultiplier = (x: Multiplier) => setMul({ id: x.id, duration: x.duration, paidHours: x.paid_hours, paidHoursHoliday: x.paid_hours_holiday });
+  const deleteMultiplier = (x: Multiplier) => void del({ kind: "multiplier", id: x.id });
+
   return <div className="grid gap-5">
     <Card><CardContent className="pt-6">
       <h2 className="mb-3 font-semibold">UMR / USD Rate History</h2>
@@ -139,7 +149,25 @@ function References({ mappings, divisions, multipliers, configHistory, date, pos
         </table>
       </div>
     </CardContent></Card>
-    <CollapsibleCard title="Duration & Paid Hours"><div className="grid grid-cols-2 gap-2 text-sm">{multipliers.map((x: any) => <div className="border-b p-1" key={x.duration}>{x.duration} hours → {x.paid_hours} paid hours</div>)}</div></CollapsibleCard>
+    <CollapsibleCard title="Duration & Paid Hours">
+      <div className="mb-3 flex flex-wrap items-end gap-2">
+        <div><label className="mb-1 block text-xs font-medium">Duration (jam)</label><Input type="number" step="0.5" min="0" className="h-8 w-24" value={mul.duration} onChange={(e) => setMul({ ...mul, duration: e.target.value })} /></div>
+        <div><label className="mb-1 block text-xs font-medium">Regular OT</label><Input type="number" step="0.5" min="0" className="h-8 w-24" value={mul.paidHours} onChange={(e) => setMul({ ...mul, paidHours: e.target.value })} /></div>
+        <div><label className="mb-1 block text-xs font-medium">National Holiday</label><Input type="number" step="0.5" min="0" className="h-8 w-24" value={mul.paidHoursHoliday} onChange={(e) => setMul({ ...mul, paidHoursHoliday: e.target.value })} /></div>
+        <Button size="sm" onClick={() => void saveMultiplier()}>{mul.id ? <><Pencil className="size-4" />Update</> : <><Plus className="size-4" />Add</>}</Button>
+        {mul.id ? <Button size="sm" variant="outline" onClick={() => setMul(EMPTY_MULTIPLIER)}><X className="size-4" />Cancel</Button> : null}
+      </div>
+      <p className="mb-2 text-xs text-muted-foreground">Kolom <b>National Holiday</b> dipakai saat keterangan absensi = &quot;Hari Libur Pemerintah&quot;. Durasi tanpa nilai National Holiday dihitung 0.</p>
+      <div className="overflow-auto">
+        <table className="w-full max-w-md border-collapse text-xs">
+          <thead><tr className="bg-muted"><th className="border p-1 text-left">Duration</th><th className="border p-1 text-right">Regular OT</th><th className="border p-1 text-right">National Holiday</th><th className="border p-1" /></tr></thead>
+          <tbody>
+            {(multipliers as Multiplier[]).length === 0 && <tr><td colSpan={4} className="border p-2 text-center text-muted-foreground">Belum ada data.</td></tr>}
+            {(multipliers as Multiplier[]).map((x) => <tr key={x.id ?? x.duration}><td className="border p-1">{x.duration} jam</td><td className="border p-1 text-right">{x.paid_hours}</td><td className="border p-1 text-right">{x.paid_hours_holiday || 0}</td><td className="border p-1 text-right whitespace-nowrap"><button className="inline-flex size-6 items-center justify-center rounded hover:bg-muted" title="Edit" onClick={() => editMultiplier(x)}><Pencil className="size-3" /></button><button className="inline-flex size-6 items-center justify-center rounded hover:bg-destructive/10" title="Delete" onClick={() => deleteMultiplier(x)}><Trash2 className="size-3 text-destructive" /></button></td></tr>)}
+          </tbody>
+        </table>
+      </div>
+    </CollapsibleCard>
 
     <CollapsibleCard title="Units by Shed">
       <div className="mb-4 flex flex-wrap items-center gap-2">

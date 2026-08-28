@@ -8,10 +8,11 @@ import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit/js/pdfkit.standalone.js";
 import type { OtPlanningDaySnapshot } from "@/lib/ot-planning-service";
 
+export type OtPlanningCell = { duration: number; estimated: number; actual: number; holiday?: boolean };
 export type OtPlanningReport = {
   shed: string;
-  config: { umr: number; usdRate: number; divisor: number; multipliers?: Record<string, number> };
-  rows: { division: string; cells: { duration: number; estimated: number; actual: number }[] }[];
+  config: { umr: number; usdRate: number; divisor: number; multipliers?: Record<string, number>; multipliersHoliday?: Record<string, number> };
+  rows: { division: string; cells: OtPlanningCell[] }[];
 };
 
 const navy = "FF1F4E78";
@@ -26,15 +27,21 @@ export function getOtDurations(report: OtPlanningReport) {
   return values.length ? values : [0.5, 1];
 }
 
-function rate(report: OtPlanningReport, duration: number) {
-  return report.config.umr / report.config.divisor * (report.config.multipliers?.[String(duration)] ?? paidHours(duration));
+/** National Holiday rows (cell.holiday) are paid on config.multipliersHoliday;
+ * a missing holiday duration is 0 (no fallback formula). Regular rows keep the
+ * existing behaviour: config.multipliers, else the 1.5h/2h formula. */
+function rate(report: OtPlanningReport, cell: OtPlanningCell) {
+  const perHour = cell.holiday
+    ? report.config.multipliersHoliday?.[String(cell.duration)] ?? 0
+    : report.config.multipliers?.[String(cell.duration)] ?? paidHours(cell.duration);
+  return report.config.umr / report.config.divisor * perHour;
 }
 
 function rowValues(report: OtPlanningReport, row: OtPlanningReport["rows"][number], durations: number[], index: number) {
   const cells = durations.map((duration) => row.cells.find((cell) => cell.duration === duration) ?? { duration, estimated: 0, actual: 0 });
-  const estimatedTotal = cells.reduce((sum, cell) => sum + cell.estimated * rate(report, cell.duration), 0);
-  const actualTotal = cells.reduce((sum, cell) => sum + cell.actual * rate(report, cell.duration), 0);
-  return [index + 1, row.division, ...cells.flatMap((cell) => [cell.estimated, cell.estimated * rate(report, cell.duration), cell.actual, cell.actual * rate(report, cell.duration)]), cells.reduce((sum, cell) => sum + cell.estimated, 0), estimatedTotal, estimatedTotal / report.config.usdRate, cells.reduce((sum, cell) => sum + cell.actual, 0), actualTotal, actualTotal / report.config.usdRate];
+  const estimatedTotal = cells.reduce((sum, cell) => sum + cell.estimated * rate(report, cell), 0);
+  const actualTotal = cells.reduce((sum, cell) => sum + cell.actual * rate(report, cell), 0);
+  return [index + 1, row.division, ...cells.flatMap((cell) => [cell.estimated, cell.estimated * rate(report, cell), cell.actual, cell.actual * rate(report, cell)]), cells.reduce((sum, cell) => sum + cell.estimated, 0), estimatedTotal, estimatedTotal / report.config.usdRate, cells.reduce((sum, cell) => sum + cell.actual, 0), actualTotal, actualTotal / report.config.usdRate];
 }
 
 function styleHeaderCell(cell: ExcelJS.Cell, fill: string) {
@@ -75,24 +82,26 @@ function sewLineSortKey(division: string): number | null {
 
 /** Merges same-named rows across SHED A/B/C into one, summing every duration cell — the
  * flat, shed-agnostic list the Recap sheet shows (COMMON's own units are untouched). */
-function buildRecapRows(reports: OtPlanningReport[]): { division: string; cells: { duration: number; estimated: number; actual: number }[] }[] {
+function buildRecapRows(reports: OtPlanningReport[]): { division: string; cells: OtPlanningCell[] }[] {
   const common = reports.find((r) => r.shed === "COMMON");
   const production = reports.filter((r) => PRODUCTION_SHEDS.includes(r.shed));
 
-  const mergeCells = (cellSets: { duration: number; estimated: number; actual: number }[][]) => {
-    const merged = new Map<number, { duration: number; estimated: number; actual: number }>();
+  const mergeCells = (cellSets: OtPlanningCell[][]) => {
+    const merged = new Map<number, OtPlanningCell>();
     for (const cells of cellSets) {
       for (const cell of cells) {
-        const current = merged.get(cell.duration) ?? { duration: cell.duration, estimated: 0, actual: 0 };
+        const current = merged.get(cell.duration) ?? { duration: cell.duration, estimated: 0, actual: 0, holiday: true };
         current.estimated += cell.estimated;
         current.actual += cell.actual;
+        // Merged cell stays on the holiday bracket only if every source cell was.
+        current.holiday = (current.holiday ?? true) && (cell.holiday ?? false);
         merged.set(cell.duration, current);
       }
     }
     return Array.from(merged.values()).sort((a, b) => a.duration - b.duration);
   };
 
-  const rows: { division: string; cells: { duration: number; estimated: number; actual: number }[] }[] = [];
+  const rows: { division: string; cells: OtPlanningCell[] }[] = [];
 
   // COMMON's own units first, as-is (no rollup applies there).
   if (common) for (const row of common.rows) rows.push({ division: row.division, cells: row.cells });
@@ -119,7 +128,7 @@ function buildRecapRows(reports: OtPlanningReport[]): { division: string; cells:
   return rows;
 }
 
-function writeReportTable(sheet: ExcelJS.Worksheet, startRow: number, label: string, config: OtPlanningReport["config"], durations: number[], rows: { division: string; cells: { duration: number; estimated: number; actual: number }[] }[]): number {
+function writeReportTable(sheet: ExcelJS.Worksheet, startRow: number, label: string, config: OtPlanningReport["config"], durations: number[], rows: { division: string; cells: OtPlanningCell[] }[]): number {
   const virtualReport: OtPlanningReport = { shed: "", config, rows: [] };
   const totalStart = 3 + durations.length * 4;
   const totalEnd = totalStart + 5;
@@ -224,7 +233,7 @@ function actualTotalsForSheds(dayReports: OtPlanningReport[], sheds: string[], d
     usdRate = report.config.usdRate || usdRate;
     for (const row of report.rows) {
       if (divisionFilter && !divisionFilter(row.division)) continue;
-      for (const cell of row.cells) { persons += cell.actual; idr += cell.actual * rate(report, cell.duration); }
+      for (const cell of row.cells) { persons += cell.actual; idr += cell.actual * rate(report, cell); }
     }
   }
   return { persons, idr, usd: idr / usdRate };
@@ -237,8 +246,8 @@ function planningTotalsForDay(dayReports: OtPlanningReport[]) {
     usdRate = report.config.usdRate || usdRate;
     for (const row of report.rows) {
       for (const cell of row.cells) {
-        estPersons += cell.estimated; estIdr += cell.estimated * rate(report, cell.duration);
-        actPersons += cell.actual; actIdr += cell.actual * rate(report, cell.duration);
+        estPersons += cell.estimated; estIdr += cell.estimated * rate(report, cell);
+        actPersons += cell.actual; actIdr += cell.actual * rate(report, cell);
       }
     }
   }
