@@ -2,6 +2,7 @@ import type { Client } from "pg";
 
 import { SIMPLE_MASTER_SHEETS, LOOKUP_TYPES } from "@/config/master-data-sheets";
 import { SIMPLE_MASTER_SEED, LOOKUP_SEED } from "@/config/master-data-seed";
+import { OT_DURATION_MULTIPLIER_SEED } from "@/config/ot-planning-multipliers";
 import { EMPLOYEE_COLUMNS, WRITABLE_EMPLOYEE_COLUMNS } from "@/lib/database/sqlite-columns";
 import { defaultModulePermissions } from "@/config/module-permissions";
 import { hashPassword, DEFAULT_PASSWORD } from "@/lib/auth/password";
@@ -608,9 +609,25 @@ export async function ensureSchema(client: Client): Promise<void> {
     CREATE TABLE IF NOT EXISTS ot_planning_duration_multipliers (
       id BIGSERIAL PRIMARY KEY,
       duration REAL NOT NULL UNIQUE,
-      paid_hours REAL NOT NULL
+      paid_hours REAL NOT NULL,
+      paid_hours_holiday REAL NOT NULL DEFAULT 0
     );
   `);
+  // Second pay bracket for OT rows whose kategori is "Hari Libur Pemerintah".
+  await client.query("ALTER TABLE ot_planning_duration_multipliers ADD COLUMN IF NOT EXISTS paid_hours_holiday REAL NOT NULL DEFAULT 0;");
+  // One-time backfill of the National Holiday bracket + the extra duration rows
+  // it needs (regular bracket keeps whatever paid_hours it already had; only
+  // rows still at the default 0 holiday value are touched, so admin edits made
+  // later in the UI are never clobbered on re-run).
+  for (const [duration, paidHoursRegular, paidHoursHoliday] of OT_DURATION_MULTIPLIER_SEED) {
+    await client.query(
+      `INSERT INTO ot_planning_duration_multipliers (duration, paid_hours, paid_hours_holiday)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (duration) DO UPDATE SET paid_hours_holiday = EXCLUDED.paid_hours_holiday
+       WHERE ot_planning_duration_multipliers.paid_hours_holiday = 0`,
+      [duration, paidHoursRegular, paidHoursHoliday],
+    );
+  }
 
   // update_bracket_master(rows, changed_by, day_types) — bulk create/update/delete satu
   // day_type sekaligus + tulis bracket_master_history, atomik. Perlu fungsi
@@ -783,7 +800,7 @@ export async function seedMasterDataIfEmpty(client: Client): Promise<Record<stri
   const { rows: divisionRows } = await client.query<{ c: string }>("SELECT COUNT(*)::int AS c FROM ot_planning_divisions");
   if (Number(divisionRows[0].c) === 0) { const defaults: Record<string, string[]> = { "SHED A": ["CUTTING", ...Array.from({ length: 10 }, (_, i) => `SEW L${i + 1}`), "QC", "ADM PRODUKSI", "MEKANIK"], "SHED B": ["CUTTING", "FINISHING", ...Array.from({ length: 10 }, (_, i) => `SEW L${i + 13}`), "SEW L14B", "QC", "ADM PRODUKSI", "MEKANIK"], "SHED C": ["CUTTING", "FINISHING", ...Array.from({ length: 5 }, (_, i) => `SEW L${i + 23}`), "SEW L28-32", "CNC", "QC", "ADM PRODUKSI", "MEKANIK"], COMMON: ["HRD & GA & DRIVER & CS & ELEKTRIK & perawat", "IE", "SAMPLE JSS", "QC COMMON", "SAMPLE OP WORKER", "SEWING COMMON", "WAREHOUSE", "PPIC & MD & EXIM", "SAMPLE OP STAFF"] }; for (const [shed, names] of Object.entries(defaults)) for (const [idx, division] of names.entries()) await client.query("INSERT INTO ot_planning_divisions (shed, division, display_order) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", [shed, division, idx]); seeded.OtPlanningDivisions = true; } else seeded.OtPlanningDivisions = false;
   const { rows: multiplierRows } = await client.query<{ c: string }>("SELECT COUNT(*)::int AS c FROM ot_planning_duration_multipliers");
-  if (Number(multiplierRows[0].c) === 0) { for (const [duration, paid] of [[0.5,0.75],[1,1.5],[1.5,2.5],[2,3.5],[2.5,4.5],[3,5.5],[3.5,6.5],[4,7.5],[4.5,8.5],[5,9.5],[5.5,10.5],[6,11.5],[6.5,12.5],[7,13.5],[7.5,14.5],[8,15.5],[8.5,16.5],[9,17.5],[9.5,18.5],[10,19.5],[11,21.5],[12,22.5],[13,23.5]]) await client.query("INSERT INTO ot_planning_duration_multipliers (duration, paid_hours) VALUES ($1, $2) ON CONFLICT DO NOTHING", [duration, paid]); seeded.OtPlanningDurationMultipliers = true; } else seeded.OtPlanningDurationMultipliers = false;
+  if (Number(multiplierRows[0].c) === 0) { for (const [duration, paid, paidHoliday] of OT_DURATION_MULTIPLIER_SEED) await client.query("INSERT INTO ot_planning_duration_multipliers (duration, paid_hours, paid_hours_holiday) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", [duration, paid, paidHoliday]); seeded.OtPlanningDurationMultipliers = true; } else seeded.OtPlanningDurationMultipliers = false;
 
   return seeded;
 }

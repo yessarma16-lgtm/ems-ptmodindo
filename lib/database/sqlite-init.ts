@@ -5,6 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { SIMPLE_MASTER_SHEETS, LOOKUP_TYPES } from "@/config/master-data-sheets";
 import { SIMPLE_MASTER_SEED, LOOKUP_SEED } from "@/config/master-data-seed";
+import { OT_DURATION_MULTIPLIER_SEED } from "@/config/ot-planning-multipliers";
 import { EMPLOYEE_COLUMNS } from "@/lib/database/sqlite-columns";
 import { defaultModulePermissions } from "@/config/module-permissions";
 import { hashPassword, DEFAULT_PASSWORD } from "@/lib/auth/password";
@@ -629,9 +630,25 @@ export function ensureSchema(db: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS ot_planning_duration_multipliers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       duration REAL NOT NULL UNIQUE,
-      paid_hours REAL NOT NULL
+      paid_hours REAL NOT NULL,
+      paid_hours_holiday REAL NOT NULL DEFAULT 0
     );
   `);
+
+  // Second pay bracket for OT rows whose kategori is "Hari Libur Pemerintah".
+  const multiplierColumns = new Set(
+    (db.prepare("PRAGMA table_info(ot_planning_duration_multipliers)").all() as { name: string }[]).map((r) => r.name),
+  );
+  if (!multiplierColumns.has("paid_hours_holiday")) {
+    db.exec("ALTER TABLE ot_planning_duration_multipliers ADD COLUMN paid_hours_holiday REAL NOT NULL DEFAULT 0");
+  }
+  // One-time backfill of the National Holiday bracket + the extra duration rows
+  // it needs. Only rows still at the default 0 holiday value are touched, so
+  // later admin edits in the UI are never clobbered on re-run.
+  const insertMultiplier = db.prepare(
+    "INSERT INTO ot_planning_duration_multipliers (duration, paid_hours, paid_hours_holiday) VALUES (?, ?, ?) ON CONFLICT (duration) DO UPDATE SET paid_hours_holiday = excluded.paid_hours_holiday WHERE ot_planning_duration_multipliers.paid_hours_holiday = 0",
+  );
+  for (const [duration, paid, paidHoliday] of OT_DURATION_MULTIPLIER_SEED) insertMultiplier.run(duration, paid, paidHoliday);
 }
 
 /**
@@ -681,7 +698,7 @@ export function seedMasterDataIfEmpty(db: DatabaseSync): Record<string, boolean>
   const divisionCount = db.prepare("SELECT COUNT(*) as c FROM ot_planning_divisions").get() as { c: number };
   if (divisionCount.c === 0) { const insert = db.prepare("INSERT INTO ot_planning_divisions (shed, division, display_order) VALUES (?, ?, ?)"); Object.entries({ "SHED A": ["CUTTING", ...Array.from({ length: 10 }, (_, i) => `SEW L${i + 1}`), "QC", "ADM PRODUKSI", "MEKANIK"], "SHED B": ["CUTTING", "FINISHING", ...Array.from({ length: 10 }, (_, i) => `SEW L${i + 13}`), "SEW L14B", "QC", "ADM PRODUKSI", "MEKANIK"], "SHED C": ["CUTTING", "FINISHING", ...Array.from({ length: 5 }, (_, i) => `SEW L${i + 23}`), "SEW L28-32", "CNC", "QC", "ADM PRODUKSI", "MEKANIK"], COMMON: ["HRD & GA & DRIVER & CS & ELEKTRIK & perawat", "IE", "SAMPLE JSS", "QC COMMON", "SAMPLE OP WORKER", "SEWING COMMON", "WAREHOUSE", "PPIC & MD & EXIM", "SAMPLE OP STAFF"] }).forEach(([shed, names]) => (names as string[]).forEach((division, idx) => insert.run(shed, division, idx))); seeded.OtPlanningDivisions = true; } else seeded.OtPlanningDivisions = false;
   const multiplierCount = db.prepare("SELECT COUNT(*) as c FROM ot_planning_duration_multipliers").get() as { c: number };
-  if (multiplierCount.c === 0) { const insert = db.prepare("INSERT INTO ot_planning_duration_multipliers (duration, paid_hours) VALUES (?, ?)"); [[0.5,0.75],[1,1.5],[1.5,2.5],[2,3.5],[2.5,4.5],[3,5.5],[3.5,6.5],[4,7.5],[4.5,8.5],[5,9.5],[5.5,10.5],[6,11.5],[6.5,12.5],[7,13.5],[7.5,14.5],[8,15.5],[8.5,16.5],[9,17.5],[9.5,18.5],[10,19.5],[11,21.5],[12,22.5],[13,23.5]].forEach(([duration, paid]) => insert.run(duration, paid)); seeded.OtPlanningDurationMultipliers = true; } else seeded.OtPlanningDurationMultipliers = false;
+  if (multiplierCount.c === 0) { const insert = db.prepare("INSERT INTO ot_planning_duration_multipliers (duration, paid_hours, paid_hours_holiday) VALUES (?, ?, ?)"); OT_DURATION_MULTIPLIER_SEED.forEach(([duration, paid, paidHoliday]) => insert.run(duration, paid, paidHoliday)); seeded.OtPlanningDurationMultipliers = true; } else seeded.OtPlanningDurationMultipliers = false;
 
   return seeded;
 }

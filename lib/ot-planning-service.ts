@@ -1,6 +1,16 @@
 import "server-only";
 
 import { getSupabaseClient, supabaseGuarded } from "@/lib/supabase";
+import { OT_DURATION_MULTIPLIER_SEED } from "@/config/ot-planning-multipliers";
+
+/**
+ * Attendance kategori that switches an OT row from the regular pay bracket
+ * (paid_hours) to the National Holiday bracket (paid_hours_holiday). Only this
+ * one — "Hari Libur/Minggu" and "Hari Libur/Lembur" stay on the regular
+ * bracket (see NO_BRACKET_HOLIDAY_CATEGORIES in lib/attendance/overtime-rules.ts,
+ * which is a different, hours-calculation concern).
+ */
+export const NATIONAL_HOLIDAY_CATEGORY = "Hari Libur Pemerintah";
 
 /* Supabase's dynamic table facade is intentionally untyped at this boundary. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -43,8 +53,14 @@ export async function getOtPlanning(date: string, sheds: string[] = Object.keys(
     const endDate = dateTo || date;
     const dateFilter = (query: any) => dateTo ? query.gte("tanggal", date).lte("tanggal", endDate) : query.eq("tanggal", date);
 
-    const raw = await fetchAllPages<{ id: number; department: string; tanggal: string }>(client, "raw_attendance", "id,department,tanggal", dateFilter);
+    const raw = await fetchAllPages<{ id: number; department: string; tanggal: string; kategori: string }>(client, "raw_attendance", "id,department,tanggal,kategori", dateFilter);
     const rawIds = raw.map((x) => Number(x.id));
+    // A government-holiday day is holiday-wide (HR's rule: "tanggal 25 semuanya
+    // Hari Libur Pemerintah"), so we track it both per raw row (for actual, keyed
+    // by the record's own kategori) and per date (for estimates, which carry no
+    // kategori of their own).
+    const holidayRawIds = new Set(raw.filter((x) => String(x.kategori) === NATIONAL_HOLIDAY_CATEGORY).map((x) => Number(x.id)));
+    const holidayDates = new Set(raw.filter((x) => String(x.kategori) === NATIONAL_HOLIDAY_CATEGORY).map((x) => String(x.tanggal)));
     const calculated: { raw_id: number; final_oth: number; status: string }[] = [];
     for (const idBatch of chunk(rawIds, 500)) {
       const { data, error } = await client.from("calculated_attendance").select("raw_id,final_oth,status").in("raw_id", idBatch);
@@ -57,10 +73,11 @@ export async function getOtPlanning(date: string, sheds: string[] = Object.keys(
       client.from("ot_planning_config_history").select("umr,usd_rate").lte("effective_date", endDate).order("effective_date", { ascending: false }).order("id", { ascending: false }).limit(1),
       client.from("ot_planning_mappings").select("id,attendance_department,shed,division,display_order").order("display_order"),
       client.from("ot_planning_divisions").select("id,shed,division,display_order").order("display_order"),
-      client.from("ot_planning_duration_multipliers").select("duration,paid_hours").order("duration"),
+      client.from("ot_planning_duration_multipliers").select("duration,paid_hours,paid_hours_holiday").order("duration"),
     ]);
     if (estimateError) throw estimateError; if (configError) throw configError; if (mappingError) throw mappingError; if (divisionError) throw divisionError; if (multiplierError) throw multiplierError;
     const paidByDuration = new Map((multipliers ?? []).map((x: any) => [Number(x.duration), Number(x.paid_hours)]));
+    const paidHolidayByDuration = new Map((multipliers ?? []).map((x: any) => [Number(x.duration), Number(x.paid_hours_holiday)]));
     const config = configs?.[0] ?? { umr: DEFAULT_UMR, usd_rate: DEFAULT_USD_RATE };
     const mappingRows: OtMapping[] = (mappings?.length ? mappings : seedMappings).map((x: any) => ({ attendanceDepartment: String(x.attendance_department ?? x.attendanceDepartment), shed: String(x.shed), division: String(x.division), displayOrder: Number(x.display_order ?? x.displayOrder ?? 0) }));
     const divisionRows = divisions?.length ? divisions.map((x: any) => ({ shed: String(x.shed), division: String(x.division), displayOrder: Number(x.display_order ?? 0) })) : Object.entries(DIVISIONS).flatMap(([shed, names]) => names.map((division, displayOrder) => ({ shed, division, displayOrder })));
@@ -71,16 +88,41 @@ export async function getOtPlanning(date: string, sheds: string[] = Object.keys(
     // system_calculated_oth) because for Dikoreksi Manual that's the corrected value HR actually approved.
     const INCLUDED_STATUSES = new Set(["Sesuai", "Dikoreksi Manual"]);
     const actual = new Map<string, number>();
-    for (const row of calculated ?? []) { if (!INCLUDED_STATUSES.has(String((row as any).status))) continue; const mapped = mapByDepartment.get((rawById.get(Number((row as any).raw_id)) ?? "").trim().toUpperCase()); const duration = num((row as any).final_oth); if (mapped && duration > 0) actual.set(`${mapped.shed}|${mapped.division}|${duration}`, (actual.get(`${mapped.shed}|${mapped.division}|${duration}`) ?? 0) + 1); }
+    const actualHoliday = new Map<string, number>();
+    for (const row of calculated ?? []) {
+      if (!INCLUDED_STATUSES.has(String((row as any).status))) continue;
+      const mapped = mapByDepartment.get((rawById.get(Number((row as any).raw_id)) ?? "").trim().toUpperCase());
+      const duration = num((row as any).final_oth);
+      if (!mapped || duration <= 0) continue;
+      const key = `${mapped.shed}|${mapped.division}|${duration}`;
+      const bucket = holidayRawIds.has(Number((row as any).raw_id)) ? actualHoliday : actual;
+      bucket.set(key, (bucket.get(key) ?? 0) + 1);
+    }
     const estimate = new Map<string, number>();
-    for (const x of (estimates ?? []) as Array<{ shed: string; division: string; duration: number; person: number }>) { const key = `${x.shed}|${x.division}|${num(x.duration)}`; estimate.set(key, (estimate.get(key) ?? 0) + num(x.person)); }
+    const estimateHoliday = new Map<string, number>();
+    for (const x of (estimates ?? []) as Array<{ shed: string; division: string; duration: number; person: number; tanggal: string }>) {
+      const key = `${x.shed}|${x.division}|${num(x.duration)}`;
+      const bucket = holidayDates.has(String(x.tanggal)) ? estimateHoliday : estimate;
+      bucket.set(key, (bucket.get(key) ?? 0) + num(x.person));
+    }
     const divisionsByShed = new Map<string, OtDivision[]>(); for (const row of divisionRows) { const list = divisionsByShed.get(row.shed) ?? []; list.push(row); divisionsByShed.set(row.shed, list); }
     return sheds.filter((x) => divisionsByShed.has(x)).map((shed) => {
       const rows = (divisionsByShed.get(shed) ?? []).sort((a, b) => a.displayOrder - b.displayOrder).map(({ division }) => {
-        const durations = Array.from(new Set([...actual.keys(), ...estimate.keys()].filter((k) => k.startsWith(`${shed}|${division}|`)).map((k) => Number(k.split("|")[2])))).sort((a, b) => a - b);
-        return { division, cells: durations.map((duration) => ({ duration, estimated: estimate.get(`${shed}|${division}|${duration}`) ?? 0, actual: actual.get(`${shed}|${division}|${duration}`) ?? 0 })) };
+        const prefix = `${shed}|${division}|`;
+        const durations = Array.from(new Set([...actual.keys(), ...actualHoliday.keys(), ...estimate.keys(), ...estimateHoliday.keys()].filter((k) => k.startsWith(prefix)).map((k) => Number(k.split("|")[2])))).sort((a, b) => a - b);
+        return { division, cells: durations.map((duration) => {
+          const key = `${prefix}${duration}`;
+          const est = estimate.get(key) ?? 0; const estH = estimateHoliday.get(key) ?? 0;
+          const act = actual.get(key) ?? 0; const actH = actualHoliday.get(key) ?? 0;
+          // A cell is priced on the holiday bracket only when every contribution
+          // to it is from a government holiday. A cell that mixes holiday and
+          // regular days (only possible on a multi-day range export) falls back
+          // to the regular bracket rather than over-charging the regular part.
+          const holiday = estH + actH > 0 && est + act === 0;
+          return { duration, estimated: est + estH, actual: act + actH, holiday };
+        }) };
       });
-      return { shed, rows, config: { umr: num(config.umr), usdRate: num(config.usd_rate), divisor: 173, multipliers: Object.fromEntries(paidByDuration) } };
+      return { shed, rows, config: { umr: num(config.umr), usdRate: num(config.usd_rate), divisor: 173, multipliers: Object.fromEntries(paidByDuration), multipliersHoliday: Object.fromEntries(paidHolidayByDuration) } };
     });
   });
 }
@@ -146,7 +188,26 @@ export async function deleteOtConfig(id: number) {
   return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_config_history").delete().eq("id", id); if (error) throw error; });
 }
 
-export async function getOtReferences() { return supabaseGuarded(async () => { const client = getSupabaseClient(); const [{ data: mappings, error: me }, { data: divisions, error: de }, { data: multipliers, error: be }, configHistory] = await Promise.all([client.from("ot_planning_mappings").select("id,attendance_department,shed,division,display_order").order("display_order"), client.from("ot_planning_divisions").select("id,shed,division,display_order").order("display_order"), client.from("ot_planning_duration_multipliers").select("id,duration,paid_hours").order("duration"), getOtConfigHistory()]); if (me) throw me; if (de) throw de; if (be) throw be; const mappingData = (mappings?.length ? mappings : seedMappings).map((x: any) => ({ id: x.id, attendance_department: String(x.attendance_department ?? x.attendanceDepartment), shed: String(x.shed), division: String(x.division), display_order: Number(x.display_order ?? x.displayOrder ?? 0) })); const multiplierData = multipliers?.length ? multipliers : Array.from({ length: 26 }, (_, i) => ({ duration: (i + 1) / 2, paid_hours: paidHours((i + 1) / 2) })); return { mappings: mappingData, divisions: divisions?.length ? divisions : Object.entries(DIVISIONS).flatMap(([shed, names]) => names.map((division, display_order) => ({ shed, division, display_order }))), multipliers: multiplierData, configHistory }; }); }
+export async function getOtReferences() { return supabaseGuarded(async () => { const client = getSupabaseClient(); const [{ data: mappings, error: me }, { data: divisions, error: de }, { data: multipliers, error: be }, configHistory] = await Promise.all([client.from("ot_planning_mappings").select("id,attendance_department,shed,division,display_order").order("display_order"), client.from("ot_planning_divisions").select("id,shed,division,display_order").order("display_order"), client.from("ot_planning_duration_multipliers").select("id,duration,paid_hours,paid_hours_holiday").order("duration"), getOtConfigHistory()]); if (me) throw me; if (de) throw de; if (be) throw be; const mappingData = (mappings?.length ? mappings : seedMappings).map((x: any) => ({ id: x.id, attendance_department: String(x.attendance_department ?? x.attendanceDepartment), shed: String(x.shed), division: String(x.division), display_order: Number(x.display_order ?? x.displayOrder ?? 0) })); const multiplierData = multipliers?.length ? multipliers : OT_DURATION_MULTIPLIER_SEED.map(([duration, paid_hours, paid_hours_holiday]) => ({ duration, paid_hours, paid_hours_holiday })); return { mappings: mappingData, divisions: divisions?.length ? divisions : Object.entries(DIVISIONS).flatMap(([shed, names]) => names.map((division, display_order) => ({ shed, division, display_order }))), multipliers: multiplierData, configHistory }; }); }
+
+/** Edit (value.id set) UPDATEs by primary key; a fresh Add upserts by the
+ * natural key (duration) so re-adding a duration that already exists just
+ * replaces its values instead of erroring on the UNIQUE(duration) constraint —
+ * same pattern as saveOtMapping / saveOtDivision / saveOtConfig. */
+export async function saveOtMultiplier(value: { id?: number; duration: number; paidHours: number; paidHoursHoliday: number }) {
+  return supabaseGuarded(async () => {
+    const client = getSupabaseClient();
+    const row = { duration: value.duration, paid_hours: value.paidHours, paid_hours_holiday: value.paidHoursHoliday };
+    if (value.id) {
+      const { error } = await client.from("ot_planning_duration_multipliers").update(row).eq("id", value.id);
+      if (error) throw error;
+    } else {
+      const { error } = await client.from("ot_planning_duration_multipliers").upsert(row, { onConflict: "duration" });
+      if (error) throw error;
+    }
+  });
+}
+export async function deleteOtMultiplier(id: number) { return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_duration_multipliers").delete().eq("id", id); if (error) throw error; }); }
 /** Editing (value.id set) must UPDATE by primary key — upserting by the natural key (attendance_department) breaks the moment that key's value itself changes, since the row then no longer matches the ON CONFLICT target and Postgres falls through to a plain INSERT carrying the old id, colliding with the primary key. Only a fresh Add (no id) should dedupe via upsert-by-natural-key. */
 export async function saveOtMapping(value: OtMapping) {
   return supabaseGuarded(async () => {
