@@ -3,8 +3,8 @@
 /* The reference editor receives dynamic rows from the API facade. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { CalendarCheck, FileSpreadsheet, FileText, GripVertical, Pencil, Play, Plus, Save, Trash2, X } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { CalendarCheck, ChevronDown, FileSpreadsheet, FileText, GripVertical, Pencil, Play, Plus, Save, Trash2, X } from "lucide-react";
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -83,6 +83,20 @@ const EMPTY_MAPPING = { attendanceDepartment: "", shed: "SHED A", division: "", 
 const EMPTY_DIVISION = { shed: "SHED A", division: "", displayOrder: 0 };
 const EMPTY_CONFIG = { effectiveDate: "", umr: 2954114, usdRate: 16000 };
 
+/** Card section yang bisa di-minimize/maximize — klik header judul untuk toggle kontennya. */
+function CollapsibleCard({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <Card><CardContent className="pt-6">
+      <button type="button" className="mb-3 flex w-full items-center justify-between text-left" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <h2 className="font-semibold">{title}</h2>
+        <ChevronDown className={`size-5 shrink-0 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`} />
+      </button>
+      {open ? children : null}
+    </CardContent></Card>
+  );
+}
+
 function References({ mappings, divisions, multipliers, configHistory, date, post, del, reorderDivisions }: any) {
   const [m, setM] = useState<any>(EMPTY_MAPPING);
   const [d, setD] = useState<any>(EMPTY_DIVISION);
@@ -125,10 +139,9 @@ function References({ mappings, divisions, multipliers, configHistory, date, pos
         </table>
       </div>
     </CardContent></Card>
-    <Card><CardContent className="pt-6"><h2 className="mb-3 font-semibold">Duration & Paid Hours</h2><div className="grid grid-cols-2 gap-2 text-sm">{multipliers.map((x: any) => <div className="border-b p-1" key={x.duration}>{x.duration} hours → {x.paid_hours} paid hours</div>)}</div></CardContent></Card>
+    <CollapsibleCard title="Duration & Paid Hours"><div className="grid grid-cols-2 gap-2 text-sm">{multipliers.map((x: any) => <div className="border-b p-1" key={x.duration}>{x.duration} hours → {x.paid_hours} paid hours</div>)}</div></CollapsibleCard>
 
-    <Card><CardContent className="pt-6">
-      <h2 className="mb-3 font-semibold">Units by Shed</h2>
+    <CollapsibleCard title="Units by Shed">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Select value={d.shed} onValueChange={(v) => setD({ ...d, shed: v })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
         <Input className="w-56" placeholder="Unit" value={d.division} onChange={(e) => setD({ ...d, division: e.target.value })} />
@@ -138,10 +151,9 @@ function References({ mappings, divisions, multipliers, configHistory, date, pos
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {divisionGroups.map(([shed, rows]) => <SortableUnitsTable key={shed} shed={shed} rows={rows} onEdit={editDivision} onDelete={deleteDivision} onReorder={reorderDivisions} />)}
       </div>
-    </CardContent></Card>
+    </CollapsibleCard>
 
-    <Card><CardContent className="pt-6">
-      <h2 className="mb-3 font-semibold">Department Mapping</h2>
+    <CollapsibleCard title="Department Mapping">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Input className="w-64" placeholder="Attendance department" value={m.attendanceDepartment} onChange={(e) => setM({ ...m, attendanceDepartment: e.target.value })} />
         <Select value={m.shed} onValueChange={(v) => setM({ ...m, shed: v, division: "" })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent>{DEPARTMENTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>
@@ -166,7 +178,7 @@ function References({ mappings, divisions, multipliers, configHistory, date, pos
           </table>
         </div>)}
       </div>
-    </CardContent></Card>
+    </CollapsibleCard>
   </div>;
 }
 
