@@ -83,9 +83,9 @@ const EMPTY_MAPPING = { attendanceDepartment: "", shed: "SHED A", division: "", 
 const EMPTY_DIVISION = { shed: "SHED A", division: "", displayOrder: 0 };
 const EMPTY_CONFIG = { effectiveDate: "", umr: 2954114, usdRate: 16000 };
 
-/** Card section yang bisa di-minimize/maximize — klik header judul untuk toggle kontennya. */
+/** Card section yang bisa di-minimize/maximize — klik header judul untuk toggle kontennya. Default minimized. */
 function CollapsibleCard({ title, children }: { title: string; children: ReactNode }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   return (
     <Card><CardContent className="pt-6">
       <button type="button" className="mb-3 flex w-full items-center justify-between text-left" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
