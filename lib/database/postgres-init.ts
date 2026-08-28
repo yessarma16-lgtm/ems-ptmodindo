@@ -533,6 +533,42 @@ export async function ensureSchema(client: Client): Promise<void> {
   await client.query("CREATE UNIQUE INDEX IF NOT EXISTS uq_calculated_attendance_raw_id ON calculated_attendance(raw_id);");
   await client.query("CREATE INDEX IF NOT EXISTS idx_calculated_attendance_raw ON calculated_attendance(raw_id);");
   await client.query("CREATE INDEX IF NOT EXISTS idx_calculated_attendance_status ON calculated_attendance(status);");
+  await client.query("CREATE INDEX IF NOT EXISTS idx_raw_attendance_imported_at ON raw_attendance(imported_at);");
+  await client.query("CREATE INDEX IF NOT EXISTS idx_raw_attendance_source_import ON raw_attendance(source_filename, imported_at);");
+
+  // Read-side views for the attendance summary/list endpoints. Without these,
+  // getImportHistory() / the processed-dates lookup / getCalculatedAttendance()
+  // paged through every raw + calculated row over the PostgREST HTTP API and
+  // did the GROUP BY / DISTINCT / join in JS — 9-20s per call in production.
+  // Pushing the work into Postgres turns each endpoint into a single request.
+  // PostgREST exposes views automatically (a schema reload may be needed right
+  // after the first CREATE); the SQLite adapter keeps its own hand-written SQL.
+  await client.query(`
+    CREATE OR REPLACE VIEW attendance_import_history AS
+    SELECT ra.source_filename,
+           ra.imported_at,
+           ra.imported_by,
+           count(*)::int AS row_count,
+           bool_and(ca.raw_id IS NOT NULL) AS all_processed
+    FROM raw_attendance ra
+    LEFT JOIN calculated_attendance ca ON ca.raw_id = ra.id
+    GROUP BY ra.source_filename, ra.imported_at, ra.imported_by;
+  `);
+  await client.query(`
+    CREATE OR REPLACE VIEW attendance_processed_dates AS
+    SELECT DISTINCT ra.tanggal
+    FROM calculated_attendance ca
+    JOIN raw_attendance ra ON ra.id = ca.raw_id;
+  `);
+  await client.query(`
+    CREATE OR REPLACE VIEW attendance_calculated_full AS
+    SELECT ca.id, ca.raw_id, ca.day_type, ca.bracket_used, ca.system_calculated_oth,
+           ca.final_oth, ca.status, ca.corrected_by, ca.corrected_at, ca.correction_note, ca.calculated_at,
+           ra.nik, ra.nama, ra.department, ra.tanggal, ra.intime, ra.outtime, ra.it1, ra.ot1,
+           ra.whour, ra.kategori, ra.othour_recorded
+    FROM calculated_attendance ca
+    JOIN raw_attendance ra ON ra.id = ca.raw_id;
+  `);
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS ot_planning_estimates (

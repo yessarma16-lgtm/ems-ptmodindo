@@ -52,6 +52,8 @@ export interface AttendanceDatabaseAdapter {
   /** Diturunkan dari raw_attendance (GROUP BY), bukan tabel terpisah — lihat ImportHistoryEntry. */
   getImportHistory(filters?: ImportHistoryFilter): Promise<ImportHistoryEntry[]>;
   deleteImport(sourceFilename: string, importedAt: string): Promise<void>;
+  /** Distinct `tanggal` yang sudah punya minimal satu baris calculated_attendance — untuk indikator "MPP Calculation selesai" di date picker. */
+  getProcessedDates(): Promise<string[]>;
 
   // bracket_master
   getBracketMaster(dayType?: DayType): Promise<BracketMasterRow[]>;

@@ -249,6 +249,17 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     }));
   }
 
+  async function getProcessedDates(): Promise<string[]> {
+    const rows = db
+      .prepare(
+        `SELECT DISTINCT ra.tanggal AS tanggal
+         FROM calculated_attendance ca JOIN raw_attendance ra ON ra.id = ca.raw_id
+         ORDER BY ra.tanggal`,
+      )
+      .all() as SqlRow[];
+    return rows.map((row) => toStr(row.tanggal));
+  }
+
   async function deleteImport(sourceFilename: string, importedAt: string): Promise<void> {
     db.exec("BEGIN");
     try {
@@ -511,6 +522,7 @@ export function createSqliteAttendanceAdapter(db: DatabaseSync): AttendanceDatab
     countRawAttendance,
     updateRawAttendanceTimes,
     getImportHistory,
+    getProcessedDates,
     deleteImport,
     getBracketMaster,
     updateBracketMaster,

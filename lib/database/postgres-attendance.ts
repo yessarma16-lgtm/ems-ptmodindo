@@ -201,35 +201,47 @@ async function findExistingByNikDate(pairs: NikDatePair[]): Promise<ExistingReco
 
 async function getImportHistory(filters: ImportHistoryFilter = {}): Promise<ImportHistoryEntry[]> {
   return supabaseGuarded(async () => {
-    // PostgREST tidak punya GROUP BY di query builder -- ambil kolom yang
-    // relevan saja lalu group di sisi aplikasi, sama seperti workaround
-    // NOT EXISTS di runCrosscheck().
-    const PAGE_SIZE = 1000;
-    let countQuery = getSupabaseClient().from("raw_attendance").select("id", { count: "exact", head: true });
-    if (filters.dateFrom) countQuery = countQuery.gte("imported_at", `${filters.dateFrom}T00:00:00.000Z`);
-    if (filters.dateTo) countQuery = countQuery.lte("imported_at", `${filters.dateTo}T23:59:59.999Z`);
-    const { count, error: countError } = await countQuery;
-    if (countError) throw countError;
-    const pageCount = Math.ceil((count ?? 0) / PAGE_SIZE);
-    const pages = await Promise.all(Array.from({ length: pageCount }, async (_, page) => {
-      let query = getSupabaseClient().from("raw_attendance").select("id, source_filename, imported_at, imported_by, calculated_attendance(id)");
-      if (filters.dateFrom) query = query.gte("imported_at", `${filters.dateFrom}T00:00:00.000Z`);
-      if (filters.dateTo) query = query.lte("imported_at", `${filters.dateTo}T23:59:59.999Z`);
-      const { data, error } = await query.order("id", { ascending: true }).range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-      if (error) throw error;
-      return (data ?? []) as SqlRow[];
+    // One request against the attendance_import_history view (GROUP BY
+    // source_filename, imported_at, imported_by) instead of paging every
+    // raw_attendance row + a per-row calculated_attendance(id) embed and
+    // grouping in JS — that pattern took ~20s in production.
+    let query = getSupabaseClient()
+      .from("attendance_import_history")
+      .select("source_filename, imported_at, imported_by, row_count, all_processed");
+    if (filters.dateFrom) query = query.gte("imported_at", `${filters.dateFrom}T00:00:00.000Z`);
+    if (filters.dateTo) query = query.lte("imported_at", `${filters.dateTo}T23:59:59.999Z`);
+    const { data, error } = await query.order("imported_at", { ascending: false });
+    if (error) throw error;
+    return ((data ?? []) as SqlRow[]).map((row) => ({
+      sourceFilename: toStr(row.source_filename),
+      importedAt: toStr(row.imported_at),
+      importedBy: toStr(row.imported_by),
+      rowCount: toNum(row.row_count),
+      processStatus: row.all_processed ? "Done Process" : "Waiting Process",
     }));
-    const allRows = pages.flat();
-    const grouped = new Map<string, ImportHistoryEntry>();
-    for (const row of allRows) {
-      const key = `${toStr(row.source_filename)}::${toStr(row.imported_at)}::${toStr(row.imported_by)}`;
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.rowCount += 1;
-        if (!(Array.isArray(row.calculated_attendance) && row.calculated_attendance.length > 0)) existing.processStatus = "Waiting Process";
-      } else grouped.set(key, { sourceFilename: toStr(row.source_filename), importedAt: toStr(row.imported_at), importedBy: toStr(row.imported_by), rowCount: 1, processStatus: Array.isArray(row.calculated_attendance) && row.calculated_attendance.length > 0 ? "Done Process" : "Waiting Process" });
+  });
+}
+
+/** Distinct dates that have at least one calculated_attendance row — powers the
+ * "green ring = MPP Calculation done" indicator on the date pickers. Backed by
+ * the attendance_processed_dates view so it stays a single small request rather
+ * than loading every calculated row just to read distinct tanggal. */
+async function getProcessedDates(): Promise<string[]> {
+  return supabaseGuarded(async () => {
+    const PAGE_SIZE = 1000;
+    const out: string[] = [];
+    for (let page = 0; ; page += 1) {
+      const { data, error } = await getSupabaseClient()
+        .from("attendance_processed_dates")
+        .select("tanggal")
+        .order("tanggal", { ascending: true })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+      if (error) throw error;
+      const rows = (data ?? []) as SqlRow[];
+      out.push(...rows.map((row) => toStr(row.tanggal)));
+      if (rows.length < PAGE_SIZE) break;
     }
-    return Array.from(grouped.values()).sort((a, b) => (a.importedAt < b.importedAt ? 1 : -1));
+    return out;
   });
 }
 
@@ -584,73 +596,66 @@ async function runCrosscheck(rawIds?: number[], filters: { dateFrom?: string; da
   });
 }
 
+/** Filters shared by getCalculatedAttendance / countCalculatedAttendance,
+ * applied against the flat attendance_calculated_full view (calculated joined
+ * to raw). Replaces the old `raw_attendance!inner(...)` embed whose count query
+ * alone took ~9s in production. */
+function applyCalculatedFilters(query: any, filters: CalculatedAttendanceFilter): any {
+  if (filters.status) query = query.eq("status", filters.status);
+  if (filters.dateFrom) query = query.gte("tanggal", filters.dateFrom);
+  if (filters.dateTo) query = query.lte("tanggal", filters.dateTo);
+  if (filters.department) query = query.eq("department", filters.department);
+  if (filters.search?.trim()) {
+    const search = filters.search.trim();
+    query = query.or(`nik.ilike.%${search}%,nama.ilike.%${search}%`);
+  }
+  return query;
+}
+
 async function getCalculatedAttendance(filters: CalculatedAttendanceFilter): Promise<CalculatedAttendanceRecord[]> {
   return supabaseGuarded(async () => {
-    let countQuery = getSupabaseClient().from("calculated_attendance").select("id, raw_attendance!inner(tanggal, department)", { count: "exact", head: true });
-    if (filters.status) countQuery = countQuery.eq("status", filters.status);
-    if (filters.dateFrom) countQuery = countQuery.gte("raw_attendance.tanggal", filters.dateFrom);
-    if (filters.dateTo) countQuery = countQuery.lte("raw_attendance.tanggal", filters.dateTo);
-    if (filters.department) countQuery = countQuery.eq("raw_attendance.department", filters.department);
-    const { count, error: countError } = await countQuery;
+    const { count, error: countError } = await applyCalculatedFilters(
+      getSupabaseClient().from("attendance_calculated_full").select("id", { count: "exact", head: true }),
+      filters,
+    );
     if (countError) throw countError;
     const pageCount = Math.ceil((count ?? 0) / ATTENDANCE_BATCH_SIZE);
     const pages = await Promise.all(Array.from({ length: pageCount }, async (_, page) => {
-      let pageQuery = getSupabaseClient()
-        .from("calculated_attendance")
-        .select("*, raw_attendance!inner(nik, nama, department, tanggal, intime, outtime, it1, ot1, whour, kategori, othour_recorded)");
-      if (filters.status) pageQuery = pageQuery.eq("status", filters.status);
-      if (filters.dateFrom) pageQuery = pageQuery.gte("raw_attendance.tanggal", filters.dateFrom);
-      if (filters.dateTo) pageQuery = pageQuery.lte("raw_attendance.tanggal", filters.dateTo);
-      if (filters.department) pageQuery = pageQuery.eq("raw_attendance.department", filters.department);
-      const { data, error } = await pageQuery.order("id", { ascending: true }).range(page * ATTENDANCE_BATCH_SIZE, (page + 1) * ATTENDANCE_BATCH_SIZE - 1);
+      const { data, error } = await applyCalculatedFilters(
+        getSupabaseClient().from("attendance_calculated_full").select("*"),
+        filters,
+      ).order("id", { ascending: true }).range(page * ATTENDANCE_BATCH_SIZE, (page + 1) * ATTENDANCE_BATCH_SIZE - 1);
       if (error) throw error;
       return (data ?? []) as SqlRow[];
     }));
-    const data = pages.flat();
-    const search = filters.search?.toLowerCase();
-    return (data as SqlRow[]).filter((row) => {
-      if (!search) return true;
-      const ra = row.raw_attendance as SqlRow;
-      return `${toStr(ra?.nik)} ${toStr(ra?.nama)}`.toLowerCase().includes(search);
-    }).map((row) => {
-      const ra = row.raw_attendance as SqlRow;
-      return {
-        id: toNum(row.id),
-        rawId: toNum(row.raw_id),
-        dayType: toStr(row.day_type) as DayType,
-        bracketUsed: toStr(row.bracket_used),
-        systemCalculatedOth: toNumOrNull(row.system_calculated_oth),
-        finalOth: toNumOrNull(row.final_oth),
-        status: toStr(row.status) as CalculatedStatus,
-        correctedBy: toStrOrNull(row.corrected_by),
-        correctedAt: toStrOrNull(row.corrected_at),
-        correctionNote: toStrOrNull(row.correction_note),
-        calculatedAt: toStr(row.calculated_at),
-        nik: toStr(ra?.nik),
-        nama: toStr(ra?.nama),
-        department: toStr(ra?.department),
-        tanggal: toStr(ra?.tanggal),
-        intime: toStrOrNull(ra?.intime), outtime: toStrOrNull(ra?.outtime), it1: toStrOrNull(ra?.it1), ot1: toStrOrNull(ra?.ot1),
-        whour: toNumOrNull(ra?.whour), kategori: toStr(ra?.kategori), othourRecorded: toNumOrNull(ra?.othour_recorded),
-      };
-    });
+    return pages.flat().map((row) => ({
+      id: toNum(row.id),
+      rawId: toNum(row.raw_id),
+      dayType: toStr(row.day_type) as DayType,
+      bracketUsed: toStr(row.bracket_used),
+      systemCalculatedOth: toNumOrNull(row.system_calculated_oth),
+      finalOth: toNumOrNull(row.final_oth),
+      status: toStr(row.status) as CalculatedStatus,
+      correctedBy: toStrOrNull(row.corrected_by),
+      correctedAt: toStrOrNull(row.corrected_at),
+      correctionNote: toStrOrNull(row.correction_note),
+      calculatedAt: toStr(row.calculated_at),
+      nik: toStr(row.nik),
+      nama: toStr(row.nama),
+      department: toStr(row.department),
+      tanggal: toStr(row.tanggal),
+      intime: toStrOrNull(row.intime), outtime: toStrOrNull(row.outtime), it1: toStrOrNull(row.it1), ot1: toStrOrNull(row.ot1),
+      whour: toNumOrNull(row.whour), kategori: toStr(row.kategori), othourRecorded: toNumOrNull(row.othour_recorded),
+    }));
   });
 }
 
 async function countCalculatedAttendance(filters: CalculatedAttendanceFilter): Promise<number> {
   return supabaseGuarded(async () => {
-    let query = getSupabaseClient()
-      .from("calculated_attendance")
-      .select("id, raw_attendance!inner(nik, nama, department, tanggal)", { count: "exact", head: true });
-    if (filters.status) query = query.eq("status", filters.status);
-    if (filters.dateFrom) query = query.gte("raw_attendance.tanggal", filters.dateFrom);
-    if (filters.dateTo) query = query.lte("raw_attendance.tanggal", filters.dateTo);
-    if (filters.department) query = query.eq("raw_attendance.department", filters.department);
-    if (filters.search?.trim()) {
-      const search = filters.search.trim();
-      query = query.or(`nik.ilike.%${search}%,nama.ilike.%${search}%`, { referencedTable: "raw_attendance" });
-    }
-    const { count, error } = await query;
+    const { count, error } = await applyCalculatedFilters(
+      getSupabaseClient().from("attendance_calculated_full").select("id", { count: "exact", head: true }),
+      filters,
+    );
     if (error) throw error;
     return count ?? 0;
   });
@@ -682,6 +687,7 @@ export function getPostgresAttendanceAdapter(): AttendanceDatabaseAdapter {
       countRawAttendance,
       updateRawAttendanceTimes,
       getImportHistory,
+      getProcessedDates,
       deleteImport,
       getBracketMaster,
       updateBracketMaster,

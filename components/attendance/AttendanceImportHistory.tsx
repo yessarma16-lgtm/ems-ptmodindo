@@ -20,19 +20,31 @@ interface HistoryEntry {
 export function AttendanceImportHistory({ refreshKey }: { refreshKey: number }) {
   const [loading, setLoading] = useState(true);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     // Tidak ada setState sinkron di badan effect (react-hooks/set-state-in-effect) --
     // `loading` sudah start `true`, pola sama dengan MasterDataManager.tsx.
-    queueMicrotask(() => {
+    let cancelled = false;
+    queueMicrotask(async () => {
       const params = new URLSearchParams(); if (dateFrom) params.set("dateFrom", dateFrom); if (dateTo) params.set("dateTo", dateTo);
-      fetch(`/api/attendance/import/history${params.toString() ? `?${params}` : ""}`, { cache: "no-store" })
-        .then((r) => r.json())
-        .then((data) => setHistory(data.history ?? []))
-        .finally(() => setLoading(false));
+      try {
+        const r = await fetch(`/api/attendance/import/history${params.toString() ? `?${params}` : ""}`, { cache: "no-store" });
+        const data = await r.json().catch(() => null);
+        if (cancelled) return;
+        if (!r.ok) throw new Error(data?.error || `Request gagal (HTTP ${r.status}).`);
+        setHistory(data?.history ?? []);
+        setError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Gagal memuat riwayat import.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     });
+    return () => { cancelled = true; };
   }, [refreshKey, dateFrom, dateTo]);
 
   async function deleteHistory(h: HistoryEntry) {
@@ -54,7 +66,7 @@ export function AttendanceImportHistory({ refreshKey }: { refreshKey: number }) 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-3"><div><label className="mb-1 block text-xs font-medium">Start date</label><input className="h-9 rounded-md border bg-background px-3 text-sm" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></div><div><label className="mb-1 block text-xs font-medium">End date</label><input className="h-9 rounded-md border bg-background px-3 text-sm" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></div></div>
-      {history.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No import history yet.</p> : <div className="rounded-xl border border-border bg-card">
+      {error ? <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-6 text-center text-sm text-destructive">{error}</p> : history.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">No import history yet.</p> : <div className="rounded-xl border border-border bg-card">
       <Table>
         <TableHeader>
           <TableRow>

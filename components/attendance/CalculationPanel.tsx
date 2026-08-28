@@ -153,7 +153,16 @@ export function CalculationPanel() {
     try {
       const saved = localStorage.getItem(CALCULATION_JOB_KEY);
       if (!saved) return;
-      const job = JSON.parse(saved) as { from?: string; to?: string };
+      const job = JSON.parse(saved) as { from?: string; to?: string; savedAt?: number };
+      // Only auto-resume a job that was started recently. An old key means the
+      // previous run errored, timed out, or the tab was closed and never
+      // cleaned up — resuming it on every mount is what made the calculation
+      // "spin forever". Stale keys are dropped instead.
+      const STALE_MS = 6 * 60 * 60 * 1000;
+      if (!job.savedAt || Date.now() - job.savedAt > STALE_MS) {
+        localStorage.removeItem(CALCULATION_JOB_KEY);
+        return;
+      }
       if (job.from && job.to) {
         queueMicrotask(() => {
           setCalculateFrom(job.from!);
@@ -210,6 +219,9 @@ export function CalculationPanel() {
       toast.success("Crosscheck completed.");
     } catch (err) {
       if (controller.signal.aborted) return;
+      // A failed run must not leave the resume key behind, or the next page
+      // load will silently restart the same failing crosscheck.
+      localStorage.removeItem(CALCULATION_JOB_KEY);
       toast.error(err instanceof Error ? err.message : "Failed to run crosscheck.");
     } finally {
       setRunning(false);
@@ -227,7 +239,7 @@ export function CalculationPanel() {
       toast.error("Tanggal mulai tidak boleh lebih besar dari tanggal akhir.");
       return;
     }
-    localStorage.setItem(CALCULATION_JOB_KEY, JSON.stringify({ from: calculateFrom, to: calculateTo, processed: 0 }));
+    localStorage.setItem(CALCULATION_JOB_KEY, JSON.stringify({ from: calculateFrom, to: calculateTo, processed: 0, savedAt: Date.now() }));
     setDateFrom(calculateFrom);
     setDateTo(calculateTo);
     setCalculateDialogOpen(false);
