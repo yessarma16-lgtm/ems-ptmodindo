@@ -6,6 +6,7 @@ import { CheckCircle2, FileSpreadsheet, Loader2, Upload, XCircle, AlertTriangle 
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { AttendanceImportHistory } from "@/components/attendance/AttendanceImportHistory";
 import { cn } from "@/lib/utils";
@@ -19,11 +20,24 @@ interface RawAttendanceInputShape {
 interface PreviewValidRow { rowNumber: number; key: string; input: RawAttendanceInputShape }
 interface PreviewConflict { rowNumber: number; key: string; existing: RawAttendanceInputShape & { id: number }; incoming: RawAttendanceInputShape }
 interface PreviewRejected { rowNumber: number; reason: string }
+interface EstimateRow { tanggal: string; shed: string; division: string; duration: number; person: number }
+interface EstimateSkipped { rowNumber: number; shed: string; unit: string; reason: string }
+interface EstimateImportPreview {
+  detected: boolean;
+  reason?: string;
+  rows: EstimateRow[];
+  skipped: EstimateSkipped[];
+  dates: string[];
+  totalPeople: number;
+  warnings: string[];
+  summary: { units: number; cells: number; totalPeople: number };
+}
 interface ImportPreview {
   sourceFilename: string;
   validRows: PreviewValidRow[];
   conflicts: PreviewConflict[];
   rejected: PreviewRejected[];
+  estimateImport?: EstimateImportPreview;
 }
 type Decision = "overwrite" | "skip";
 
@@ -32,6 +46,7 @@ interface FinalSummary {
   overwrittenCount: number;
   skippedCount: number;
   rejected: PreviewRejected[];
+  estimate?: { imported: number; dates: string[] } | { error: string };
 }
 
 export function AttendanceImportPanel() {
@@ -42,6 +57,7 @@ export function AttendanceImportPanel() {
   const [commitProgress, setCommitProgress] = useState<{ processed: number; total: number } | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
+  const [includeEstimates, setIncludeEstimates] = useState(true);
   const [summary, setSummary] = useState<FinalSummary | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -50,6 +66,7 @@ export function AttendanceImportPanel() {
     setFile(null);
     setPreview(null);
     setDecisions({});
+    setIncludeEstimates(true);
     setSummary(null);
     setCommitProgress(null);
     setDragOver(false);
@@ -76,6 +93,7 @@ export function AttendanceImportPanel() {
       }
       const p: ImportPreview = data.preview;
       setPreview(p);
+      setIncludeEstimates((p.estimateImport?.rows.length ?? 0) > 0);
       // Default keputusan konflik: "skip" (aman) -- user harus sadar pilih Timpa.
       const initialDecisions: Record<string, Decision> = {};
       for (const c of p.conflicts) initialDecisions[c.key] = "skip";
@@ -109,10 +127,11 @@ export function AttendanceImportPanel() {
     setCommitProgress(null);
     try {
       const rows = [...preview.validRows.map((v) => v.input), ...preview.conflicts.map((c) => c.incoming)];
+      const estimateRows = includeEstimates && preview.estimateImport?.rows.length ? preview.estimateImport.rows : undefined;
       const res = await fetch("/api/attendance/import/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceFilename: preview.sourceFilename, rows, decisions }),
+        body: JSON.stringify({ sourceFilename: preview.sourceFilename, rows, decisions, estimateRows }),
       });
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => null);
@@ -152,6 +171,7 @@ export function AttendanceImportPanel() {
         overwrittenCount,
         skippedCount,
         rejected: preview.rejected,
+        estimate: (finalSummary as FinalSummary & { estimateResult?: FinalSummary["estimate"] }).estimateResult,
       });
       toast.success("Import completed.");
       setHistoryRefreshKey((k) => k + 1);
@@ -289,6 +309,44 @@ export function AttendanceImportPanel() {
             </div>
           )}
 
+          {preview.estimateImport && (
+          <div className="rounded-lg border border-border p-3">
+            <div className="mb-1 flex items-center gap-2 text-sm font-medium">
+              <FileSpreadsheet className="size-4 text-primary" />
+              Estimasi OT Planning (Sheet 2)
+            </div>
+            {preview.estimateImport.rows.length > 0 ? (
+              <div className="space-y-2 text-xs">
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox checked={includeEstimates} onCheckedChange={(v) => setIncludeEstimates(v === true)} />
+                  Impor estimasi OT untuk tanggal {preview.estimateImport.dates.join(", ")}
+                </label>
+                <p className="text-muted-foreground">
+                  {preview.estimateImport.summary.units} unit · {preview.estimateImport.summary.cells} sel · total {preview.estimateImport.summary.totalPeople} orang.
+                  Estimasi lama untuk tanggal tsb akan ditimpa.
+                </p>
+                {preview.estimateImport.warnings.map((w, idx) => (
+                  <p key={idx} className="flex items-start gap-1.5 text-warning"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" />{w}</p>
+                ))}
+                {preview.estimateImport.skipped.length > 0 && (
+                  <div className="rounded-md border border-warning/30 bg-warning/5 p-2">
+                    <div className="mb-0.5 font-medium text-warning">{preview.estimateImport.skipped.length} baris estimasi dilewati</div>
+                    <ul className="ml-4 list-disc space-y-0.5 text-muted-foreground">
+                      {preview.estimateImport.skipped.map((s, idx) => (
+                        <li key={idx}>Row {s.rowNumber}: {s.shed} – {s.unit} ({s.reason})</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {preview.estimateImport.reason ?? "Tidak ada baris estimasi yang bisa diimpor dari Sheet 2."}
+              </p>
+            )}
+          </div>
+          )}
+
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={reset} disabled={committing}>Batal</Button>
             <Button onClick={handleCommit} disabled={committing || hasUnresolvedConflict}>
@@ -310,7 +368,15 @@ export function AttendanceImportPanel() {
             <li>{summary.overwrittenCount} rows overwritten</li>
             <li>{summary.skippedCount} rows skipped</li>
             <li>{summary.rejected.length} rows rejected</li>
+            {summary.estimate && "imported" in summary.estimate && (
+              <li>Estimasi OT: {summary.estimate.imported} baris ditulis untuk {summary.estimate.dates.join(", ")}</li>
+            )}
           </ul>
+          {summary.estimate && "error" in summary.estimate && (
+            <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+              Estimasi OT gagal disimpan: {summary.estimate.error}
+            </div>
+          )}
           {summary.rejected.length > 0 && (
             <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
               <div className="mb-1 text-xs font-medium text-destructive">Rejection reasons</div>

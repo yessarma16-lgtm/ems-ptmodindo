@@ -61,6 +61,9 @@ export interface RawAttendanceRejectedRow {
 
 export interface ParsedAttendanceImport {
   headerRowNumber: number;
+  /** Nama sheet yang dipilih sebagai sumber absensi — dipakai pemanggil supaya
+   * parser lain (mis. estimasi OT di Sheet2) tidak salah membaca sheet ini. */
+  sheetName: string;
   rows: RawAttendanceParsedRow[];
   rejected: RawAttendanceRejectedRow[];
 }
@@ -154,7 +157,7 @@ function parseDDMMYYYYText(value: string): string | null {
 }
 
 /** Cell tanggal bisa berupa Date instance (serial Excel asli, sudah benar dari ExcelJS) atau teks "DD/MM/YYYY". */
-function parseDateCell(value: unknown): string | null {
+export function parseDateCell(value: unknown): string | null {
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   if (typeof value === "string" && value.trim()) return parseDDMMYYYYText(value);
   return null;
@@ -199,16 +202,25 @@ function cellToString(value: unknown): string {
   return String(value).trim();
 }
 
-export async function parseAttendanceImportWorkbook(buffer: Buffer): Promise<ParsedAttendanceImport> {
+/** Load + validate a workbook from an upload buffer. Exported so a single load
+ * can be shared between the attendance parser and other sheet parsers (e.g. the
+ * OT estimate grid on Sheet2). */
+export async function loadImportWorkbook(buffer: Buffer): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
   try {
     await workbook.xlsx.load(normalizeExcelBuffer(buffer) as unknown as Parameters<typeof workbook.xlsx.load>[0]);
   } catch {
     throw new ImportParseError("This doesn't look like a valid .xls or .xlsx file.");
   }
-
   if (!workbook.worksheets.length) throw new ImportParseError("The uploaded file has no sheets.");
+  return workbook;
+}
 
+export async function parseAttendanceImportWorkbook(buffer: Buffer): Promise<ParsedAttendanceImport> {
+  return parseAttendanceFromWorkbook(await loadImportWorkbook(buffer));
+}
+
+export function parseAttendanceFromWorkbook(workbook: ExcelJS.Workbook): ParsedAttendanceImport {
   const { sheet, rowNumber: headerRowNumber, columnKeyByIndex } = selectSheetWithHeaderRow(workbook);
 
   const rows: RawAttendanceParsedRow[] = [];
@@ -258,5 +270,5 @@ export async function parseAttendanceImportWorkbook(buffer: Buffer): Promise<Par
     });
   });
 
-  return { headerRowNumber, rows, rejected };
+  return { headerRowNumber, sheetName: sheet.name, rows, rejected };
 }

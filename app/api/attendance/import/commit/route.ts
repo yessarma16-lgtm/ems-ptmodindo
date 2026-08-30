@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
             parsed.data.sourceFilename,
             undefined,
             (processed, total) => send({ type: "progress", processed, total }),
+            parsed.data.estimateRows,
           );
           send({ type: "done", summary });
         } catch (err) {

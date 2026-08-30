@@ -147,6 +147,28 @@ export async function saveOtEstimates(date: string, values: Array<{ shed: string
   return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_estimates").upsert(values.map((x) => ({ ...x, tanggal: date, updated_at: new Date().toISOString() })), { onConflict: "tanggal,shed,division,duration" }); if (error) throw error; });
 }
 
+/**
+ * Full overwrite of the OT estimate rows for every date present in `values`:
+ * delete all existing estimates for those dates, then insert the given rows.
+ * Used by the "import estimasi OT dari Sheet2" flow — a duration cell cleared
+ * in the sheet removes the corresponding estimate. Returns the row count
+ * written. Dates not present in `values` are untouched.
+ */
+export async function replaceOtEstimatesForDates(values: Array<{ tanggal: string; shed: string; division: string; duration: number; person: number }>) {
+  return supabaseGuarded(async () => {
+    const client = getSupabaseClient();
+    const dates = Array.from(new Set(values.map((x) => x.tanggal)));
+    if (dates.length === 0) return 0;
+    const { error: deleteError } = await client.from("ot_planning_estimates").delete().in("tanggal", dates);
+    if (deleteError) throw deleteError;
+    if (values.length === 0) return 0;
+    const now = new Date().toISOString();
+    const { error: insertError } = await client.from("ot_planning_estimates").insert(values.map((x) => ({ ...x, updated_at: now })));
+    if (insertError) throw insertError;
+    return values.length;
+  });
+}
+
 export async function getOtConfigHistory(): Promise<OtConfigEntry[]> {
   return supabaseGuarded(async () => {
     const { data, error } = await getSupabaseClient()

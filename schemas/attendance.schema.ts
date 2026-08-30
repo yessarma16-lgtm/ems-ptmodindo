@@ -42,6 +42,18 @@ export const importCommitSchema = z.object({
     }),
   ),
   decisions: z.record(z.string(), z.enum(["overwrite", "skip"])),
+  /** Baris estimasi OT Planning dari Sheet2 — hanya dikirim kalau user mencentang "Impor estimasi OT". Kosong/absen = tidak menyentuh ot_planning_estimates. */
+  estimateRows: z
+    .array(
+      z.object({
+        tanggal: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        shed: z.string().trim().min(1),
+        division: z.string().trim().min(1),
+        duration: z.coerce.number().nonnegative(),
+        person: z.coerce.number(),
+      }),
+    )
+    .optional(),
 });
 export type ImportCommitInput = z.infer<typeof importCommitSchema>;
 

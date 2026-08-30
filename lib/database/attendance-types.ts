@@ -85,6 +85,8 @@ export interface ImportSummary {
   skipped: number;
   rejected: number;
   conflicts: ExistingRecord[];
+  /** Hasil impor estimasi OT Planning dari Sheet2, kalau user mencentangnya. */
+  estimateResult?: { imported: number; dates: string[] } | { error: string };
 }
 
 /**
