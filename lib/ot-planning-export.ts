@@ -203,24 +203,24 @@ function buildMainSheet(workbook: ExcelJS.Workbook, date: string, reports: OtPla
     startRow = lastRow + 3;
   }
 
-  const titleEnd = Math.max(16, ...reports.map((report) => 3 + getOtDurations(report).length * 4 + 5));
+  // RECAP block — the rolled-up "ALL UNITS" table that used to be its own sheet,
+  // now appended below the per-shed tables with its own navy title band.
+  const recapRows = buildRecapRows(reports);
+  const recapDurations = Array.from(new Set(reports.flatMap((report) => getOtDurations(report)))).sort((a, b) => a - b);
+  const recapConfig = reports[0]?.config ?? { umr: 0, usdRate: 1, divisor: 173 };
+  const recapTitleEnd = Math.max(16, 3 + recapDurations.length * 4 + 5);
+  sheet.mergeCells(startRow, 1, startRow, recapTitleEnd);
+  const recapTitleCell = sheet.getCell(startRow, 1);
+  recapTitleCell.value = `RECAP ${date}`;
+  recapTitleCell.font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
+  recapTitleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: navy } };
+  recapTitleCell.alignment = { horizontal: "center", vertical: "middle" };
+  sheet.getRow(startRow).height = 24;
+  writeReportTable(sheet, startRow + 1, "RECAP - ALL UNITS", recapConfig, recapDurations, recapRows);
+
+  const titleEnd = Math.max(16, recapTitleEnd, ...reports.map((report) => 3 + getOtDurations(report).length * 4 + 5));
   sheet.mergeCells(`A1:${sheet.getColumn(titleEnd).letter}1`);
   sheet.getColumn(1).width = 7; sheet.getColumn(2).width = 24;
-  for (let column = 3; column <= sheet.columnCount; column++) sheet.getColumn(column).width = 15;
-  sheet.eachRow((row) => { row.height = Math.max(row.height ?? 15, 20); });
-}
-
-function buildRecapSheet(workbook: ExcelJS.Workbook, date: string, reports: OtPlanningReport[]) {
-  const sheet = workbook.addWorksheet("Recap");
-  const rows = buildRecapRows(reports);
-  const durations = Array.from(new Set(reports.flatMap((r) => getOtDurations(r)))).sort((a, b) => a - b);
-  const config = reports[0]?.config ?? { umr: 0, usdRate: 1, divisor: 173 };
-  const titleEnd = Math.max(16, 3 + durations.length * 4 + 5);
-
-  const title = titleRow(sheet, `RECAP ${date}`, titleEnd);
-  writeReportTable(sheet, title.number + 1, "ALL UNITS", config, durations, rows);
-
-  sheet.getColumn(1).width = 7; sheet.getColumn(2).width = 30;
   for (let column = 3; column <= sheet.columnCount; column++) sheet.getColumn(column).width = 15;
   sheet.eachRow((row) => { row.height = Math.max(row.height ?? 15, 20); });
 }
@@ -439,7 +439,6 @@ export async function buildOtPlanningWorkbook(date: string, reports: OtPlanningR
   workbook.creator = "MET OT Planning";
 
   buildMainSheet(workbook, date, reports);
-  buildRecapSheet(workbook, date, reports);
   buildRecapPerDaySheet(workbook, monthToDate);
   buildRecapPerDepartmentSheet(workbook, monthToDate[monthToDate.length - 1]?.date ?? date, monthToDate);
   buildAccountingReportSheet(workbook, monthToDate);
