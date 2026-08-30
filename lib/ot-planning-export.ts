@@ -27,6 +27,20 @@ export function getOtDurations(report: OtPlanningReport) {
   return values.length ? values : [0.5, 1];
 }
 
+/** Column durations shared by every table on the OT Planning sheet + RECAP: the
+ * `alwaysShow` durations (the Duration & Paid Hours rows checked "show in
+ * export") unioned with any duration that actually carries an estimated/actual
+ * value, sorted ascending — so a checked column always appears even when empty,
+ * real data at an unchecked duration is never hidden, and every shed block lines
+ * up with the same width. Falls back to [0.5, 1] when there is nothing at all. */
+export function displayDurations(alwaysShow: number[], reports: OtPlanningReport[]) {
+  const withData = reports.flatMap((report) =>
+    report.rows.flatMap((row) => row.cells.filter((cell) => cell.estimated !== 0 || cell.actual !== 0).map((cell) => cell.duration)),
+  );
+  const values = Array.from(new Set([...alwaysShow, ...withData])).sort((a, b) => a - b);
+  return values.length ? values : [0.5, 1];
+}
+
 /** National Holiday rows (cell.holiday) are paid on config.multipliersHoliday;
  * a missing holiday duration is 0 (no fallback formula). Regular rows keep the
  * existing behaviour: config.multipliers, else the 1.5h/2h formula. */
@@ -187,7 +201,7 @@ function writeReportTable(sheet: ExcelJS.Worksheet, startRow: number, label: str
   return totalRowNumber;
 }
 
-function buildMainSheet(workbook: ExcelJS.Workbook, date: string, reports: OtPlanningReport[]) {
+function buildMainSheet(workbook: ExcelJS.Workbook, date: string, reports: OtPlanningReport[], exportDurations: number[]) {
   const sheet = workbook.addWorksheet("OT Planning");
   sheet.views = [{ state: "frozen", ySplit: 6, xSplit: 2 }];
   sheet.getCell("A1").value = `OT PLANNING ${date}`;
@@ -196,9 +210,14 @@ function buildMainSheet(workbook: ExcelJS.Workbook, date: string, reports: OtPla
   sheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
   sheet.getRow(1).height = 26;
 
+  // One shared column set for every shed block AND the RECAP block, so they all
+  // line up: the checked "show in export" durations unioned with any duration
+  // that carries data.
+  const durations = displayDurations(exportDurations, reports);
+  const titleEnd = Math.max(16, 3 + durations.length * 4 + 5);
+
   let startRow = 4;
   for (const report of reports) {
-    const durations = getOtDurations(report);
     const lastRow = writeReportTable(sheet, startRow, `DEPARTEMEN ${report.shed}`, report.config, durations, report.rows);
     startRow = lastRow + 3;
   }
@@ -206,19 +225,16 @@ function buildMainSheet(workbook: ExcelJS.Workbook, date: string, reports: OtPla
   // RECAP block — the rolled-up "ALL UNITS" table that used to be its own sheet,
   // now appended below the per-shed tables with its own navy title band.
   const recapRows = buildRecapRows(reports);
-  const recapDurations = Array.from(new Set(reports.flatMap((report) => getOtDurations(report)))).sort((a, b) => a - b);
   const recapConfig = reports[0]?.config ?? { umr: 0, usdRate: 1, divisor: 173 };
-  const recapTitleEnd = Math.max(16, 3 + recapDurations.length * 4 + 5);
-  sheet.mergeCells(startRow, 1, startRow, recapTitleEnd);
+  sheet.mergeCells(startRow, 1, startRow, titleEnd);
   const recapTitleCell = sheet.getCell(startRow, 1);
   recapTitleCell.value = `RECAP ${date}`;
   recapTitleCell.font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
   recapTitleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: navy } };
   recapTitleCell.alignment = { horizontal: "center", vertical: "middle" };
   sheet.getRow(startRow).height = 24;
-  writeReportTable(sheet, startRow + 1, "RECAP - ALL UNITS", recapConfig, recapDurations, recapRows);
+  writeReportTable(sheet, startRow + 1, "RECAP - ALL UNITS", recapConfig, durations, recapRows);
 
-  const titleEnd = Math.max(16, recapTitleEnd, ...reports.map((report) => 3 + getOtDurations(report).length * 4 + 5));
   sheet.mergeCells(`A1:${sheet.getColumn(titleEnd).letter}1`);
   sheet.getColumn(1).width = 7; sheet.getColumn(2).width = 24;
   for (let column = 3; column <= sheet.columnCount; column++) sheet.getColumn(column).width = 15;
@@ -434,11 +450,11 @@ function buildAccountingReportSheet(workbook: ExcelJS.Workbook, monthToDate: OtP
   footerRow.getCell(2).alignment = { horizontal: "center" };
 }
 
-export async function buildOtPlanningWorkbook(date: string, reports: OtPlanningReport[], monthToDate: OtPlanningDaySnapshot[]): Promise<ExcelJS.Workbook> {
+export async function buildOtPlanningWorkbook(date: string, reports: OtPlanningReport[], monthToDate: OtPlanningDaySnapshot[], exportDurations: number[] = []): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "MET OT Planning";
 
-  buildMainSheet(workbook, date, reports);
+  buildMainSheet(workbook, date, reports, exportDurations);
   buildRecapPerDaySheet(workbook, monthToDate);
   buildRecapPerDepartmentSheet(workbook, monthToDate[monthToDate.length - 1]?.date ?? date, monthToDate);
   buildAccountingReportSheet(workbook, monthToDate);

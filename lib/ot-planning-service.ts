@@ -188,16 +188,38 @@ export async function deleteOtConfig(id: number) {
   return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_config_history").delete().eq("id", id); if (error) throw error; });
 }
 
-export async function getOtReferences() { return supabaseGuarded(async () => { const client = getSupabaseClient(); const [{ data: mappings, error: me }, { data: divisions, error: de }, { data: multipliers, error: be }, configHistory] = await Promise.all([client.from("ot_planning_mappings").select("id,attendance_department,shed,division,display_order").order("display_order"), client.from("ot_planning_divisions").select("id,shed,division,display_order").order("display_order"), client.from("ot_planning_duration_multipliers").select("id,duration,paid_hours,paid_hours_holiday").order("duration"), getOtConfigHistory()]); if (me) throw me; if (de) throw de; if (be) throw be; const mappingData = (mappings?.length ? mappings : seedMappings).map((x: any) => ({ id: x.id, attendance_department: String(x.attendance_department ?? x.attendanceDepartment), shed: String(x.shed), division: String(x.division), display_order: Number(x.display_order ?? x.displayOrder ?? 0) })); const multiplierData = multipliers?.length ? multipliers : OT_DURATION_MULTIPLIER_SEED.map(([duration, paid_hours, paid_hours_holiday]) => ({ duration, paid_hours, paid_hours_holiday })); return { mappings: mappingData, divisions: divisions?.length ? divisions : Object.entries(DIVISIONS).flatMap(([shed, names]) => names.map((division, display_order) => ({ shed, division, display_order }))), multipliers: multiplierData, configHistory }; }); }
+export async function getOtReferences() { return supabaseGuarded(async () => { const client = getSupabaseClient(); const [{ data: mappings, error: me }, { data: divisions, error: de }, { data: multipliers, error: be }, configHistory] = await Promise.all([client.from("ot_planning_mappings").select("id,attendance_department,shed,division,display_order").order("display_order"), client.from("ot_planning_divisions").select("id,shed,division,display_order").order("display_order"), client.from("ot_planning_duration_multipliers").select("id,duration,paid_hours,paid_hours_holiday,show_in_export").order("duration"), getOtConfigHistory()]); if (me) throw me; if (de) throw de; if (be) throw be; const mappingData = (mappings?.length ? mappings : seedMappings).map((x: any) => ({ id: x.id, attendance_department: String(x.attendance_department ?? x.attendanceDepartment), shed: String(x.shed), division: String(x.division), display_order: Number(x.display_order ?? x.displayOrder ?? 0) })); const multiplierData = multipliers?.length ? multipliers.map((x: any) => ({ ...x, show_in_export: x.show_in_export ?? true })) : OT_DURATION_MULTIPLIER_SEED.map(([duration, paid_hours, paid_hours_holiday]) => ({ duration, paid_hours, paid_hours_holiday, show_in_export: duration <= 10 })); return { mappings: mappingData, divisions: divisions?.length ? divisions : Object.entries(DIVISIONS).flatMap(([shed, names]) => names.map((division, display_order) => ({ shed, division, display_order }))), multipliers: multiplierData, configHistory }; }); }
+
+/**
+ * Durations that always get a column in the Excel export even when they carry
+ * no data — the `show_in_export`-checked rows of the Duration & Paid Hours
+ * reference. buildOtPlanningWorkbook unions these with whatever durations
+ * actually have estimated/actual values, so a checked column is always shown
+ * and real data is never hidden by an unchecked box.
+ */
+export async function getExportDurations(): Promise<number[]> {
+  return supabaseGuarded(async () => {
+    const { data, error } = await getSupabaseClient()
+      .from("ot_planning_duration_multipliers")
+      .select("duration,show_in_export")
+      .order("duration");
+    if (error) throw error;
+    const rows = data?.length
+      ? data
+      : OT_DURATION_MULTIPLIER_SEED.map(([duration]) => ({ duration, show_in_export: duration <= 10 }));
+    return rows.filter((x: any) => x.show_in_export ?? true).map((x: any) => Number(x.duration));
+  });
+}
 
 /** Edit (value.id set) UPDATEs by primary key; a fresh Add upserts by the
  * natural key (duration) so re-adding a duration that already exists just
  * replaces its values instead of erroring on the UNIQUE(duration) constraint —
  * same pattern as saveOtMapping / saveOtDivision / saveOtConfig. */
-export async function saveOtMultiplier(value: { id?: number; duration: number; paidHours: number; paidHoursHoliday: number }) {
+export async function saveOtMultiplier(value: { id?: number; duration: number; paidHours: number; paidHoursHoliday: number; showInExport?: boolean }) {
   return supabaseGuarded(async () => {
     const client = getSupabaseClient();
-    const row = { duration: value.duration, paid_hours: value.paidHours, paid_hours_holiday: value.paidHoursHoliday };
+    const row: Record<string, unknown> = { duration: value.duration, paid_hours: value.paidHours, paid_hours_holiday: value.paidHoursHoliday };
+    if (value.showInExport !== undefined) row.show_in_export = value.showInExport;
     if (value.id) {
       const { error } = await client.from("ot_planning_duration_multipliers").update(row).eq("id", value.id);
       if (error) throw error;

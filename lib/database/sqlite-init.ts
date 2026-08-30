@@ -631,7 +631,8 @@ export function ensureSchema(db: DatabaseSync): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       duration REAL NOT NULL UNIQUE,
       paid_hours REAL NOT NULL,
-      paid_hours_holiday REAL NOT NULL DEFAULT 0
+      paid_hours_holiday REAL NOT NULL DEFAULT 0,
+      show_in_export INTEGER NOT NULL DEFAULT 1
     );
   `);
 
@@ -642,13 +643,22 @@ export function ensureSchema(db: DatabaseSync): void {
   if (!multiplierColumns.has("paid_hours_holiday")) {
     db.exec("ALTER TABLE ot_planning_duration_multipliers ADD COLUMN paid_hours_holiday REAL NOT NULL DEFAULT 0");
   }
+  // Excel export column visibility — a checked ("show in export") duration always
+  // gets a column in the OT Planning workbook even when empty. One-time on first
+  // add: default to 0.5–10 shown, above 10 hidden. Guarded so later admin
+  // checkbox edits are never reset on re-run.
+  if (!multiplierColumns.has("show_in_export")) {
+    db.exec("ALTER TABLE ot_planning_duration_multipliers ADD COLUMN show_in_export INTEGER NOT NULL DEFAULT 1");
+    db.exec("UPDATE ot_planning_duration_multipliers SET show_in_export = 0 WHERE duration > 10");
+  }
   // One-time backfill of the National Holiday bracket + the extra duration rows
   // it needs. Only rows still at the default 0 holiday value are touched, so
-  // later admin edits in the UI are never clobbered on re-run.
+  // later admin edits in the UI are never clobbered on re-run. show_in_export is
+  // set on fresh inserts only — ON CONFLICT never touches it.
   const insertMultiplier = db.prepare(
-    "INSERT INTO ot_planning_duration_multipliers (duration, paid_hours, paid_hours_holiday) VALUES (?, ?, ?) ON CONFLICT (duration) DO UPDATE SET paid_hours_holiday = excluded.paid_hours_holiday WHERE ot_planning_duration_multipliers.paid_hours_holiday = 0",
+    "INSERT INTO ot_planning_duration_multipliers (duration, paid_hours, paid_hours_holiday, show_in_export) VALUES (?, ?, ?, ?) ON CONFLICT (duration) DO UPDATE SET paid_hours_holiday = excluded.paid_hours_holiday WHERE ot_planning_duration_multipliers.paid_hours_holiday = 0",
   );
-  for (const [duration, paid, paidHoliday] of OT_DURATION_MULTIPLIER_SEED) insertMultiplier.run(duration, paid, paidHoliday);
+  for (const [duration, paid, paidHoliday] of OT_DURATION_MULTIPLIER_SEED) insertMultiplier.run(duration, paid, paidHoliday, duration <= 10 ? 1 : 0);
 }
 
 /**
@@ -698,7 +708,7 @@ export function seedMasterDataIfEmpty(db: DatabaseSync): Record<string, boolean>
   const divisionCount = db.prepare("SELECT COUNT(*) as c FROM ot_planning_divisions").get() as { c: number };
   if (divisionCount.c === 0) { const insert = db.prepare("INSERT INTO ot_planning_divisions (shed, division, display_order) VALUES (?, ?, ?)"); Object.entries({ "SHED A": ["CUTTING", ...Array.from({ length: 10 }, (_, i) => `SEW L${i + 1}`), "QC", "ADM PRODUKSI", "MEKANIK"], "SHED B": ["CUTTING", "FINISHING", ...Array.from({ length: 10 }, (_, i) => `SEW L${i + 13}`), "SEW L14B", "QC", "ADM PRODUKSI", "MEKANIK"], "SHED C": ["CUTTING", "FINISHING", ...Array.from({ length: 5 }, (_, i) => `SEW L${i + 23}`), "SEW L28-32", "CNC", "QC", "ADM PRODUKSI", "MEKANIK"], COMMON: ["HRD & GA & DRIVER & CS & ELEKTRIK & perawat", "IE", "SAMPLE JSS", "QC COMMON", "SAMPLE OP WORKER", "SEWING COMMON", "WAREHOUSE", "PPIC & MD & EXIM", "SAMPLE OP STAFF"] }).forEach(([shed, names]) => (names as string[]).forEach((division, idx) => insert.run(shed, division, idx))); seeded.OtPlanningDivisions = true; } else seeded.OtPlanningDivisions = false;
   const multiplierCount = db.prepare("SELECT COUNT(*) as c FROM ot_planning_duration_multipliers").get() as { c: number };
-  if (multiplierCount.c === 0) { const insert = db.prepare("INSERT INTO ot_planning_duration_multipliers (duration, paid_hours, paid_hours_holiday) VALUES (?, ?, ?)"); OT_DURATION_MULTIPLIER_SEED.forEach(([duration, paid, paidHoliday]) => insert.run(duration, paid, paidHoliday)); seeded.OtPlanningDurationMultipliers = true; } else seeded.OtPlanningDurationMultipliers = false;
+  if (multiplierCount.c === 0) { const insert = db.prepare("INSERT INTO ot_planning_duration_multipliers (duration, paid_hours, paid_hours_holiday, show_in_export) VALUES (?, ?, ?, ?)"); OT_DURATION_MULTIPLIER_SEED.forEach(([duration, paid, paidHoliday]) => insert.run(duration, paid, paidHoliday, duration <= 10 ? 1 : 0)); seeded.OtPlanningDurationMultipliers = true; } else seeded.OtPlanningDurationMultipliers = false;
 
   return seeded;
 }

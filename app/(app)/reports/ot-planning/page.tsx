@@ -19,7 +19,7 @@ import { toast } from "sonner";
 
 type Cell = { duration: number; estimated: number; actual: number; holiday?: boolean };
 type Report = { shed: string; config: { umr: number; usdRate: number; divisor: number; multipliers?: Record<string, number>; multipliersHoliday?: Record<string, number> }; rows: { division: string; cells: Cell[] }[] };
-type Multiplier = { id?: number; duration: number; paid_hours: number; paid_hours_holiday: number };
+type Multiplier = { id?: number; duration: number; paid_hours: number; paid_hours_holiday: number; show_in_export?: boolean | number };
 type Mapping = { id?: number; attendance_department: string; shed: string; division: string; display_order: number };
 type Division = { id?: number; shed: string; division: string; display_order: number };
 type ConfigEntry = { id?: number; effectiveDate: string; umr: number; usdRate: number };
@@ -127,6 +127,8 @@ function References({ mappings, divisions, multipliers, configHistory, date, pos
   const saveMultiplier = async () => { if (mul.duration === "" || mul.paidHours === "") return; await post({ kind: "multiplier", value: { id: mul.id, duration: Number(mul.duration), paidHours: Number(mul.paidHours), paidHoursHoliday: Number(mul.paidHoursHoliday || 0) } }); setMul(EMPTY_MULTIPLIER); };
   const editMultiplier = (x: Multiplier) => setMul({ id: x.id, duration: x.duration, paidHours: x.paid_hours, paidHoursHoliday: x.paid_hours_holiday });
   const deleteMultiplier = (x: Multiplier) => void del({ kind: "multiplier", id: x.id });
+  /** Per-duration checkbox: whether this duration always gets a column in the Excel export (even when empty). Saves immediately. */
+  const toggleMultiplierExport = (x: Multiplier, checked: boolean) => void post({ kind: "multiplier", value: { id: x.id, duration: x.duration, paidHours: x.paid_hours, paidHoursHoliday: x.paid_hours_holiday, showInExport: checked } });
 
   return <div className="grid gap-5">
     <Card><CardContent className="pt-6">
@@ -158,12 +160,13 @@ function References({ mappings, divisions, multipliers, configHistory, date, pos
         {mul.id ? <Button size="sm" variant="outline" onClick={() => setMul(EMPTY_MULTIPLIER)}><X className="size-4" />Cancel</Button> : null}
       </div>
       <p className="mb-2 text-xs text-muted-foreground">Kolom <b>National Holiday</b> dipakai saat keterangan absensi = &quot;Hari Libur Pemerintah&quot;. Durasi tanpa nilai National Holiday dihitung 0.</p>
+      <p className="mb-2 text-xs text-muted-foreground">Kolom <b>Excel</b>: durasi yang dicentang selalu muncul sebagai kolom di export Excel (sheet OT Planning &amp; RECAP) walau kosong. Durasi yang ada datanya tetap muncul walau tidak dicentang.</p>
       <div className="overflow-auto">
         <table className="w-full max-w-md border-collapse text-xs">
-          <thead><tr className="bg-muted"><th className="border p-1 text-left">Duration</th><th className="border p-1 text-right">Regular OT</th><th className="border p-1 text-right">National Holiday</th><th className="border p-1" /></tr></thead>
+          <thead><tr className="bg-muted"><th className="border p-1 text-left">Duration</th><th className="border p-1 text-right">Regular OT</th><th className="border p-1 text-right">National Holiday</th><th className="border p-1 text-center">Excel</th><th className="border p-1" /></tr></thead>
           <tbody>
-            {(multipliers as Multiplier[]).length === 0 && <tr><td colSpan={4} className="border p-2 text-center text-muted-foreground">Belum ada data.</td></tr>}
-            {(multipliers as Multiplier[]).map((x) => <tr key={x.id ?? x.duration}><td className="border p-1">{x.duration} jam</td><td className="border p-1 text-right">{x.paid_hours}</td><td className="border p-1 text-right">{x.paid_hours_holiday || 0}</td><td className="border p-1 text-right whitespace-nowrap"><button className="inline-flex size-6 items-center justify-center rounded hover:bg-muted" title="Edit" onClick={() => editMultiplier(x)}><Pencil className="size-3" /></button><button className="inline-flex size-6 items-center justify-center rounded hover:bg-destructive/10" title="Delete" onClick={() => deleteMultiplier(x)}><Trash2 className="size-3 text-destructive" /></button></td></tr>)}
+            {(multipliers as Multiplier[]).length === 0 && <tr><td colSpan={5} className="border p-2 text-center text-muted-foreground">Belum ada data.</td></tr>}
+            {(multipliers as Multiplier[]).map((x) => <tr key={x.id ?? x.duration}><td className="border p-1">{x.duration} jam</td><td className="border p-1 text-right">{x.paid_hours}</td><td className="border p-1 text-right">{x.paid_hours_holiday || 0}</td><td className="border p-1 text-center"><Checkbox checked={!!x.show_in_export} onCheckedChange={(checked) => toggleMultiplierExport(x, checked === true)} aria-label={`Tampilkan kolom ${x.duration} jam di Excel`} /></td><td className="border p-1 text-right whitespace-nowrap"><button className="inline-flex size-6 items-center justify-center rounded hover:bg-muted" title="Edit" onClick={() => editMultiplier(x)}><Pencil className="size-3" /></button><button className="inline-flex size-6 items-center justify-center rounded hover:bg-destructive/10" title="Delete" onClick={() => deleteMultiplier(x)}><Trash2 className="size-3 text-destructive" /></button></td></tr>)}
           </tbody>
         </table>
       </div>
