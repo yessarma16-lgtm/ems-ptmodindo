@@ -51,6 +51,26 @@ function rate(report: OtPlanningReport, cell: OtPlanningCell) {
   return report.config.umr / report.config.divisor * perHour;
 }
 
+const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
+
+/** "CK Analisa" column text for one unit row: a clause per duration where the
+ * actual person-count exceeds the estimate. actual <= estimate (including the
+ * "estimated but nobody worked" case) produces nothing. Clauses joined with "; ". */
+export function analysisRemark(row: { cells: OtPlanningCell[] }, durations: number[]): string {
+  const clauses: string[] = [];
+  for (const duration of durations) {
+    const cell = row.cells.find((c) => c.duration === duration);
+    const actual = cell?.actual ?? 0;
+    const estimated = cell?.estimated ?? 0;
+    if (actual <= estimated) continue;
+    const worked = `${plural(actual, "employee")} worked ${plural(duration, "hour")} of overtime`;
+    clauses.push(estimated === 0
+      ? `${worked} without prior estimation`
+      : `${worked}, compared to the initial estimate of ${plural(estimated, "employee")}`);
+  }
+  return clauses.join("; ");
+}
+
 function rowValues(report: OtPlanningReport, row: OtPlanningReport["rows"][number], durations: number[], index: number) {
   const cells = durations.map((duration) => row.cells.find((cell) => cell.duration === duration) ?? { duration, estimated: 0, actual: 0 });
   const estimatedTotal = cells.reduce((sum, cell) => sum + cell.estimated * rate(report, cell), 0);
@@ -146,6 +166,7 @@ function writeReportTable(sheet: ExcelJS.Worksheet, startRow: number, label: str
   const virtualReport: OtPlanningReport = { shed: "", config, rows: [] };
   const totalStart = 3 + durations.length * 4;
   const totalEnd = totalStart + 5;
+  const analysisCol = totalEnd + 1; // "CK Analisa" text column, right of the totals
   const headerRow = startRow;
   const subHeaderRow = startRow + 1;
   const labelRow = startRow + 2;
@@ -171,7 +192,9 @@ function writeReportTable(sheet: ExcelJS.Worksheet, startRow: number, label: str
   sheet.getCell(headerRow, totalStart + 3).value = "TOTAL OVERTIME ACTUAL";
   [totalStart, totalStart + 1, totalStart + 2, totalStart + 3, totalStart + 4, totalEnd].forEach((column) => sheet.mergeCells(subHeaderRow, column, labelRow, column));
   ["TOTAL PERSON", "TOTAL ESTIMASI IDR", "TOTAL ESTIMASI USD", "TOTAL PERSON", "TOTAL ESTIMASI IDR", "TOTAL ESTIMASI USD"].forEach((text, index) => { sheet.getCell(subHeaderRow, totalStart + index).value = text; });
-  for (let row = headerRow; row <= labelRow; row++) for (let column = 1; column <= totalEnd; column++) styleHeaderCell(sheet.getCell(row, column), row === headerRow ? navy : lightBlue);
+  sheet.mergeCells(headerRow, analysisCol, labelRow, analysisCol);
+  sheet.getCell(headerRow, analysisCol).value = "Analysis";
+  for (let row = headerRow; row <= labelRow; row++) for (let column = 1; column <= analysisCol; column++) styleHeaderCell(sheet.getCell(row, column), row === headerRow ? navy : lightBlue);
 
   const dataStart = labelRow + 1;
   rows.forEach((row, index) => {
@@ -183,6 +206,10 @@ function writeReportTable(sheet: ExcelJS.Worksheet, startRow: number, label: str
       if (column >= 4) cell.numFmt = column % 4 === 0 ? moneyFormat : column > totalStart + 1 && column <= totalEnd ? moneyFormat : "#,##0.##";
     });
     [totalStart + 2, totalEnd].forEach((column) => { excelRow.getCell(column).numFmt = usdFormat; });
+    const analysisCell = excelRow.getCell(analysisCol);
+    analysisCell.value = analysisRemark(row, durations);
+    analysisCell.border = { top: border, left: border, bottom: border, right: border };
+    analysisCell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
   });
 
   const totalRowNumber = dataStart + rows.length;
@@ -196,6 +223,9 @@ function writeReportTable(sheet: ExcelJS.Worksheet, startRow: number, label: str
     cell.numFmt = column === totalStart + 2 || column === totalEnd ? usdFormat : column % 4 === 0 || column === totalStart + 1 || column === totalStart + 4 ? moneyFormat : "#,##0.##";
   }
   totalRow.eachCell((cell) => { cell.border = { top: border, left: border, bottom: border, right: border }; cell.font = { bold: true }; cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: lightBlue } }; });
+  const totalAnalysisCell = totalRow.getCell(analysisCol);
+  totalAnalysisCell.border = { top: border, left: border, bottom: border, right: border };
+  totalAnalysisCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: lightBlue } };
   totalRow.commit();
 
   return totalRowNumber;
@@ -214,7 +244,8 @@ function buildMainSheet(workbook: ExcelJS.Workbook, date: string, reports: OtPla
   // line up: the checked "show in export" durations unioned with any duration
   // that carries data.
   const durations = displayDurations(exportDurations, reports);
-  const titleEnd = Math.max(16, 3 + durations.length * 4 + 5);
+  const analysisCol = 3 + durations.length * 4 + 6; // matches writeReportTable's analysisCol
+  const titleEnd = Math.max(16, analysisCol);
 
   let startRow = 4;
   for (const report of reports) {
@@ -238,6 +269,7 @@ function buildMainSheet(workbook: ExcelJS.Workbook, date: string, reports: OtPla
   sheet.mergeCells(`A1:${sheet.getColumn(titleEnd).letter}1`);
   sheet.getColumn(1).width = 7; sheet.getColumn(2).width = 24;
   for (let column = 3; column <= sheet.columnCount; column++) sheet.getColumn(column).width = 15;
+  sheet.getColumn(analysisCol).width = 70;
   sheet.eachRow((row) => { row.height = Math.max(row.height ?? 15, 20); });
 }
 
