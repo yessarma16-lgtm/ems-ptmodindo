@@ -63,7 +63,7 @@ function timeToMinutes(value: unknown): number | null {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-function bucketOf(selisihMinutes: number): TimeOverdueBucket {
+export function bucketOf(selisihMinutes: number): TimeOverdueBucket {
   if (selisihMinutes <= 15) return "0:00 - 0:15";
   if (selisihMinutes <= 20) return "0:16 - 0:20";
   return "> 0:21 Minute";

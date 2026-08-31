@@ -2,20 +2,13 @@ import "server-only";
 
 import ExcelJS from "exceljs";
 import type { TimeOverdueReport, TimeOverdueBucket } from "@/lib/time-overdue-service";
-import { TIME_OVERDUE_BUCKETS } from "@/lib/time-overdue-service";
+import { TIME_OVERDUE_BUCKETS, bucketOf } from "@/lib/time-overdue-service";
 
 const navy = "FF1F4E78";
 const lightBlue = "FFD9EAF7";
 const border = { style: "thin" as const, color: { argb: "FF808080" } };
 
 const SHED_ORDER = ["SHED A", "SHED B", "SHED C", "COMMON"];
-
-/** Excel sheet names can't contain ":" "/" "\" "?" "*" "[" "]" — the bucket labels do, so each detail sheet gets a safe equivalent. */
-const DETAIL_SHEET_NAMES: Record<TimeOverdueBucket, string> = {
-  "0:00 - 0:15": "Name 0-15 Min",
-  "0:16 - 0:20": "Name 16-20 Min",
-  "> 0:21 Minute": "Name Over 21 Min",
-};
 
 const DETAIL_DESCRIPTIONS: Record<TimeOverdueBucket, string> = {
   "0:00 - 0:15": "0-15",
@@ -79,18 +72,22 @@ export function buildTimeOverdueWorkbook(date: string, report: TimeOverdueReport
     recap.addRow([]); // blank separator row between shed blocks
   }
 
-  for (const bucket of TIME_OVERDUE_BUCKETS) {
-    const sheet = workbook.addWorksheet(DETAIL_SHEET_NAMES[bucket]);
+  // One detail sheet per shed (SHED A / B / C / COMMON, then any extras), each
+  // holding that shed's overdue rows across all buckets, worst overdue first.
+  // Sheds with no rows are skipped. DESCRIPTION is per row (0-15 / 16-20 / >21).
+  const allDetail = TIME_OVERDUE_BUCKETS.flatMap((bucket) => report.detail[bucket]);
+  for (const [shed, rows] of groupByShed(allDetail)) {
+    const sheet = workbook.addWorksheet(shed);
     sheet.columns = [
       { width: 6 }, { width: 16 }, { width: 26 }, { width: 26 }, { width: 10 }, { width: 20 },
       { width: 12 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 14 }, { width: 12 },
     ];
     const headerRow = sheet.addRow(["NO", "NIK", "NAME", "DEPARTMENT", "SHED", "UNIT", "DATE", "INTIME", "OUTTIME", "IT1", "OT1", "OVERDUE (HH:MM)", "DESCRIPTION"]);
     styleHeaderRow(headerRow, navy);
-    report.detail[bucket].forEach((item, index) => {
+    [...rows].sort((a, b) => b.selisihMinutes - a.selisihMinutes).forEach((item, index) => {
       const dataRow = sheet.addRow([
         index + 1, item.nik, item.name, item.department, item.shed, item.division, item.tanggal,
-        item.intime, item.outtime, item.it1, item.ot1, formatHHMM(item.selisihMinutes), DETAIL_DESCRIPTIONS[bucket],
+        item.intime, item.outtime, item.it1, item.ot1, formatHHMM(item.selisihMinutes), DETAIL_DESCRIPTIONS[bucketOf(item.selisihMinutes)],
       ]);
       dataRow.eachCell((cell, column) => {
         cell.border = { top: border, left: border, bottom: border, right: border };
