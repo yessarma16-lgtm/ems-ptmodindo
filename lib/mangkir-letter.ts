@@ -105,40 +105,49 @@ function buildLetterContent(event: MangkirEvent): LetterContent {
   };
 }
 
-/** Plain-text version for the wa.me pre-filled message — WhatsApp's own *bold* markdown. */
+/**
+ * Plain-text version for the wa.me pre-filled message — WhatsApp's own *bold*
+ * markdown. Line breaks mirror the formal PDF's layout (blank line between
+ * every block) so the message reads as tidily as the printed letter; empty
+ * optional fields (letter number, address, phone) are skipped without leaving
+ * a stray blank line.
+ */
 export function buildMangkirLetterWhatsAppText(event: MangkirEvent, signer: MangkirSignerInfo): string {
   const c = buildLetterContent(event);
-  const lines = [
-    `*${c.title}*`,
-    c.fullLetterNumber ? `No. ${c.fullLetterNumber}` : "",
-    "",
-    `Kepada Yth,`,
-    `Sdr/sdri: *${event.name}*`,
-    `(${c.unitLine})`,
-    event.address || "",
-    event.phoneNumber ? `(${event.phoneNumber})` : "",
-    "di Tempat",
-    "",
-    `Perihal: ${c.perihal}`,
-    "",
-    "Dengan hormat,",
-    c.bodyParagraph,
-    "",
-    `Tanggal : ${c.meetingDate}`,
-    `Jam        : ${MEETING_TIME}`,
-    `Tempat   : ${MEETING_PLACE}`,
-    "",
-    c.closingParagraphs.join("\n\n"),
-    "",
-    "Atas Perhatian dan kerjasamanya kami sampaikan terima kasih.",
-    "",
-    c.issuePlaceDate,
-    "Hormat kami,",
-    "",
-    `*${signer.signerName}*`,
-    signer.signerTitle,
-  ];
-  return lines.filter((l) => l !== "").join("\n").replace(/\n{3,}/g, "\n\n");
+  const L: string[] = [];
+
+  L.push(`*${c.title}*`);
+  if (c.fullLetterNumber) L.push(`No. ${c.fullLetterNumber}`);
+  L.push("");
+  L.push("Kepada Yth,");
+  L.push(`Sdr/sdri: *${event.name}*`);
+  L.push(`(${c.unitLine})`);
+  if (event.address) L.push(event.address);
+  if (event.phoneNumber) L.push(`(${event.phoneNumber})`);
+  L.push("di Tempat");
+  L.push("");
+  L.push(`Perihal: ${c.perihal}`);
+  L.push("");
+  L.push("Dengan hormat,");
+  L.push(c.bodyParagraph);
+  L.push("");
+  L.push(`Tanggal : ${c.meetingDate}`);
+  L.push(`Jam     : ${MEETING_TIME}`);
+  L.push(`Tempat  : ${MEETING_PLACE}`);
+  L.push("");
+  for (const p of c.closingParagraphs) {
+    L.push(p);
+    L.push("");
+  }
+  L.push("Atas Perhatian dan kerjasamanya kami sampaikan terima kasih.");
+  L.push("");
+  L.push(c.issuePlaceDate);
+  L.push("Hormat kami,");
+  L.push("");
+  L.push(`*${signer.signerName}*`);
+  L.push(signer.signerTitle);
+
+  return L.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /** Indonesian phone numbers are usually stored starting with 0 — wa.me needs the 62 country code, no leading zero/plus/spaces/dashes. */

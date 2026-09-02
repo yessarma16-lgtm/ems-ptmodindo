@@ -3,14 +3,13 @@
 import { createContext, useContext, useMemo, useState } from "react";
 
 /**
- * Keeps the Employee Report page's Run results alive across navigation —
- * switching tabs (Radix unmounts inactive TabsContent by default) or leaving
- * to another page and coming back both would otherwise reset the page's own
- * local state. Living here, in a Provider mounted once in AppShell (see
- * components/layout/AppShell.tsx), means the data survives exactly those two
- * cases but resets on an actual page reload (a fresh Provider on a fresh JS
- * load) — matching what was asked: only a hard refresh or an explicit
- * Clear/Cancel action should wipe it. Same pattern as
+ * Keeps the report pages' Run results alive across navigation — leaving
+ * Employee Report / Report Mangkir for another page and coming back would
+ * otherwise reset each page's own local state. Living here, in a Provider
+ * mounted once in AppShell (see components/layout/AppShell.tsx), means the
+ * data survives that but resets on an actual page reload (a fresh Provider on
+ * a fresh JS load) — matching what was asked: only a hard refresh or an
+ * explicit Clear action should wipe it. Same pattern as
  * components/attendance/CalculationSession.tsx, minus its idle-timeout
  * auto-clear (not requested here).
  */
