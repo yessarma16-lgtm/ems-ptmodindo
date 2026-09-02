@@ -150,7 +150,7 @@ export function buildMangkirLetterWhatsAppText(event: MangkirEvent, signer: Mang
   return L.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-/** Indonesian phone numbers are usually stored starting with 0 — wa.me needs the 62 country code, no leading zero/plus/spaces/dashes. */
+/** Indonesian phone numbers are usually stored starting with 0 — WhatsApp needs the 62 country code, no leading zero/plus/spaces/dashes. */
 export function toWhatsAppNumber(rawPhone: string): string | null {
   const digits = rawPhone.replace(/[^\d]/g, "");
   if (!digits) return null;
@@ -159,10 +159,18 @@ export function toWhatsAppNumber(rawPhone: string): string | null {
   return digits;
 }
 
+/**
+ * Opens the chat straight in WhatsApp Web (web.whatsapp.com/send), not the
+ * wa.me interstitial. wa.me bounces through its own landing page which — on a
+ * desktop browser — keeps trying to hand off to the app / a fresh login tab;
+ * web.whatsapp.com/send drops the user directly into the pre-filled chat in
+ * the WhatsApp Web session they already have open. HR uses WhatsApp Web.
+ */
 export function buildWhatsAppLink(event: MangkirEvent, signer: MangkirSignerInfo): string | null {
   const number = toWhatsAppNumber(event.phoneNumber);
   if (!number) return null;
-  return `https://wa.me/${number}?text=${encodeURIComponent(buildMangkirLetterWhatsAppText(event, signer))}`;
+  const text = encodeURIComponent(buildMangkirLetterWhatsAppText(event, signer));
+  return `https://web.whatsapp.com/send?phone=${number}&text=${text}&type=phone_number&app_absent=0`;
 }
 
 // Content area on the PT MOD INDO letterhead (assets/mangkir-letterhead.pdf,
