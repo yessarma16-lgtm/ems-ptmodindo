@@ -7,6 +7,7 @@ import { Header } from "@/components/layout/Header";
 import type { User } from "@/lib/user-service";
 import { isDeveloperUser } from "@/lib/auth/developer-access";
 import { CalculationSessionProvider } from "@/components/attendance/CalculationSession";
+import { EmployeeReportSessionProvider } from "@/components/reports/EmployeeReportSession";
 
 const COLLAPSE_STORAGE_KEY = "sidebar-collapsed";
 
@@ -40,7 +41,9 @@ export function AppShell({ children, currentUser }: { children: React.ReactNode;
       <div className="flex min-w-0 flex-1 flex-col">
         <Header onMenuClick={() => setMobileOpen(true)} currentUser={currentUser} />
         <CalculationSessionProvider>
-          <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+          <EmployeeReportSessionProvider>
+            <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+          </EmployeeReportSessionProvider>
         </CalculationSessionProvider>
       </div>
     </div>

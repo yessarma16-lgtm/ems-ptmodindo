@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CalendarCheck, FileDown, FileSpreadsheet, Loader2, MessageCircle, Play } from "lucide-react";
+import { AlertTriangle, CalendarCheck, FileDown, FileSpreadsheet, Loader2, MessageCircle, Play, X } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,16 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AttendanceDatePicker } from "@/components/attendance/AttendanceDatePicker";
 import { formatDateDMY } from "@/lib/date-format";
+import { useEmployeeReportSession, type TimeOverdueUnitRow, type MangkirEvent } from "@/components/reports/EmployeeReportSession";
 import { toast } from "sonner";
 
 const SHED_ORDER = ["SHED A", "SHED B", "SHED C", "COMMON"];
 const BUCKETS = ["0:00 - 0:15", "0:16 - 0:20", "> 0:21 Minute"] as const;
 
-type UnitRow = { shed: string; division: string; counts: Record<string, number>; total: number };
-type TimeOverdueReport = { units: UnitRow[]; detail: Record<string, unknown[]> };
-
-function groupByShed(rows: UnitRow[]): [string, UnitRow[]][] {
-  const groups = new Map<string, UnitRow[]>();
+function groupByShed(rows: TimeOverdueUnitRow[]): [string, TimeOverdueUnitRow[]][] {
+  const groups = new Map<string, TimeOverdueUnitRow[]>();
   for (const row of rows) { const list = groups.get(row.shed) ?? []; list.push(row); groups.set(row.shed, list); }
   const order = [...SHED_ORDER, ...Array.from(groups.keys()).filter((s) => !SHED_ORDER.includes(s))];
   return order.filter((s) => groups.has(s)).map((s) => [s, groups.get(s)!]);
@@ -62,13 +60,10 @@ export default function EmployeeReportPage() {
 }
 
 function TimeOverdueReportTab() {
-  const today = new Date().toISOString().slice(0, 10);
-  const [dateFrom, setDateFrom] = useState(today);
-  const [dateTo, setDateTo] = useState(today);
+  const { timeOverdue, setTimeOverdue, clearTimeOverdue } = useEmployeeReportSession();
+  const { dateFrom, dateTo, report, hasRun } = timeOverdue;
   const [processedDates, setProcessedDates] = useState<string[]>([]);
-  const [report, setReport] = useState<TimeOverdueReport | null>(null);
   const [loading, setLoading] = useState(false);
-  const [hasRun, setHasRun] = useState(false);
 
   useEffect(() => {
     fetch("/api/attendance/status", { cache: "no-store" }).then((r) => r.json()).then((v) => setProcessedDates(v.processedDates ?? [])).catch(() => undefined);
@@ -76,13 +71,13 @@ function TimeOverdueReportTab() {
 
   async function load() {
     if (!dateFrom || !dateTo || dateFrom > dateTo) { toast.error("Pilih tanggal mulai dan tanggal akhir yang valid."); return; }
-    setHasRun(true);
+    setTimeOverdue({ hasRun: true });
     setLoading(true);
     try {
       const q = new URLSearchParams({ dateFrom, dateTo });
       const r = await fetch(`/api/reports/time-overdue?${q}`, { cache: "no-store" });
       if (!r.ok) throw new Error("Failed to load report.");
-      setReport(await r.json());
+      setTimeOverdue({ report: await r.json() });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load report.");
     } finally {
@@ -97,8 +92,8 @@ function TimeOverdueReportTab() {
     <div className="mt-4 space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-5">
         <div className="flex flex-wrap items-end gap-5">
-          <div><label className="mb-1 block text-xs font-medium">From</label><AttendanceDatePicker value={dateFrom} onChange={setDateFrom} processedDates={processedDates} /></div>
-          <div><label className="mb-1 block text-xs font-medium">To</label><AttendanceDatePicker value={dateTo} onChange={setDateTo} processedDates={processedDates} /></div>
+          <div><label className="mb-1 block text-xs font-medium">From</label><AttendanceDatePicker value={dateFrom} onChange={(v) => setTimeOverdue({ dateFrom: v })} processedDates={processedDates} /></div>
+          <div><label className="mb-1 block text-xs font-medium">To</label><AttendanceDatePicker value={dateTo} onChange={(v) => setTimeOverdue({ dateTo: v })} processedDates={processedDates} /></div>
           <Button
             size="icon"
             className="rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-md transition-all hover:shadow-lg hover:from-violet-600 hover:to-violet-700"
@@ -108,6 +103,9 @@ function TimeOverdueReportTab() {
             disabled={loading}
           >
             <Play className="size-[18px]" />
+          </Button>
+          <Button variant="outline" size="icon" title="Clear" aria-label="Clear" onClick={clearTimeOverdue} disabled={loading}>
+            <X className="size-[18px]" />
           </Button>
         </div>
         <div className="flex flex-wrap gap-2 rounded-2xl border border-border bg-muted/30 p-1.5 shadow-sm">
@@ -168,28 +166,6 @@ function TimeOverdueReportTab() {
   );
 }
 
-interface MangkirEvent {
-  recordId: string;
-  nik: string;
-  name: string;
-  position: string;
-  department: string;
-  shed: string;
-  division: string;
-  phoneNumber: string;
-  level: 1 | 2;
-  episodeStartDate: string;
-  triggerDates: string[];
-  episodeLength: number;
-  sentAt: string | null;
-  sentBy: string | null;
-}
-interface MangkirReport {
-  sp1Threshold: number;
-  sp2Threshold: number;
-  events: MangkirEvent[];
-}
-
 function letterPdfUrl(e: MangkirEvent) {
   const q = new URLSearchParams({
     recordId: e.recordId, nik: e.nik, name: e.name, position: e.position, department: e.department,
@@ -208,17 +184,12 @@ function letterPdfUrl(e: MangkirEvent) {
  * still-ongoing absence that reaches both levels gets two rows.
  */
 function MangkirReportTab() {
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const [dateFrom, setDateFrom] = useState(thirtyDaysAgo);
-  const [dateTo, setDateTo] = useState(today);
+  const { mangkir, setMangkir, clearMangkir } = useEmployeeReportSession();
+  const { dateFrom, dateTo, report, hasRun } = mangkir;
+  const levelFilter = new Set(mangkir.levelFilter);
   const [processedDates, setProcessedDates] = useState<string[]>([]);
-  const [report, setReport] = useState<MangkirReport | null>(null);
   const [loading, setLoading] = useState(false);
-  const [hasRun, setHasRun] = useState(false);
   const [sendingKey, setSendingKey] = useState<string | null>(null);
-  const [levelFilter, setLevelFilter] = useState<Set<1 | 2>>(new Set([1, 2]));
 
   useEffect(() => {
     fetch("/api/attendance/status", { cache: "no-store" }).then((r) => r.json()).then((v) => setProcessedDates(v.processedDates ?? [])).catch(() => undefined);
@@ -226,13 +197,13 @@ function MangkirReportTab() {
 
   async function load() {
     if (!dateFrom || !dateTo || dateFrom > dateTo) { toast.error("Pilih tanggal mulai dan tanggal akhir yang valid."); return; }
-    setHasRun(true);
+    setMangkir({ hasRun: true });
     setLoading(true);
     try {
       const q = new URLSearchParams({ dateFrom, dateTo });
       const r = await fetch(`/api/reports/mangkir?${q}`, { cache: "no-store" });
       if (!r.ok) throw new Error("Failed to load report.");
-      setReport(await r.json());
+      setMangkir({ report: await r.json() });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to load report.");
     } finally {
@@ -243,12 +214,10 @@ function MangkirReportTab() {
   const eventKey = (e: MangkirEvent) => `${e.recordId}|${e.episodeStartDate}|${e.level}`;
 
   function toggleLevelFilter(level: 1 | 2) {
-    setLevelFilter((prev) => {
-      const next = new Set(prev);
-      if (next.has(level)) next.delete(level);
-      else next.add(level);
-      return next;
-    });
+    const next = new Set(levelFilter);
+    if (next.has(level)) next.delete(level);
+    else next.add(level);
+    setMangkir({ levelFilter: Array.from(next) });
   }
 
   const filteredEvents = report?.events.filter((e) => levelFilter.has(e.level)) ?? [];
@@ -276,8 +245,8 @@ function MangkirReportTab() {
   return (
     <div className="mt-4 space-y-5">
       <div className="flex flex-wrap items-end gap-5">
-        <div><label className="mb-1 block text-xs font-medium">From</label><AttendanceDatePicker value={dateFrom} onChange={setDateFrom} processedDates={processedDates} /></div>
-        <div><label className="mb-1 block text-xs font-medium">To</label><AttendanceDatePicker value={dateTo} onChange={setDateTo} processedDates={processedDates} /></div>
+        <div><label className="mb-1 block text-xs font-medium">From</label><AttendanceDatePicker value={dateFrom} onChange={(v) => setMangkir({ dateFrom: v })} processedDates={processedDates} /></div>
+        <div><label className="mb-1 block text-xs font-medium">To</label><AttendanceDatePicker value={dateTo} onChange={(v) => setMangkir({ dateTo: v })} processedDates={processedDates} /></div>
         <Button
           size="icon"
           className="rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-md transition-all hover:shadow-lg hover:from-violet-600 hover:to-violet-700"
@@ -287,6 +256,9 @@ function MangkirReportTab() {
           disabled={loading}
         >
           <Play className="size-[18px]" />
+        </Button>
+        <Button variant="outline" size="icon" title="Clear" aria-label="Clear" onClick={clearMangkir} disabled={loading}>
+          <X className="size-[18px]" />
         </Button>
         <div className="flex items-center gap-1 rounded-2xl border border-border bg-muted/30 p-1.5 shadow-sm">
           {([1, 2] as const).map((level) => (
