@@ -44,6 +44,8 @@ interface LetterContent {
   bodyParagraph: string;
   meetingDate: string;
   closingParagraphs: string[];
+  /** SP2's two closing paragraphs run on with no blank line between them — only SP1's (unrelated) pair keeps one. */
+  joinClosingParagraphs?: boolean;
   issuePlaceDate: string;
 }
 
@@ -78,8 +80,9 @@ function buildLetterContent(event: MangkirEvent): LetterContent {
     meetingDate: formatDateLongID(addDaysISO(last, 1)),
     closingParagraphs: [
       "Apabila Saudara tidak memenuhi Surat Panggilan II (Kedua) ini tanpa memberikan alasan yang dapat dipertanggung jawabkan, maka perusahaan akan mengambil tindakan sesuai dengan ketentuan dan peraturan perusahaan yang berlaku.",
-      "Ketidakhadiran Saudara dalam memenuhi panggilan tersebut akan kami catat sebagai ketidakpatuhan terhadap proses penyelesaian hubungan kerja secara prosedural dan dapat ditindaklanjuti sesuai dengan ketentuan yang berlaku.",
+      "Ketidak hadiran Saudara dalam memenuhi panggilan tersebut akan kami catat sebagai ketidak patuhan terhadap proses penyelesaian hubungan kerja secara prosedural dan dapat ditindaklanjuti sesuai dengan ketentuan yang berlaku.",
     ],
+    joinClosingParagraphs: true,
     issuePlaceDate: `${ISSUE_PLACE}, ${lastFormatted}`,
   };
 }
@@ -96,19 +99,18 @@ export function buildMangkirLetterWhatsAppText(event: MangkirEvent, signer: Mang
     `(${c.unitLine})`,
     event.address || "",
     event.phoneNumber ? `(${event.phoneNumber})` : "",
-    "Ditempat",
+    "di Tempat",
     "",
     `Perihal: ${c.perihal}`,
     "",
     "Dengan hormat,",
-    "",
     c.bodyParagraph,
     "",
     `Tanggal : ${c.meetingDate}`,
     `Jam        : ${MEETING_TIME}`,
     `Tempat   : ${MEETING_PLACE}`,
     "",
-    ...c.closingParagraphs,
+    c.joinClosingParagraphs ? c.closingParagraphs.join(" ") : c.closingParagraphs.join("\n\n"),
     "",
     "Atas Perhatian dan kerjasamanya kami sampaikan terima kasih.",
     "",
@@ -145,7 +147,7 @@ const MARGIN_RIGHT = 56;
 const MARGIN_TOP = 135; // below the logo + "PT. MOD INDO" + rule
 const MARGIN_BOTTOM = 78; // above the "Head Office & Factory" footer block
 const FONT_SIZE = 10.5;
-const LINE_HEIGHT = FONT_SIZE * 1.5; // "ukuran paragraf 1,5"
+const LINE_HEIGHT = FONT_SIZE * 1.15; // "paragraf jadi 1.15"
 const LABEL_COLUMN_WIDTH = 62; // aligns the ":" in Perihal/Tanggal/Jam/Tempat
 
 /** Greedy word-wrap using the font's actual glyph widths — pdf-lib has no built-in text flow. */
@@ -239,15 +241,14 @@ export async function buildMangkirLetterPdf(event: MangkirEvent, signer: Mangkir
   await line(`(${c.unitLine})`);
   if (event.address) await line(event.address);
   if (event.phoneNumber) await line(`(${event.phoneNumber})`);
-  await line("Ditempat");
+  await line("di Tempat");
   await blank(); // "setelah di tempat kemudian enter"
 
   await labeledRow("Perihal", c.perihal);
   await blank(); // "setelah perihal di enter"
 
   await line("Dengan hormat,");
-  await blank();
-  await paragraph(c.bodyParagraph);
+  await paragraph(c.bodyParagraph); // no blank between "Dengan hormat," and the body
   await blank();
 
   await labeledRow("Tanggal", c.meetingDate);
@@ -255,9 +256,15 @@ export async function buildMangkirLetterPdf(event: MangkirEvent, signer: Mangkir
   await labeledRow("Tempat", MEETING_PLACE);
   await blank();
 
-  for (const p of c.closingParagraphs) {
-    await paragraph(p);
+  if (c.joinClosingParagraphs) {
+    // Runs on as one paragraph — no blank line between the two sentences.
+    await paragraph(c.closingParagraphs.join(" "));
     await blank();
+  } else {
+    for (const p of c.closingParagraphs) {
+      await paragraph(p);
+      await blank();
+    }
   }
   await line("Atas Perhatian dan kerjasamanya kami sampaikan terima kasih.");
   await blank(2); // "setelah terimakasih di enter 2x"
