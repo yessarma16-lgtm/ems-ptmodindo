@@ -115,10 +115,28 @@ export function MangkirReport() {
   const [actionLevel, setActionLevel] = useState<1 | 2 | null>(null);
   const [numberInput, setNumberInput] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [waTarget, setWaTarget] = useState<"web" | "app">("web");
 
   useEffect(() => {
     fetch("/api/attendance/status", { cache: "no-store" }).then((r) => r.json()).then((v) => setProcessedDates(v.processedDates ?? [])).catch(() => undefined);
+    try {
+      const saved = localStorage.getItem("mangkir-wa-target");
+      // queueMicrotask — same deferral as AppShell's collapsed-sidebar read, keeps
+      // the setState out of the synchronous effect body (react-hooks/set-state-in-effect).
+      if (saved === "web" || saved === "app") queueMicrotask(() => setWaTarget(saved));
+    } catch {
+      /* localStorage unavailable — keep the default */
+    }
   }, []);
+
+  function chooseWaTarget(target: "web" | "app") {
+    setWaTarget(target);
+    try {
+      localStorage.setItem("mangkir-wa-target", target);
+    } catch {
+      /* ignore — the choice just won't be remembered */
+    }
+  }
 
   async function load() {
     if (!dateFrom || !dateTo || dateFrom > dateTo) { toast.error("Pilih tanggal mulai dan tanggal akhir yang valid."); return; }
@@ -187,8 +205,15 @@ export function MangkirReport() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Gagal menyiapkan pesan.");
-        window.open(data.whatsappLink, "_blank");
-        toast.success("WhatsApp terbuka dengan teks surat — tinggal kirim.");
+        if (waTarget === "app") {
+          // Custom scheme — hands off to WhatsApp Desktop without navigating this page away.
+          window.location.href = data.whatsappAppLink;
+          toast.success("Membuka aplikasi WhatsApp dengan teks surat — tinggal kirim.");
+        } else {
+          // Named target: a second send reuses the same WhatsApp Web tab instead of piling up new ones.
+          window.open(data.whatsappWebLink, "modWhatsAppTab");
+          toast.success("WhatsApp Web terbuka dengan teks surat — tinggal kirim.");
+        }
         void load(); // refresh so the "terkirim" status shows immediately
         setActionRow(null);
       } catch (err) {
@@ -434,6 +459,32 @@ export function MangkirReport() {
                     </span>
                   </p>
                 )}
+              </div>
+            )}
+
+            {actionMode === "wa" && actionLevel && dialogLevelEvent && (
+              <div className="space-y-1">
+                <label className="block text-xs font-medium">Buka lewat</label>
+                <div className="flex gap-2">
+                  {(["web", "app"] as const).map((target) => (
+                    <button
+                      key={target}
+                      type="button"
+                      onClick={() => chooseWaTarget(target)}
+                      className={cn(
+                        "flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                        waTarget === target ? "border-emerald-600 bg-emerald-50 text-emerald-700" : "border-border hover:bg-muted",
+                      )}
+                    >
+                      {target === "web" ? "WhatsApp Web" : "Aplikasi WhatsApp"}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {waTarget === "web"
+                    ? "Buka di tab WhatsApp Web (dipakai ulang, tidak menumpuk tab baru)."
+                    : "Buka di aplikasi WhatsApp Desktop yang terpasang."}
+                </p>
               </div>
             )}
           </div>

@@ -159,18 +159,27 @@ export function toWhatsAppNumber(rawPhone: string): string | null {
   return digits;
 }
 
-/**
- * Opens the chat straight in WhatsApp Web (web.whatsapp.com/send), not the
- * wa.me interstitial. wa.me bounces through its own landing page which — on a
- * desktop browser — keeps trying to hand off to the app / a fresh login tab;
- * web.whatsapp.com/send drops the user directly into the pre-filled chat in
- * the WhatsApp Web session they already have open. HR uses WhatsApp Web.
- */
-export function buildWhatsAppLink(event: MangkirEvent, signer: MangkirSignerInfo): string | null {
+export interface WhatsAppLinks {
+  /**
+   * WhatsApp Web (web.whatsapp.com/send) — drops the user directly into the
+   * pre-filled chat in the WhatsApp Web session they already have open,
+   * unlike the wa.me interstitial which on desktop keeps trying to hand off
+   * to the app / a fresh login tab.
+   */
+  web: string;
+  /** Custom-scheme link that launches the installed WhatsApp Desktop / mobile app. */
+  app: string;
+}
+
+/** Both link flavours for a warning-letter WhatsApp message; HR picks web vs app in the dialog. */
+export function buildWhatsAppLinks(event: MangkirEvent, signer: MangkirSignerInfo): WhatsAppLinks | null {
   const number = toWhatsAppNumber(event.phoneNumber);
   if (!number) return null;
   const text = encodeURIComponent(buildMangkirLetterWhatsAppText(event, signer));
-  return `https://web.whatsapp.com/send?phone=${number}&text=${text}&type=phone_number&app_absent=0`;
+  return {
+    web: `https://web.whatsapp.com/send?phone=${number}&text=${text}&type=phone_number&app_absent=0`,
+    app: `whatsapp://send?phone=${number}&text=${text}`,
+  };
 }
 
 // Content area on the PT MOD INDO letterhead (assets/mangkir-letterhead.pdf,

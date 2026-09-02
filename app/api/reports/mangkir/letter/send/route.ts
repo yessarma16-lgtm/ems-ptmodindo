@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireModuleAccess } from "@/lib/module-permission";
 import { getCurrentSessionUser } from "@/lib/auth/current-user";
 import { markMangkirLetterSent, getMangkirLetterMeta, getMangkirSignerInfo } from "@/lib/mangkir-service";
-import { buildWhatsAppLink } from "@/lib/mangkir-letter";
+import { buildWhatsAppLinks } from "@/lib/mangkir-letter";
 import type { MangkirEvent } from "@/lib/mangkir-service";
 import { toApiErrorResponse } from "@/lib/api-error";
 
 /**
  * Records that a Surat Panggilan's "Kirim via WhatsApp" action was used, and
- * returns the wa.me link to open. Not a delivery confirmation — wa.me only
- * pre-fills WhatsApp with the message, HR still sends it manually there.
+ * returns both the WhatsApp Web and the WhatsApp app links to open (HR picks
+ * which in the dialog). Not a delivery confirmation — the link only pre-fills
+ * WhatsApp with the message, HR still sends it manually there.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -28,8 +29,8 @@ export async function POST(request: NextRequest) {
     ]);
     const fullEvent: MangkirEvent = { ...event, letterNumber, previousLevelSentAt };
 
-    const whatsappLink = buildWhatsAppLink(fullEvent, signer);
-    if (!whatsappLink) return NextResponse.json({ error: "Karyawan ini belum punya nomor HP." }, { status: 400 });
+    const whatsappLinks = buildWhatsAppLinks(fullEvent, signer);
+    if (!whatsappLinks) return NextResponse.json({ error: "Karyawan ini belum punya nomor HP." }, { status: 400 });
 
     await markMangkirLetterSent({
       recordId: event.recordId,
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
       phoneNumber: event.phoneNumber,
     });
 
-    return NextResponse.json({ whatsappLink });
+    return NextResponse.json({ whatsappWebLink: whatsappLinks.web, whatsappAppLink: whatsappLinks.app });
   } catch (error) {
     return toApiErrorResponse(error);
   }
