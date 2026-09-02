@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CalendarCheck, FileSpreadsheet, Loader2, Play } from "lucide-react";
+import { AlertTriangle, CalendarCheck, FileDown, FileSpreadsheet, Loader2, MessageCircle, Play } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AttendanceDatePicker } from "@/components/attendance/AttendanceDatePicker";
+import { formatDateDMY } from "@/lib/date-format";
 import { toast } from "sonner";
 
 const SHED_ORDER = ["SHED A", "SHED B", "SHED C", "COMMON"];
@@ -217,6 +218,7 @@ function MangkirReportTab() {
   const [loading, setLoading] = useState(false);
   const [hasRun, setHasRun] = useState(false);
   const [sendingKey, setSendingKey] = useState<string | null>(null);
+  const [levelFilter, setLevelFilter] = useState<Set<1 | 2>>(new Set([1, 2]));
 
   useEffect(() => {
     fetch("/api/attendance/status", { cache: "no-store" }).then((r) => r.json()).then((v) => setProcessedDates(v.processedDates ?? [])).catch(() => undefined);
@@ -239,6 +241,17 @@ function MangkirReportTab() {
   }
 
   const eventKey = (e: MangkirEvent) => `${e.recordId}|${e.episodeStartDate}|${e.level}`;
+
+  function toggleLevelFilter(level: 1 | 2) {
+    setLevelFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(level)) next.delete(level);
+      else next.add(level);
+      return next;
+    });
+  }
+
+  const filteredEvents = report?.events.filter((e) => levelFilter.has(e.level)) ?? [];
 
   async function sendWhatsApp(e: MangkirEvent) {
     if (!e.phoneNumber) { toast.error("Karyawan ini belum punya nomor HP di data master."); return; }
@@ -275,6 +288,20 @@ function MangkirReportTab() {
         >
           <Play className="size-[18px]" />
         </Button>
+        <div className="flex items-center gap-1 rounded-2xl border border-border bg-muted/30 p-1.5 shadow-sm">
+          {([1, 2] as const).map((level) => (
+            <button
+              key={level}
+              type="button"
+              onClick={() => toggleLevelFilter(level)}
+              className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${
+                levelFilter.has(level) ? "bg-rose-600 text-white" : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              SP{level}
+            </button>
+          ))}
+        </div>
       </div>
       <p className="text-xs text-muted-foreground">
         <AlertTriangle className="mr-1 inline size-3" />
@@ -285,8 +312,8 @@ function MangkirReportTab() {
         <p className="text-sm text-muted-foreground">Pilih rentang tanggal, lalu klik Run.</p>
       ) : loading ? (
         <p className="text-sm text-muted-foreground">Loading...</p>
-      ) : !report || report.events.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Tidak ada karyawan yang kena Surat Panggilan pada rentang ini.</p>
+      ) : !report || filteredEvents.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Tidak ada karyawan yang kena Surat Panggilan pada rentang/filter ini.</p>
       ) : (
         <Card className="overflow-auto">
           <CardContent className="pt-6">
@@ -304,7 +331,7 @@ function MangkirReportTab() {
                 </tr>
               </thead>
               <tbody>
-                {report.events.map((e) => (
+                {filteredEvents.map((e) => (
                   <tr key={eventKey(e)}>
                     <td className="border p-2">{e.nik}</td>
                     <td className="border p-2 font-medium">
@@ -313,23 +340,33 @@ function MangkirReportTab() {
                     <td className="border p-2">{e.position}</td>
                     <td className="border p-2">{e.department}</td>
                     <td className="border p-2 text-center"><Badge variant="destructive">SP {e.level}</Badge></td>
-                    <td className="border p-2 text-xs">{e.triggerDates.join(", ")}</td>
+                    <td className="border p-2">
+                      <div className="flex flex-wrap gap-1">
+                        {e.triggerDates.map((d) => (
+                          <span key={d} className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs whitespace-nowrap">
+                            {formatDateDMY(d)}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
                     <td className="border p-2 text-xs">
                       {e.sentAt ? `Sudah dikirim ${new Date(e.sentAt).toLocaleDateString("id-ID")}${e.sentBy ? ` oleh ${e.sentBy}` : ""}` : <span className="text-muted-foreground">Belum dikirim</span>}
                     </td>
                     <td className="border p-2">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="outline" size="sm" asChild title="Download Surat (PDF)">
-                          <a href={letterPdfUrl(e)} target="_blank" rel="noreferrer">PDF</a>
+                        <Button variant="outline" size="icon" asChild title="Download Surat (PDF)">
+                          <a href={letterPdfUrl(e)} target="_blank" rel="noreferrer">
+                            <FileDown className="size-4" />
+                          </a>
                         </Button>
                         <Button
-                          size="sm"
+                          size="icon"
                           className="bg-emerald-600 text-white hover:bg-emerald-700"
                           disabled={sendingKey === eventKey(e) || !e.phoneNumber}
                           title={e.phoneNumber ? "Kirim via WhatsApp" : "Karyawan belum punya nomor HP"}
                           onClick={() => void sendWhatsApp(e)}
                         >
-                          {sendingKey === eventKey(e) ? <Loader2 className="size-4 animate-spin" /> : "WA"}
+                          {sendingKey === eventKey(e) ? <Loader2 className="size-4 animate-spin" /> : <MessageCircle className="size-4" />}
                         </Button>
                       </div>
                     </td>

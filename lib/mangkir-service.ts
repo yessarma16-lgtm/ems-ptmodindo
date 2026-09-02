@@ -26,12 +26,17 @@ import { getSettingValue, setSettingValue } from "@/lib/database/postgres-settin
  *
  * Two escalating warning letters per episode (company policy, mirroring the
  * "2 written summons before Pasal 168 termination" pattern in UU
- * Ketenagakerjaan):
+ * Ketenagakerjaan). Each cites its dates CUMULATIVELY from the start of the
+ * episode, not just the days newly added since the previous letter:
  *   - Surat Panggilan 1 (level 1): episode reaches `sp1Threshold` days
- *     (default 3) — cites the first `sp1Threshold` dates.
+ *     (default 3) — cites those `sp1Threshold` dates.
  *   - Surat Panggilan 2 (level 2): episode reaches `sp2Threshold` days
- *     (default 5, i.e. 3 + 2 more) — cites the dates from sp1Threshold+1
- *     through sp2Threshold.
+ *     (default 5, i.e. 3 + 2 more) — cites all `sp2Threshold` dates from the
+ *     start of the episode.
+ * An episode that keeps going past `sp2Threshold` (e.g. 8 days) has no
+ * further letter yet — level 2 stays capped at its first `sp2Threshold`
+ * dates; the extra days aren't dropped from the source data, just not (yet)
+ * surfaced as their own escalation level.
  * `episode_start_date` (the episode's first date) is this pair's stable key
  * in mangkir_warning_letters — a still-ongoing episode that later also
  * reaches level 2 gets its own new row there, the level-1 row untouched.
@@ -192,7 +197,8 @@ export async function getMangkirReport(dateFrom: string, dateTo: string): Promis
           drafts.push({ ...base, level: 1, episodeStartDate, triggerDates: episode.slice(0, sp1Threshold), episodeLength });
         }
         if (episodeLength >= sp2Threshold) {
-          drafts.push({ ...base, level: 2, episodeStartDate, triggerDates: episode.slice(sp1Threshold, sp2Threshold), episodeLength });
+          // Cumulative — all sp2Threshold dates from the start of the episode, not just the days added since SP1.
+          drafts.push({ ...base, level: 2, episodeStartDate, triggerDates: episode.slice(0, sp2Threshold), episodeLength });
         }
       }
     }
