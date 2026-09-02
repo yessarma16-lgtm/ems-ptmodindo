@@ -151,6 +151,8 @@ export function MangkirReport() {
   const filterLabel =
     levelFilter.size === 2 ? "SP1 & SP2" : levelFilter.has(1) ? "SP1" : levelFilter.has(2) ? "SP2" : "Tidak ada";
 
+  const dialogLevelEvent = actionRow && actionLevel ? actionRow.levels[actionLevel] ?? null : null;
+
   function openAction(row: EpisodeRow, mode: "pdf" | "wa") {
     const reached = ([1, 2] as const).filter((l) => row.levels[l]);
     const initial = reached.length === 1 ? reached[0] : null;
@@ -170,10 +172,34 @@ export function MangkirReport() {
     if (!actionRow || !actionLevel) return;
     const lvlEvent = actionRow.levels[actionLevel];
     if (!lvlEvent) return;
-    if (actionMode === "wa" && !actionRow.phoneNumber) {
-      toast.error("Karyawan ini belum punya nomor HP di data master.");
+
+    if (actionMode === "wa") {
+      // WhatsApp reuses the number already set when the PDF was generated —
+      // it's read-only here, never re-saved. No number yet = generate the PDF first.
+      if (!actionRow.phoneNumber) { toast.error("Karyawan ini belum punya nomor HP di data master."); return; }
+      if (!lvlEvent.letterNumber.trim()) { toast.error(`Belum ada nomor surat — Generate PDF Surat Panggilan ${actionLevel} dulu.`); return; }
+      setProcessing(true);
+      try {
+        const res = await fetch("/api/reports/mangkir/letter/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event: lvlEvent }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Gagal menyiapkan pesan.");
+        window.open(data.whatsappLink, "_blank");
+        toast.success("WhatsApp terbuka dengan teks surat — tinggal kirim.");
+        void load(); // refresh so the "terkirim" status shows immediately
+        setActionRow(null);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Gagal memproses.");
+      } finally {
+        setProcessing(false);
+      }
       return;
     }
+
+    // PDF: HR types the number, it's saved, then the PDF opens.
     setProcessing(true);
     try {
       const numRes = await fetch("/api/reports/mangkir/letter/number", {
@@ -187,7 +213,7 @@ export function MangkirReport() {
       if (!numRes.ok) throw new Error("Gagal menyimpan nomor surat.");
 
       const savedEvent: MangkirEvent = { ...lvlEvent, letterNumber: numberInput.trim() };
-      // Keep the saved number on the row so re-opening the dialog shows it.
+      // Keep the saved number on the row so the WhatsApp dialog can reuse it.
       setMangkir({
         report: report
           ? {
@@ -201,20 +227,7 @@ export function MangkirReport() {
           : report,
       });
 
-      if (actionMode === "pdf") {
-        window.open(letterPdfUrl(savedEvent), "_blank");
-      } else {
-        const res = await fetch("/api/reports/mangkir/letter/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ event: savedEvent }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Gagal menyiapkan pesan.");
-        window.open(data.whatsappLink, "_blank");
-        toast.success("WhatsApp terbuka dengan teks surat — tinggal kirim.");
-        void load(); // refresh so the "terkirim" status shows immediately
-      }
+      window.open(letterPdfUrl(savedEvent), "_blank");
       setActionRow(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal memproses.");
@@ -389,20 +402,34 @@ export function MangkirReport() {
               })}
             </div>
 
-            {actionLevel && actionRow && (
+            {actionLevel && actionRow && dialogLevelEvent && (
               <div className="space-y-1">
                 <label className="block text-xs font-medium">Nomor surat</label>
-                <Input value={numberInput} onChange={(e) => setNumberInput(e.target.value)} placeholder="5" autoFocus />
+                <Input
+                  value={actionMode === "wa" ? dialogLevelEvent.letterNumber : numberInput}
+                  onChange={(e) => setNumberInput(e.target.value)}
+                  placeholder="5"
+                  autoFocus={actionMode === "pdf"}
+                  readOnly={actionMode === "wa"}
+                  className={actionMode === "wa" ? "bg-muted text-muted-foreground" : undefined}
+                />
                 <p className="text-xs text-muted-foreground">
-                  Bagian &quot;/HRD_SPK/bulan romawi/tahun&quot; otomatis mengikuti tanggal surat — cukup isi angkanya.
+                  {actionMode === "wa"
+                    ? "Nomor mengikuti yang dipakai saat Generate PDF — tidak bisa diubah di sini."
+                    : "Bagian “/HRD_SPK/bulan romawi/tahun” otomatis mengikuti tanggal surat — cukup isi angkanya."}
                 </p>
-                {numberInput.trim() && (
+                {actionMode === "wa" && !dialogLevelEvent.letterNumber.trim() && (
+                  <p className="text-sm text-amber-600">
+                    Belum ada nomor surat. Generate PDF Surat Panggilan {actionLevel} dulu untuk menetapkan nomornya.
+                  </p>
+                )}
+                {(actionMode === "wa" ? dialogLevelEvent.letterNumber : numberInput).trim() && (
                   <p className="text-sm text-muted-foreground">
                     Nomor lengkap:{" "}
                     <span className="font-medium text-foreground">
                       {previewFullLetterNumber(
-                        numberInput,
-                        actionRow.levels[actionLevel]?.triggerDates[(actionRow.levels[actionLevel]?.triggerDates.length ?? 1) - 1] ?? "",
+                        actionMode === "wa" ? dialogLevelEvent.letterNumber : numberInput,
+                        dialogLevelEvent.triggerDates[dialogLevelEvent.triggerDates.length - 1] ?? "",
                       )}
                     </span>
                   </p>
@@ -413,7 +440,14 @@ export function MangkirReport() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setActionRow(null)} disabled={processing}>Batal</Button>
-            <Button onClick={() => void confirmAction()} disabled={processing || !actionLevel}>
+            <Button
+              onClick={() => void confirmAction()}
+              disabled={
+                processing ||
+                !actionLevel ||
+                (actionMode === "wa" && !dialogLevelEvent?.letterNumber.trim())
+              }
+            >
               {processing ? <Loader2 className="size-4 animate-spin" /> : actionMode === "pdf" ? "Generate PDF" : "Buka WhatsApp"}
             </Button>
           </DialogFooter>
