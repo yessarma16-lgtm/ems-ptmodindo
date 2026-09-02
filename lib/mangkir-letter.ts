@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts, type PDFFont } from "pdf-lib";
 
 import type { MangkirEvent, MangkirSignerInfo } from "@/lib/mangkir-service";
 import { MANGKIR_LETTERHEAD_PDF_BASE64 } from "@/lib/mangkir-letterhead-data";
+import { MANGKIR_SIGNATURE_JPG_BASE64 } from "@/lib/mangkir-signature-data";
 
 /**
  * Surat Panggilan (warning letter) content — modeled directly on the
@@ -93,11 +94,11 @@ function buildLetterContent(event: MangkirEvent): LetterContent {
     title: "SURAT PANGGILAN KE-2",
     perihal: "Surat Panggilan ke-2",
     unitLine,
-    bodyParagraph: `Sehubungan dengan ketidak hadiran saudara dari tanggal ${first} s/d ${lastFormatted} selama ${dayCount} hari tanpa keterangan yang dapat di pertanggung jawabkan dan telah kami kirimkan surat panggilan ke-1 (satu) pada tanggal ${sp1SentDate}, maka bersama ini kami sampaikan Surat panggilan Ke II (dua) untuk Saudara bisa hadir pada :`,
+    bodyParagraph: `Sehubungan dengan ketidak hadiran saudara dari tanggal ${first} s/d ${lastFormatted} selama ${dayCount} hari tanpa keterangan dan telah kami kirimkan surat panggilan ke-1 (satu) pada tanggal ${sp1SentDate}, maka bersama ini kami sampaikan Surat panggilan Ke-2 (dua) untuk Saudara bisa hadir pada :`,
     meetingDate: formatDateLongID(addDaysISO(last, 1)),
     closingParagraphs: [
-      "Apabila Saudara tidak memenuhi Surat Panggilan II (Kedua) ini tanpa memberikan alasan yang dapat dipertanggung jawabkan, maka perusahaan akan mengambil tindakan sesuai dengan ketentuan dan peraturan perusahaan yang berlaku.",
-      "Ketidak hadiran Saudara dalam memenuhi panggilan tersebut akan kami catat sebagai ketidak patuhan terhadap proses penyelesaian hubungan kerja secara prosedural dan dapat ditindaklanjuti sesuai dengan ketentuan yang berlaku.",
+      "Apabila Saudara tidak memenuhi Surat Panggilan ke-2 (Kedua) ini tanpa memberikan alasan yang dapat dipertanggung jawabkan, maka perusahaan akan mengambil tindakan sesuai dengan ketentuan dan peraturan perusahaan yang berlaku.",
+      "Ketidak hadiran Saudara dalam memenuhi panggilan tersebut akan kami catat sebagai ketidak patuhan terhadap proses penyelesaian hubungan kerja secara prosedural dan dapat ditindak lanjuti sesuai dengan ketentuan yang berlaku.",
     ],
     issuePlaceDate: `${ISSUE_PLACE}, ${lastFormatted}`,
     fullLetterNumber,
@@ -196,6 +197,9 @@ export async function buildMangkirLetterPdf(event: MangkirEvent, signer: Mangkir
   const templateSource = await PDFDocument.load(letterheadBytes);
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
+  const signatureImage = await doc.embedJpg(Buffer.from(MANGKIR_SIGNATURE_JPG_BASE64, "base64"));
+  const SIGNATURE_WIDTH = 110;
+  const SIGNATURE_HEIGHT = SIGNATURE_WIDTH * (signatureImage.height / signatureImage.width);
 
   let page = doc.getPage(0);
   const { width: pageWidth, height: pageHeight } = page.getSize();
@@ -250,6 +254,13 @@ export async function buildMangkirLetterPdf(event: MangkirEvent, signer: Mangkir
     }
   }
 
+  /** HRD's scanned signature, drawn between "Hormat kami," and the printed signer name/title. */
+  async function drawSignature() {
+    await ensureSpace(Math.ceil(SIGNATURE_HEIGHT / LINE_HEIGHT) + 1);
+    page.drawImage(signatureImage, { x: MARGIN_LEFT, y: y - SIGNATURE_HEIGHT, width: SIGNATURE_WIDTH, height: SIGNATURE_HEIGHT });
+    y -= SIGNATURE_HEIGHT + LINE_HEIGHT * 0.3;
+  }
+
   /** "Sdr/sdri: " in regular weight immediately followed by the bold name, on one line. */
   async function labelPlusBold(label: string, bold: string) {
     await ensureSpace(1);
@@ -300,7 +311,7 @@ export async function buildMangkirLetterPdf(event: MangkirEvent, signer: Mangkir
 
   await line(c.issuePlaceDate);
   await line("Hormat kami,");
-  await blank(2); // room for an actual signature
+  await drawSignature();
   await line(signer.signerName, { bold: true });
   await line(signer.signerTitle);
 

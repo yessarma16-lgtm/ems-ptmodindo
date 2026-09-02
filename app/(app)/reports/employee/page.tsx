@@ -238,6 +238,16 @@ function MangkirReportTab() {
 
   const filteredEvents = report?.events.filter((e) => levelFilter.has(e.level)) ?? [];
 
+  /** wa.me can only pre-fill text, never attach a file — this triggers the PDF's browser download (no new tab, so it isn't popup-blocked) so it's ready in Downloads for HR to attach manually inside WhatsApp. */
+  function triggerPdfDownload(e: MangkirEvent) {
+    const a = document.createElement("a");
+    a.href = letterPdfUrl(e);
+    a.rel = "noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   async function sendWhatsApp(e: MangkirEvent) {
     if (!e.phoneNumber) { toast.error("Karyawan ini belum punya nomor HP di data master."); return; }
     setSendingKey(eventKey(e));
@@ -249,7 +259,9 @@ function MangkirReportTab() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Gagal menyiapkan pesan.");
+      triggerPdfDownload(e);
       window.open(data.whatsappLink, "_blank");
+      toast.success("Surat PDF diunduh — lampirkan manual di WhatsApp yang baru terbuka.");
       void load(); // refresh so "Sudah dikirim" status shows immediately
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Gagal mengirim.");
