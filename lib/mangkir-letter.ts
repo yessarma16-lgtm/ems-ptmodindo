@@ -37,6 +37,22 @@ function addDaysISO(iso: string, days: number): string {
   return dt.toISOString().slice(0, 10);
 }
 
+const ROMAN_MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+
+/**
+ * Full letter number string, e.g. "5/HRD_SPK/VIII/2026" — HR only ever types
+ * the leading sequence number (`sequence`, `event.letterNumber` as stored);
+ * the "/HRD_SPK/{bulan romawi}/{tahun}" part is always derived from the
+ * letter's own issue date (the episode's last absence date), never typed.
+ */
+export function buildFullLetterNumber(sequence: string, issueDateIso: string): string {
+  if (!sequence.trim()) return "";
+  const m = /^(\d{4})-(\d{2})/.exec(issueDateIso);
+  if (!m) return sequence;
+  const [, year, month] = m;
+  return `${sequence.trim()}/HRD_SPK/${ROMAN_MONTHS[Number(month) - 1]}/${year}`;
+}
+
 interface LetterContent {
   title: string;
   perihal: string;
@@ -44,9 +60,8 @@ interface LetterContent {
   bodyParagraph: string;
   meetingDate: string;
   closingParagraphs: string[];
-  /** SP2's two closing paragraphs run on with no blank line between them — only SP1's (unrelated) pair keeps one. */
-  joinClosingParagraphs?: boolean;
   issuePlaceDate: string;
+  fullLetterNumber: string;
 }
 
 function buildLetterContent(event: MangkirEvent): LetterContent {
@@ -55,11 +70,12 @@ function buildLetterContent(event: MangkirEvent): LetterContent {
   const lastFormatted = formatDateLongID(last);
   const dayCount = event.triggerDates.length;
   const unitLine = [event.division, event.shed].filter(Boolean).join(" ");
+  const fullLetterNumber = buildFullLetterNumber(event.letterNumber, last);
 
   if (event.level === 1) {
     return {
       title: "SURAT PANGGILAN",
-      perihal: "SURAT PANGGILAN 1",
+      perihal: "Surat Panggilan ke-1",
       unitLine,
       bodyParagraph: `Sehubungan dengan ketidak hadiran saudara dari tanggal ${first} s/d ${lastFormatted} selama ${dayCount} hari tanpa keterangan yang dapat di pertanggung jawabkan, maka bersama ini kami harapkan Saudara bisa hadir pada`,
       meetingDate: formatDateLongID(addDaysISO(last, 1)),
@@ -68,22 +84,23 @@ function buildLetterContent(event: MangkirEvent): LetterContent {
         "Demikian surat panggilan ini kami sampaikan untuk dilaksanakan sebagaimana mestinya.",
       ],
       issuePlaceDate: `${ISSUE_PLACE}, ${lastFormatted}`,
+      fullLetterNumber,
     };
   }
 
   const sp1SentDate = event.previousLevelSentAt ? formatDateLongID(event.previousLevelSentAt.slice(0, 10)) : "(belum tercatat)";
   return {
     title: "SURAT PANGGILAN KE-2",
-    perihal: "SURAT PANGGILAN II",
+    perihal: "Surat Panggilan ke-2",
     unitLine,
-    bodyParagraph: `Sehubungan dengan ketidak hadiran saudara dari tanggal ${first} s/d ${lastFormatted} selama ${dayCount} hari tanpa keterangan yang dapat di pertanggung jawabkan dan telah kami kirimkan surat panggilan kerja I (satu) pada tanggal ${sp1SentDate}, maka bersama ini kami sampaikan Surat panggilan Ke II (dua) untuk Saudara bisa hadir pada :`,
+    bodyParagraph: `Sehubungan dengan ketidak hadiran saudara dari tanggal ${first} s/d ${lastFormatted} selama ${dayCount} hari tanpa keterangan yang dapat di pertanggung jawabkan dan telah kami kirimkan surat panggilan ke-1 (satu) pada tanggal ${sp1SentDate}, maka bersama ini kami sampaikan Surat panggilan Ke II (dua) untuk Saudara bisa hadir pada :`,
     meetingDate: formatDateLongID(addDaysISO(last, 1)),
     closingParagraphs: [
       "Apabila Saudara tidak memenuhi Surat Panggilan II (Kedua) ini tanpa memberikan alasan yang dapat dipertanggung jawabkan, maka perusahaan akan mengambil tindakan sesuai dengan ketentuan dan peraturan perusahaan yang berlaku.",
       "Ketidak hadiran Saudara dalam memenuhi panggilan tersebut akan kami catat sebagai ketidak patuhan terhadap proses penyelesaian hubungan kerja secara prosedural dan dapat ditindaklanjuti sesuai dengan ketentuan yang berlaku.",
     ],
-    joinClosingParagraphs: true,
     issuePlaceDate: `${ISSUE_PLACE}, ${lastFormatted}`,
+    fullLetterNumber,
   };
 }
 
@@ -92,7 +109,7 @@ export function buildMangkirLetterWhatsAppText(event: MangkirEvent, signer: Mang
   const c = buildLetterContent(event);
   const lines = [
     `*${c.title}*`,
-    event.letterNumber ? `No. ${event.letterNumber}` : "",
+    c.fullLetterNumber ? `No. ${c.fullLetterNumber}` : "",
     "",
     `Kepada Yth,`,
     `Sdr/sdri: *${event.name}*`,
@@ -110,7 +127,7 @@ export function buildMangkirLetterWhatsAppText(event: MangkirEvent, signer: Mang
     `Jam        : ${MEETING_TIME}`,
     `Tempat   : ${MEETING_PLACE}`,
     "",
-    c.joinClosingParagraphs ? c.closingParagraphs.join(" ") : c.closingParagraphs.join("\n\n"),
+    c.closingParagraphs.join("\n\n"),
     "",
     "Atas Perhatian dan kerjasamanya kami sampaikan terima kasih.",
     "",
@@ -147,24 +164,24 @@ const MARGIN_RIGHT = 56;
 const MARGIN_TOP = 135; // below the logo + "PT. MOD INDO" + rule
 const MARGIN_BOTTOM = 78; // above the "Head Office & Factory" footer block
 const FONT_SIZE = 10.5;
-const LINE_HEIGHT = FONT_SIZE * 1.15; // "paragraf jadi 1.15"
+const LINE_HEIGHT = FONT_SIZE * 1.25; // "paragraf jadi 1.25"
 const LABEL_COLUMN_WIDTH = 62; // aligns the ":" in Perihal/Tanggal/Jam/Tempat
 
-/** Greedy word-wrap using the font's actual glyph widths — pdf-lib has no built-in text flow. */
-function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+/** Greedy word-wrap using the font's actual glyph widths — pdf-lib has no built-in text flow. Returns each line as its still-separate words, so the caller can justify them. */
+function wrapTextWords(text: string, font: PDFFont, size: number, maxWidth: number): string[][] {
   const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = "";
+  const lines: string[][] = [];
+  let current: string[] = [];
   for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (current && font.widthOfTextAtSize(candidate, size) > maxWidth) {
+    const candidate = [...current, word].join(" ");
+    if (current.length && font.widthOfTextAtSize(candidate, size) > maxWidth) {
       lines.push(current);
-      current = word;
+      current = [word];
     } else {
-      current = candidate;
+      current.push(word);
     }
   }
-  if (current) lines.push(current);
+  if (current.length) lines.push(current);
   return lines;
 }
 
@@ -204,8 +221,26 @@ export async function buildMangkirLetterPdf(event: MangkirEvent, signer: Mangkir
     y -= LINE_HEIGHT;
   }
 
+  /** Justified (rata kanan-kiri): extra space is spread between words so a wrapped line's words touch both margins. The paragraph's last line (or any one-word line) stays left-aligned, per normal typographic convention. */
   async function paragraph(text: string) {
-    for (const wrapped of wrapText(text, font, FONT_SIZE, contentWidth)) await line(wrapped);
+    const lines = wrapTextWords(text, font, FONT_SIZE, contentWidth);
+    for (let i = 0; i < lines.length; i++) {
+      const words = lines[i];
+      await ensureSpace(1);
+      const isLastLine = i === lines.length - 1;
+      if (isLastLine || words.length === 1) {
+        page.drawText(words.join(" "), { x: MARGIN_LEFT, y, size: FONT_SIZE, font });
+      } else {
+        const wordsWidth = words.reduce((sum, w) => sum + font.widthOfTextAtSize(w, FONT_SIZE), 0);
+        const gapWidth = (contentWidth - wordsWidth) / (words.length - 1);
+        let x = MARGIN_LEFT;
+        for (const word of words) {
+          page.drawText(word, { x, y, size: FONT_SIZE, font });
+          x += font.widthOfTextAtSize(word, FONT_SIZE) + gapWidth;
+        }
+      }
+      y -= LINE_HEIGHT;
+    }
   }
 
   async function blank(count = 1) {
@@ -233,7 +268,7 @@ export async function buildMangkirLetterPdf(event: MangkirEvent, signer: Mangkir
   }
 
   await line(c.title, { bold: true, size: 14, center: true });
-  if (event.letterNumber) await line(`No. ${event.letterNumber}`, { center: true });
+  if (c.fullLetterNumber) await line(`No. ${c.fullLetterNumber}`, { center: true });
   await blank();
 
   await line("Kepada Yth,");
@@ -256,15 +291,9 @@ export async function buildMangkirLetterPdf(event: MangkirEvent, signer: Mangkir
   await labeledRow("Tempat", MEETING_PLACE);
   await blank();
 
-  if (c.joinClosingParagraphs) {
-    // Runs on as one paragraph — no blank line between the two sentences.
-    await paragraph(c.closingParagraphs.join(" "));
+  for (const p of c.closingParagraphs) {
+    await paragraph(p);
     await blank();
-  } else {
-    for (const p of c.closingParagraphs) {
-      await paragraph(p);
-      await blank();
-    }
   }
   await line("Atas Perhatian dan kerjasamanya kami sampaikan terima kasih.");
   await blank(2); // "setelah terimakasih di enter 2x"

@@ -167,6 +167,17 @@ function TimeOverdueReportTab() {
   );
 }
 
+const ROMAN_MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+
+/** Preview-only mirror of buildFullLetterNumber in lib/mangkir-letter.ts (kept separate — that module pulls in pdf-lib + the embedded letterhead, too heavy to import client-side just for this). HR only ever types the leading sequence number; "/HRD_SPK/{bulan romawi}/{tahun}" always comes from the letter's own issue date (its episode's last absence date). */
+function previewFullLetterNumber(sequence: string, lastTriggerDateIso: string): string {
+  if (!sequence.trim()) return "";
+  const m = /^(\d{4})-(\d{2})/.exec(lastTriggerDateIso);
+  if (!m) return sequence;
+  const [, year, month] = m;
+  return `${sequence.trim()}/HRD_SPK/${ROMAN_MONTHS[Number(month) - 1]}/${year}`;
+}
+
 function letterPdfUrl(e: MangkirEvent) {
   const q = new URLSearchParams({
     recordId: e.recordId, nik: e.nik, name: e.name, position: e.position, department: e.department,
@@ -388,12 +399,17 @@ function MangkirReportTab() {
       <Dialog open={!!numberDialogEvent} onOpenChange={(open) => !open && setNumberDialogEvent(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nomor Surat</DialogTitle>
+            <DialogTitle>Nomor Surat Panggilan {numberDialogEvent?.level}</DialogTitle>
             <DialogDescription>
-              Masukkan nomor Surat Panggilan {numberDialogEvent?.level} untuk {numberDialogEvent?.name} (mis. 5/HRD_SPK/VII/2026). Nomor ini tersimpan otomatis untuk surat ini.
+              Masukkan nomor urut surat untuk {numberDialogEvent?.name}. Bagian &quot;/HRD_SPK/bulan romawi/tahun&quot; otomatis mengikuti tanggal surat — cukup isi angkanya saja.
             </DialogDescription>
           </DialogHeader>
-          <Input value={numberInput} onChange={(e) => setNumberInput(e.target.value)} placeholder="5/HRD_SPK/VII/2026" autoFocus />
+          <Input value={numberInput} onChange={(e) => setNumberInput(e.target.value)} placeholder="5" autoFocus />
+          {numberDialogEvent && numberInput.trim() && (
+            <p className="text-sm text-muted-foreground">
+              Nomor lengkap: <span className="font-medium text-foreground">{previewFullLetterNumber(numberInput, numberDialogEvent.triggerDates[numberDialogEvent.triggerDates.length - 1])}</span>
+            </p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setNumberDialogEvent(null)} disabled={savingNumber}>Cancel</Button>
             <Button onClick={() => void confirmNumberDialog()} disabled={savingNumber}>
