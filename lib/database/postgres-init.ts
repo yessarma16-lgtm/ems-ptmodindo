@@ -641,6 +641,31 @@ export async function ensureSchema(client: Client): Promise<void> {
   await client.query(
     "ALTER TABLE ot_planning_duration_multipliers ADD COLUMN IF NOT EXISTS time_overdue_filter BOOLEAN NOT NULL DEFAULT false;",
   );
+
+  // Report Mangkir — one row per (employee, absence episode, warning level)
+  // once its "Kirim via WhatsApp" / "Download Surat" action has been used, so
+  // the (live-recalculated, never-cached) report can show "sudah dikirim"
+  // instead of asking HR to re-send the same warning letter on every Run.
+  // `episode_start_date` is the first Mangkir date of the run — stable across
+  // re-runs even as a still-ongoing episode grows longer, so a level-1 row
+  // recorded early keeps matching the same episode once it also reaches
+  // level 2. See lib/mangkir-service.ts.
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS mangkir_warning_letters (
+      id BIGSERIAL PRIMARY KEY,
+      employee_id UUID NOT NULL,
+      nik TEXT NOT NULL,
+      level INTEGER NOT NULL,
+      episode_start_date TEXT NOT NULL,
+      trigger_dates TEXT NOT NULL,
+      sent_at TIMESTAMPTZ,
+      sent_by TEXT NOT NULL DEFAULT '',
+      phone_number TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (employee_id, episode_start_date, level)
+    );
+    CREATE INDEX IF NOT EXISTS idx_mangkir_letters_employee ON mangkir_warning_letters(employee_id);
+  `);
   // One-time backfill of the National Holiday bracket + the extra duration rows
   // it needs (regular bracket keeps whatever paid_hours it already had; only
   // rows still at the default 0 holiday value are touched, so admin edits made

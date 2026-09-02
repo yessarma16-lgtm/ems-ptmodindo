@@ -77,18 +77,25 @@ export interface WalkinApplicantsMonthPoint {
   rejected: number;
 }
 
-export interface MangkirAlertEmployee {
+export interface MangkirAlertEvent {
   recordId: string;
   name: string;
   department: string;
-  streakLength: number;
+  level: 1 | 2;
   lastMangkirDate: string;
 }
 
-/** Rolling-30-day Report Mangkir check for the Dashboard alert card — see lib/mangkir-service.ts for the detection rule. Fails soft (empty) so a Postgres hiccup never takes down the whole Dashboard. */
+/**
+ * Rolling-30-day Report Mangkir check for the Dashboard alert card — see
+ * lib/mangkir-service.ts for the detection rule. Only events whose Surat
+ * Panggilan hasn't been sent yet surface here (a sent one no longer needs
+ * attention). Fails soft (empty) so a Postgres hiccup never takes down the
+ * whole Dashboard.
+ */
 export interface MangkirAlert {
-  threshold: number;
-  employees: MangkirAlertEmployee[];
+  sp1Threshold: number;
+  sp2Threshold: number;
+  events: MangkirAlertEvent[];
 }
 
 export interface DashboardData {
@@ -155,17 +162,20 @@ export async function loadDashboardData(filter: DashboardFilter): Promise<Dashbo
     getOnlineRegistrations(),
     getMangkirReport(dateFrom, dateTo)
       .then((r) => ({
-        threshold: r.threshold,
-        employees: r.employees.map((e) => ({
-          recordId: e.recordId,
-          name: e.name,
-          department: e.department,
-          streakLength: e.streakLength,
-          lastMangkirDate: e.streakDates[e.streakDates.length - 1] ?? "",
-        })),
+        sp1Threshold: r.sp1Threshold,
+        sp2Threshold: r.sp2Threshold,
+        events: r.events
+          .filter((e) => !e.sentAt) // already-sent events no longer need attention on the Dashboard
+          .map((e) => ({
+            recordId: e.recordId,
+            name: e.name,
+            department: e.department,
+            level: e.level,
+            lastMangkirDate: e.triggerDates[e.triggerDates.length - 1] ?? "",
+          })),
       }))
       // Fail soft — a Postgres hiccup on this rolling check must never take down the whole Dashboard.
-      .catch(() => ({ threshold: 3, employees: [] as MangkirAlertEmployee[] })),
+      .catch(() => ({ sp1Threshold: 3, sp2Threshold: 5, events: [] as MangkirAlertEvent[] })),
   ]);
 
   const activeYear = Number(filter.year) || new Date().getFullYear();

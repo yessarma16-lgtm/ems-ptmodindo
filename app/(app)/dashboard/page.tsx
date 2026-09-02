@@ -81,16 +81,16 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
           <div className="mt-4 grid grid-cols-1 gap-4">
             <StatCard
-              label={`Mangkir ${data.mangkirAlert.threshold}+ Hari Kerja Berturut-turut`}
-              value={data.mangkirAlert.employees.length}
+              label="Surat Panggilan Mangkir Belum Dikirim"
+              value={data.mangkirAlert.events.length}
               icon={AlertTriangle}
               tone="rose"
-              subtitle="30 hari terakhir · lihat Report Mangkir untuk detail lengkap"
-              details={data.mangkirAlert.employees.map((employee) => ({
-                label: employee.name,
-                href: `/employees/${employee.recordId}`,
-                sublabel: employee.department,
-                endDate: `${employee.streakLength}x — ${formatDisplayDate(employee.lastMangkirDate)}`,
+              subtitle={`30 hari terakhir · SP1 pada ${data.mangkirAlert.sp1Threshold} hari kerja, SP2 pada ${data.mangkirAlert.sp2Threshold} hari kerja · lihat Report Mangkir untuk detail lengkap`}
+              details={data.mangkirAlert.events.map((event) => ({
+                label: event.name,
+                href: `/employees/${event.recordId}`,
+                sublabel: event.department,
+                endDate: `SP${event.level} — ${formatDisplayDate(event.lastMangkirDate)}`,
               }))}
             />
           </div>

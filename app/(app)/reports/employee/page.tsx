@@ -167,26 +167,44 @@ function TimeOverdueReportTab() {
   );
 }
 
-interface MangkirEmployee {
+interface MangkirEvent {
   recordId: string;
   nik: string;
   name: string;
+  position: string;
   department: string;
   shed: string;
   division: string;
-  streakDates: string[];
-  streakLength: number;
+  phoneNumber: string;
+  level: 1 | 2;
+  episodeStartDate: string;
+  triggerDates: string[];
+  episodeLength: number;
+  sentAt: string | null;
+  sentBy: string | null;
 }
 interface MangkirReport {
-  threshold: number;
-  employees: MangkirEmployee[];
+  sp1Threshold: number;
+  sp2Threshold: number;
+  events: MangkirEvent[];
+}
+
+function letterPdfUrl(e: MangkirEvent) {
+  const q = new URLSearchParams({
+    recordId: e.recordId, nik: e.nik, name: e.name, position: e.position, department: e.department,
+    phoneNumber: e.phoneNumber, level: String(e.level), episodeStartDate: e.episodeStartDate, dates: e.triggerDates.join(","),
+  });
+  return `/api/reports/mangkir/letter/pdf?${q}`;
 }
 
 /**
- * "Report Mangkir" — Active employees with `threshold`+ consecutive SCHEDULED
- * WORK DAYS of unauthorized absence (kategori = "Mangkir" in attendance, not
- * merely a blank clock time — see lib/mangkir-service.ts). Threshold is set
- * on the Setup tab.
+ * "Report Mangkir" — Active employees whose unauthorized absence (kategori =
+ * "Mangkir" in attendance, not merely a blank clock time — see
+ * lib/mangkir-service.ts) reaches the Surat Panggilan 1 or 2 threshold
+ * (Minggu/libur nasional dilewati, tidak memutus rentetan; hari kerja lain —
+ * Normal, Cuti, Ijin, dll — memutus rentetan). Thresholds are set on the
+ * Setup tab. Each row is one (employee, episode, level) event — a
+ * still-ongoing absence that reaches both levels gets two rows.
  */
 function MangkirReportTab() {
   const now = new Date();
@@ -198,6 +216,7 @@ function MangkirReportTab() {
   const [report, setReport] = useState<MangkirReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasRun, setHasRun] = useState(false);
+  const [sendingKey, setSendingKey] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/attendance/status", { cache: "no-store" }).then((r) => r.json()).then((v) => setProcessedDates(v.processedDates ?? [])).catch(() => undefined);
@@ -219,6 +238,28 @@ function MangkirReportTab() {
     }
   }
 
+  const eventKey = (e: MangkirEvent) => `${e.recordId}|${e.episodeStartDate}|${e.level}`;
+
+  async function sendWhatsApp(e: MangkirEvent) {
+    if (!e.phoneNumber) { toast.error("Karyawan ini belum punya nomor HP di data master."); return; }
+    setSendingKey(eventKey(e));
+    try {
+      const res = await fetch("/api/reports/mangkir/letter/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: e }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Gagal menyiapkan pesan.");
+      window.open(data.whatsappLink, "_blank");
+      void load(); // refresh so "Sudah dikirim" status shows immediately
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal mengirim.");
+    } finally {
+      setSendingKey(null);
+    }
+  }
+
   return (
     <div className="mt-4 space-y-5">
       <div className="flex flex-wrap items-end gap-5">
@@ -237,40 +278,61 @@ function MangkirReportTab() {
       </div>
       <p className="text-xs text-muted-foreground">
         <AlertTriangle className="mr-1 inline size-3" />
-        Karyawan Active dengan {report?.threshold ?? "N"}+ hari kerja Mangkir berturut-turut (Minggu/libur nasional dilewati, tidak memutus rentetan; hari kerja lain — Normal, Cuti, Ijin, dll — memutus rentetan). Ubah ambang batas di tab Setup.
+        Surat Panggilan 1 pada {report?.sp1Threshold ?? "N"} hari kerja Mangkir berturut-turut, Surat Panggilan 2 pada {report?.sp2Threshold ?? "N"} hari kerja (Minggu/libur nasional dilewati, tidak memutus rentetan; hari kerja lain memutus rentetan). Ubah ambang batas di tab Setup. Report ini live — dihitung ulang tiap klik Run, tidak disimpan.
       </p>
 
       {!hasRun ? (
         <p className="text-sm text-muted-foreground">Pilih rentang tanggal, lalu klik Run.</p>
       ) : loading ? (
         <p className="text-sm text-muted-foreground">Loading...</p>
-      ) : !report || report.employees.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Tidak ada karyawan yang mangkir {report?.threshold ?? ""}+ hari kerja berturut-turut pada rentang ini.</p>
+      ) : !report || report.events.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Tidak ada karyawan yang kena Surat Panggilan pada rentang ini.</p>
       ) : (
         <Card className="overflow-auto">
           <CardContent className="pt-6">
-            <table className="w-full min-w-[800px] border-collapse text-sm">
+            <table className="w-full min-w-[900px] border-collapse text-sm">
               <thead>
                 <tr className="bg-muted">
                   <th className="border p-2 text-left">NIK</th>
                   <th className="border p-2 text-left">Name</th>
+                  <th className="border p-2 text-left">Jabatan</th>
                   <th className="border p-2 text-left">Department</th>
-                  <th className="border p-2 text-left">Shed / Unit</th>
-                  <th className="border p-2">Streak (hari kerja)</th>
+                  <th className="border p-2">Level</th>
                   <th className="border p-2 text-left">Tanggal Mangkir</th>
+                  <th className="border p-2 text-left">Status</th>
+                  <th className="border p-2 text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {report.employees.map((e) => (
-                  <tr key={e.recordId}>
+                {report.events.map((e) => (
+                  <tr key={eventKey(e)}>
                     <td className="border p-2">{e.nik}</td>
                     <td className="border p-2 font-medium">
                       <Link href={`/employees/${e.recordId}`} className="text-primary hover:underline">{e.name}</Link>
                     </td>
+                    <td className="border p-2">{e.position}</td>
                     <td className="border p-2">{e.department}</td>
-                    <td className="border p-2">{e.shed} {e.division && `/ ${e.division}`}</td>
-                    <td className="border p-2 text-center"><Badge variant="destructive">{e.streakLength}</Badge></td>
-                    <td className="border p-2 text-xs">{e.streakDates.join(", ")}</td>
+                    <td className="border p-2 text-center"><Badge variant="destructive">SP {e.level}</Badge></td>
+                    <td className="border p-2 text-xs">{e.triggerDates.join(", ")}</td>
+                    <td className="border p-2 text-xs">
+                      {e.sentAt ? `Sudah dikirim ${new Date(e.sentAt).toLocaleDateString("id-ID")}${e.sentBy ? ` oleh ${e.sentBy}` : ""}` : <span className="text-muted-foreground">Belum dikirim</span>}
+                    </td>
+                    <td className="border p-2">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="outline" size="sm" asChild title="Download Surat (PDF)">
+                          <a href={letterPdfUrl(e)} target="_blank" rel="noreferrer">PDF</a>
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 text-white hover:bg-emerald-700"
+                          disabled={sendingKey === eventKey(e) || !e.phoneNumber}
+                          title={e.phoneNumber ? "Kirim via WhatsApp" : "Karyawan belum punya nomor HP"}
+                          onClick={() => void sendWhatsApp(e)}
+                        >
+                          {sendingKey === eventKey(e) ? <Loader2 className="size-4 animate-spin" /> : "WA"}
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -299,9 +361,10 @@ function SetupTab() {
   const [loading, setLoading] = useState(true);
   const [savingDuration, setSavingDuration] = useState<number | null>(null);
 
-  const [threshold, setThreshold] = useState<number | "">("");
+  const [sp1Threshold, setSp1Threshold] = useState<number | "">("");
+  const [sp2Threshold, setSp2Threshold] = useState<number | "">("");
   const [thresholdLoading, setThresholdLoading] = useState(true);
-  const [savingThreshold, setSavingThreshold] = useState(false);
+  const [savingLevel, setSavingLevel] = useState<1 | 2 | null>(null);
 
   useEffect(() => {
     fetch("/api/reports/time-overdue/setup", { cache: "no-store" })
@@ -312,26 +375,29 @@ function SetupTab() {
 
     fetch("/api/reports/mangkir/setup", { cache: "no-store" })
       .then((r) => r.json())
-      .then((v) => setThreshold(v.threshold ?? 3))
+      .then((v) => {
+        setSp1Threshold(v.sp1Threshold ?? 3);
+        setSp2Threshold(v.sp2Threshold ?? 5);
+      })
       .catch(() => toast.error("Failed to load setup."))
       .finally(() => setThresholdLoading(false));
   }, []);
 
-  async function saveThreshold() {
-    if (threshold === "" || threshold < 1) { toast.error("Masukkan angka minimal 1."); return; }
-    setSavingThreshold(true);
+  async function saveThreshold(level: 1 | 2, value: number | "") {
+    if (value === "" || value < 1) { toast.error("Masukkan angka minimal 1."); return; }
+    setSavingLevel(level);
     try {
       const res = await fetch("/api/reports/mangkir/setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threshold }),
+        body: JSON.stringify({ level, threshold: value }),
       });
       if (!res.ok) throw new Error();
-      toast.success("Threshold Mangkir disimpan.");
+      toast.success(`Threshold Surat Panggilan ${level} disimpan.`);
     } catch {
       toast.error("Gagal menyimpan threshold.");
     } finally {
-      setSavingThreshold(false);
+      setSavingLevel(null);
     }
   }
 
@@ -358,23 +424,40 @@ function SetupTab() {
   return (
     <div className="mt-4 space-y-8">
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold">Report Mangkir</h3>
-        <p className="text-sm text-muted-foreground">Jumlah hari kerja Mangkir berturut-turut sebelum karyawan di-flag (Minggu/libur nasional dilewati, tidak memutus rentetan).</p>
+        <h3 className="text-sm font-semibold">Report Mangkir — Ambang Batas Surat Panggilan</h3>
+        <p className="text-sm text-muted-foreground">Jumlah hari kerja Mangkir berturut-turut sebelum karyawan dikenakan Surat Panggilan (Minggu/libur nasional dilewati, tidak memutus rentetan).</p>
         {thresholdLoading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : (
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              min={1}
-              className="h-9 w-24"
-              value={threshold}
-              onChange={(e) => setThreshold(e.target.value === "" ? "" : Number(e.target.value))}
-            />
-            <span className="text-sm text-muted-foreground">hari kerja</span>
-            <Button size="sm" onClick={() => void saveThreshold()} disabled={savingThreshold}>
-              {savingThreshold ? <Loader2 className="size-4 animate-spin" /> : "Save"}
-            </Button>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="w-36 text-sm">Surat Panggilan 1</span>
+              <Input
+                type="number"
+                min={1}
+                className="h-9 w-24"
+                value={sp1Threshold}
+                onChange={(e) => setSp1Threshold(e.target.value === "" ? "" : Number(e.target.value))}
+              />
+              <span className="text-sm text-muted-foreground">hari kerja</span>
+              <Button size="sm" onClick={() => void saveThreshold(1, sp1Threshold)} disabled={savingLevel === 1}>
+                {savingLevel === 1 ? <Loader2 className="size-4 animate-spin" /> : "Save"}
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-36 text-sm">Surat Panggilan 2</span>
+              <Input
+                type="number"
+                min={1}
+                className="h-9 w-24"
+                value={sp2Threshold}
+                onChange={(e) => setSp2Threshold(e.target.value === "" ? "" : Number(e.target.value))}
+              />
+              <span className="text-sm text-muted-foreground">hari kerja</span>
+              <Button size="sm" onClick={() => void saveThreshold(2, sp2Threshold)} disabled={savingLevel === 2}>
+                {savingLevel === 2 ? <Loader2 className="size-4 animate-spin" /> : "Save"}
+              </Button>
+            </div>
           </div>
         )}
       </div>

@@ -655,6 +655,23 @@ export function ensureSchema(db: DatabaseSync): void {
   if (!multiplierColumns.has("time_overdue_filter")) {
     db.exec("ALTER TABLE ot_planning_duration_multipliers ADD COLUMN time_overdue_filter INTEGER NOT NULL DEFAULT 0");
   }
+  // Report Mangkir — see postgres-init.ts for the full note.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mangkir_warning_letters (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id TEXT NOT NULL,
+      nik TEXT NOT NULL,
+      level INTEGER NOT NULL,
+      episode_start_date TEXT NOT NULL,
+      trigger_dates TEXT NOT NULL,
+      sent_at TEXT,
+      sent_by TEXT NOT NULL DEFAULT '',
+      phone_number TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (employee_id, episode_start_date, level)
+    );
+    CREATE INDEX IF NOT EXISTS idx_mangkir_letters_employee ON mangkir_warning_letters(employee_id);
+  `);
   // One-time backfill of the National Holiday bracket + the extra duration rows
   // it needs. Only rows still at the default 0 holiday value are touched, so
   // later admin edits in the UI are never clobbered on re-run. show_in_export is
