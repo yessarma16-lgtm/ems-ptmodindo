@@ -24,6 +24,7 @@ export interface MangkirEvent {
   name: string;
   position: string;
   department: string;
+  address: string;
   shed: string;
   division: string;
   phoneNumber: string;
@@ -33,6 +34,8 @@ export interface MangkirEvent {
   episodeLength: number;
   sentAt: string | null;
   sentBy: string | null;
+  letterNumber: string;
+  previousLevelSentAt: string | null;
 }
 export interface MangkirReport {
   sp1Threshold: number;

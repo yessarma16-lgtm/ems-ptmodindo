@@ -658,6 +658,7 @@ export async function ensureSchema(client: Client): Promise<void> {
       level INTEGER NOT NULL,
       episode_start_date TEXT NOT NULL,
       trigger_dates TEXT NOT NULL,
+      letter_number TEXT NOT NULL DEFAULT '',
       sent_at TIMESTAMPTZ,
       sent_by TEXT NOT NULL DEFAULT '',
       phone_number TEXT NOT NULL DEFAULT '',
@@ -666,6 +667,9 @@ export async function ensureSchema(client: Client): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_mangkir_letters_employee ON mangkir_warning_letters(employee_id);
   `);
+  // Free-text letter number (e.g. "5/HRD_SPK/VII/2026") — entered by HR at
+  // PDF-download time (see saveMangkirLetterNumber), not auto-generated.
+  await client.query("ALTER TABLE mangkir_warning_letters ADD COLUMN IF NOT EXISTS letter_number TEXT NOT NULL DEFAULT '';");
   // One-time backfill of the National Holiday bracket + the extra duration rows
   // it needs (regular bracket keeps whatever paid_hours it already had; only
   // rows still at the default 0 holiday value are touched, so admin edits made

@@ -664,6 +664,7 @@ export function ensureSchema(db: DatabaseSync): void {
       level INTEGER NOT NULL,
       episode_start_date TEXT NOT NULL,
       trigger_dates TEXT NOT NULL,
+      letter_number TEXT NOT NULL DEFAULT '',
       sent_at TEXT,
       sent_by TEXT NOT NULL DEFAULT '',
       phone_number TEXT NOT NULL DEFAULT '',
@@ -672,6 +673,9 @@ export function ensureSchema(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_mangkir_letters_employee ON mangkir_warning_letters(employee_id);
   `);
+  if (!(db.prepare("PRAGMA table_info(mangkir_warning_letters)").all() as { name: string }[]).some((c) => c.name === "letter_number")) {
+    db.exec("ALTER TABLE mangkir_warning_letters ADD COLUMN letter_number TEXT NOT NULL DEFAULT ''");
+  }
   // One-time backfill of the National Holiday bracket + the extra duration rows
   // it needs. Only rows still at the default 0 holiday value are touched, so
   // later admin edits in the UI are never clobbered on re-run. show_in_export is

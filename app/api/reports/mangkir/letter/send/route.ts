@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireModuleAccess } from "@/lib/module-permission";
 import { getCurrentSessionUser } from "@/lib/auth/current-user";
-import { markMangkirLetterSent } from "@/lib/mangkir-service";
+import { markMangkirLetterSent, getMangkirLetterMeta, getMangkirSignerInfo } from "@/lib/mangkir-service";
 import { buildWhatsAppLink } from "@/lib/mangkir-letter";
 import type { MangkirEvent } from "@/lib/mangkir-service";
 import { toApiErrorResponse } from "@/lib/api-error";
@@ -21,7 +21,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid event." }, { status: 400 });
     }
 
-    const whatsappLink = buildWhatsAppLink(event);
+    // Fetch the letter number / (for level 2) SP1's sent date fresh from the DB — same reasoning as the PDF route.
+    const [{ letterNumber, previousLevelSentAt }, signer] = await Promise.all([
+      getMangkirLetterMeta(event.recordId, event.episodeStartDate, event.level),
+      getMangkirSignerInfo(),
+    ]);
+    const fullEvent: MangkirEvent = { ...event, letterNumber, previousLevelSentAt };
+
+    const whatsappLink = buildWhatsAppLink(fullEvent, signer);
     if (!whatsappLink) return NextResponse.json({ error: "Karyawan ini belum punya nomor HP." }, { status: 400 });
 
     await markMangkirLetterSent({

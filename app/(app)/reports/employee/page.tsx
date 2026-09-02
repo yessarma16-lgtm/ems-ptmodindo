@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AttendanceDatePicker } from "@/components/attendance/AttendanceDatePicker";
 import { formatDateDMY } from "@/lib/date-format";
 import { useEmployeeReportSession, type TimeOverdueUnitRow, type MangkirEvent } from "@/components/reports/EmployeeReportSession";
@@ -169,6 +170,7 @@ function TimeOverdueReportTab() {
 function letterPdfUrl(e: MangkirEvent) {
   const q = new URLSearchParams({
     recordId: e.recordId, nik: e.nik, name: e.name, position: e.position, department: e.department,
+    address: e.address, shed: e.shed, division: e.division,
     phoneNumber: e.phoneNumber, level: String(e.level), episodeStartDate: e.episodeStartDate, dates: e.triggerDates.join(","),
   });
   return `/api/reports/mangkir/letter/pdf?${q}`;
@@ -190,6 +192,9 @@ function MangkirReportTab() {
   const [processedDates, setProcessedDates] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [sendingKey, setSendingKey] = useState<string | null>(null);
+  const [numberDialogEvent, setNumberDialogEvent] = useState<MangkirEvent | null>(null);
+  const [numberInput, setNumberInput] = useState("");
+  const [savingNumber, setSavingNumber] = useState(false);
 
   useEffect(() => {
     fetch("/api/attendance/status", { cache: "no-store" }).then((r) => r.json()).then((v) => setProcessedDates(v.processedDates ?? [])).catch(() => undefined);
@@ -239,6 +244,38 @@ function MangkirReportTab() {
       toast.error(err instanceof Error ? err.message : "Gagal mengirim.");
     } finally {
       setSendingKey(null);
+    }
+  }
+
+  function openNumberDialog(e: MangkirEvent) {
+    setNumberDialogEvent(e);
+    setNumberInput(e.letterNumber);
+  }
+
+  async function confirmNumberDialog() {
+    const e = numberDialogEvent;
+    if (!e) return;
+    setSavingNumber(true);
+    try {
+      const res = await fetch("/api/reports/mangkir/letter/number", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recordId: e.recordId, nik: e.nik, level: e.level, episodeStartDate: e.episodeStartDate,
+          triggerDates: e.triggerDates, letterNumber: numberInput,
+        }),
+      });
+      if (!res.ok) throw new Error("Gagal menyimpan nomor surat.");
+      const savedEvent = { ...e, letterNumber: numberInput.trim() };
+      setMangkir({
+        report: report ? { ...report, events: report.events.map((x) => (eventKey(x) === eventKey(e) ? savedEvent : x)) } : report,
+      });
+      setNumberDialogEvent(null);
+      window.open(letterPdfUrl(savedEvent), "_blank");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Gagal menyimpan nomor surat.");
+    } finally {
+      setSavingNumber(false);
     }
   }
 
@@ -326,10 +363,8 @@ function MangkirReportTab() {
                     </td>
                     <td className="border p-2">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="outline" size="icon" asChild title="Download Surat (PDF)">
-                          <a href={letterPdfUrl(e)} target="_blank" rel="noreferrer">
-                            <FileDown className="size-4" />
-                          </a>
+                        <Button variant="outline" size="icon" title="Download Surat (PDF)" onClick={() => openNumberDialog(e)}>
+                          <FileDown className="size-4" />
                         </Button>
                         <Button
                           size="icon"
@@ -349,6 +384,24 @@ function MangkirReportTab() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={!!numberDialogEvent} onOpenChange={(open) => !open && setNumberDialogEvent(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Nomor Surat</DialogTitle>
+            <DialogDescription>
+              Masukkan nomor Surat Panggilan {numberDialogEvent?.level} untuk {numberDialogEvent?.name} (mis. 5/HRD_SPK/VII/2026). Nomor ini tersimpan otomatis untuk surat ini.
+            </DialogDescription>
+          </DialogHeader>
+          <Input value={numberInput} onChange={(e) => setNumberInput(e.target.value)} placeholder="5/HRD_SPK/VII/2026" autoFocus />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNumberDialogEvent(null)} disabled={savingNumber}>Cancel</Button>
+            <Button onClick={() => void confirmNumberDialog()} disabled={savingNumber}>
+              {savingNumber ? <Loader2 className="size-4 animate-spin" /> : "Simpan & Download"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -375,6 +428,10 @@ function SetupTab() {
   const [thresholdLoading, setThresholdLoading] = useState(true);
   const [savingLevel, setSavingLevel] = useState<1 | 2 | null>(null);
 
+  const [signerName, setSignerName] = useState("");
+  const [signerTitle, setSignerTitle] = useState("");
+  const [savingSigner, setSavingSigner] = useState(false);
+
   useEffect(() => {
     fetch("/api/reports/time-overdue/setup", { cache: "no-store" })
       .then((r) => r.json())
@@ -387,6 +444,8 @@ function SetupTab() {
       .then((v) => {
         setSp1Threshold(v.sp1Threshold ?? 3);
         setSp2Threshold(v.sp2Threshold ?? 5);
+        setSignerName(v.signerName ?? "");
+        setSignerTitle(v.signerTitle ?? "");
       })
       .catch(() => toast.error("Failed to load setup."))
       .finally(() => setThresholdLoading(false));
@@ -407,6 +466,24 @@ function SetupTab() {
       toast.error("Gagal menyimpan threshold.");
     } finally {
       setSavingLevel(null);
+    }
+  }
+
+  async function saveSigner() {
+    if (!signerName.trim() || !signerTitle.trim()) { toast.error("Nama dan jabatan wajib diisi."); return; }
+    setSavingSigner(true);
+    try {
+      const res = await fetch("/api/reports/mangkir/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ signerName, signerTitle }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Penandatangan disimpan.");
+    } catch {
+      toast.error("Gagal menyimpan penandatangan.");
+    } finally {
+      setSavingSigner(false);
     }
   }
 
@@ -467,6 +544,22 @@ function SetupTab() {
                 {savingLevel === 2 ? <Loader2 className="size-4 animate-spin" /> : "Save"}
               </Button>
             </div>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold">Report Mangkir — Penandatangan Surat</h3>
+        <p className="text-sm text-muted-foreground">Nama & jabatan yang muncul di blok tanda tangan Surat Panggilan.</p>
+        {thresholdLoading ? (
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Input className="h-9 w-64" placeholder="Nama" value={signerName} onChange={(e) => setSignerName(e.target.value)} />
+            <Input className="h-9 w-48" placeholder="Jabatan" value={signerTitle} onChange={(e) => setSignerTitle(e.target.value)} />
+            <Button size="sm" onClick={() => void saveSigner()} disabled={savingSigner}>
+              {savingSigner ? <Loader2 className="size-4 animate-spin" /> : "Save"}
+            </Button>
           </div>
         )}
       </div>
