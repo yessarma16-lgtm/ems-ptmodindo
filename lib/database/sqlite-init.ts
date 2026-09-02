@@ -651,6 +651,10 @@ export function ensureSchema(db: DatabaseSync): void {
     db.exec("ALTER TABLE ot_planning_duration_multipliers ADD COLUMN show_in_export INTEGER NOT NULL DEFAULT 1");
     db.exec("UPDATE ot_planning_duration_multipliers SET show_in_export = 0 WHERE duration > 10");
   }
+  // Report Time Overdue "Setup" tab — see postgres-init.ts for the full note.
+  if (!multiplierColumns.has("time_overdue_filter")) {
+    db.exec("ALTER TABLE ot_planning_duration_multipliers ADD COLUMN time_overdue_filter INTEGER NOT NULL DEFAULT 0");
+  }
   // One-time backfill of the National Holiday bracket + the extra duration rows
   // it needs. Only rows still at the default 0 holiday value are touched, so
   // later admin edits in the UI are never clobbered on re-run. show_in_export is

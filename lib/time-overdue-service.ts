@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseClient, supabaseGuarded } from "@/lib/supabase";
-import { getOtReferences } from "@/lib/ot-planning-service";
+import { getOtReferences, getTimeOverdueFilterDurations } from "@/lib/ot-planning-service";
 
 /* Supabase's dynamic table facade is intentionally untyped at this boundary. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -80,15 +80,25 @@ export async function getTimeOverdueReport(date: string, dateTo?: string): Promi
     );
     const rawIds = raw.map((x) => Number(x.id));
     const validRawIds = new Set<number>();
+    const othByRawId = new Map<number, number>();
     for (const idBatch of chunk(rawIds, 500)) {
-      const { data, error } = await client.from("calculated_attendance").select("raw_id,status").in("raw_id", idBatch);
+      const { data, error } = await client.from("calculated_attendance").select("raw_id,status,final_oth").in("raw_id", idBatch);
       if (error) throw error;
       // Sesuai (clean auto-match) and Dikoreksi Manual (HR-reviewed and corrected) both count — Tidak
       // Sesuai/Cek Manual/Tidak Berlaku are excluded until HR resolves them (same rule as getOtPlanning).
-      for (const row of (data ?? []) as { raw_id: number; status: string }[]) {
-        if (row.status === "Sesuai" || row.status === "Dikoreksi Manual") validRawIds.add(Number(row.raw_id));
+      for (const row of (data ?? []) as { raw_id: number; status: string; final_oth: number | null }[]) {
+        if (row.status === "Sesuai" || row.status === "Dikoreksi Manual") {
+          validRawIds.add(Number(row.raw_id));
+          if (row.final_oth !== null) othByRawId.set(Number(row.raw_id), Number(row.final_oth));
+        }
       }
     }
+
+    // Report Time Overdue "Setup" tab — a non-empty set here means the user
+    // checked one or more durations, so only attendance whose FINAL OTH
+    // matches a checked duration counts. Empty set = no filtering (default).
+    const filterEntries = await getTimeOverdueFilterDurations();
+    const filterDurations = new Set(filterEntries.filter((x) => x.timeOverdueFilter).map((x) => x.duration));
 
     const { mappings, divisions } = await getOtReferences();
     const mapByDepartment = new Map<string, { shed: string; division: string }>(
@@ -100,6 +110,7 @@ export async function getTimeOverdueReport(date: string, dateTo?: string): Promi
 
     for (const row of raw) {
       if (!validRawIds.has(Number(row.id))) continue;
+      if (filterDurations.size > 0 && !filterDurations.has(othByRawId.get(Number(row.id)) ?? -1)) continue;
       const unit = mapByDepartment.get(String(row.department).trim().toUpperCase());
       if (!unit) continue;
       const inMinutes = timeToMinutes(row.intime);

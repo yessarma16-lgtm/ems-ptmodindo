@@ -633,6 +633,14 @@ export async function ensureSchema(client: Client): Promise<void> {
       END IF;
     END $$;
   `);
+  // Report Time Overdue "Setup" tab — a checked duration means only attendance
+  // rows whose FINAL OTH equals that duration are counted into the report (see
+  // getTimeOverdueFilterDurations). Defaults to false/unchecked for every
+  // duration so a fresh deploy shows the report unfiltered exactly as before
+  // this feature existed (see getTimeOverdueReport's empty-set == no filter).
+  await client.query(
+    "ALTER TABLE ot_planning_duration_multipliers ADD COLUMN IF NOT EXISTS time_overdue_filter BOOLEAN NOT NULL DEFAULT false;",
+  );
   // One-time backfill of the National Holiday bracket + the extra duration rows
   // it needs (regular bracket keeps whatever paid_hours it already had; only
   // rows still at the default 0 holiday value are touched, so admin edits made

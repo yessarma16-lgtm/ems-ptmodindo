@@ -252,6 +252,40 @@ export async function saveOtMultiplier(value: { id?: number; duration: number; p
   });
 }
 export async function deleteOtMultiplier(id: number) { return supabaseGuarded(async () => { const { error } = await getSupabaseClient().from("ot_planning_duration_multipliers").delete().eq("id", id); if (error) throw error; }); }
+
+/**
+ * Report Time Overdue "Setup" tab (app/(app)/reports/employee) — lists every
+ * known OT duration alongside whether it's checked as a Time Overdue filter.
+ * Reuses the same duration master list as the OT Planning Export checkboxes
+ * (`show_in_export`), but `time_overdue_filter` is a separate, independent
+ * flag: checking a duration here restricts getTimeOverdueReport to only
+ * attendance rows whose FINAL OTH equals a checked duration. No durations
+ * checked = report shows everything, same as before this feature existed.
+ */
+export async function getTimeOverdueFilterDurations(): Promise<{ duration: number; timeOverdueFilter: boolean }[]> {
+  return supabaseGuarded(async () => {
+    const { data, error } = await getSupabaseClient()
+      .from("ot_planning_duration_multipliers")
+      .select("duration,time_overdue_filter")
+      .order("duration");
+    if (error) throw error;
+    const rows = data?.length
+      ? data
+      : OT_DURATION_MULTIPLIER_SEED.map(([duration]) => ({ duration, time_overdue_filter: false }));
+    return rows.map((x: any) => ({ duration: Number(x.duration), timeOverdueFilter: !!x.time_overdue_filter }));
+  });
+}
+
+/** Toggles the Time Overdue filter checkbox for one duration (matched by the duration value itself, not id — every duration in OT_DURATION_MULTIPLIER_SEED already has a row from the init-time backfill). */
+export async function setTimeOverdueFilterDuration(duration: number, timeOverdueFilter: boolean) {
+  return supabaseGuarded(async () => {
+    const { error } = await getSupabaseClient()
+      .from("ot_planning_duration_multipliers")
+      .update({ time_overdue_filter: timeOverdueFilter })
+      .eq("duration", duration);
+    if (error) throw error;
+  });
+}
 /** Editing (value.id set) must UPDATE by primary key — upserting by the natural key (attendance_department) breaks the moment that key's value itself changes, since the row then no longer matches the ON CONFLICT target and Postgres falls through to a plain INSERT carrying the old id, colliding with the primary key. Only a fresh Add (no id) should dedupe via upsert-by-natural-key. */
 export async function saveOtMapping(value: OtMapping) {
   return supabaseGuarded(async () => {

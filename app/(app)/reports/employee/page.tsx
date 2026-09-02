@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarCheck, FileSpreadsheet, Play } from "lucide-react";
+import { CalendarCheck, FileSpreadsheet, Loader2, Play } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AttendanceDatePicker } from "@/components/attendance/AttendanceDatePicker";
 import { toast } from "sonner";
@@ -37,9 +38,13 @@ export default function EmployeeReportPage() {
           <Tabs defaultValue="time-overdue">
             <TabsList>
               <TabsTrigger value="time-overdue">Report Time Overdue</TabsTrigger>
+              <TabsTrigger value="setup">Setup</TabsTrigger>
             </TabsList>
             <TabsContent value="time-overdue">
               <TimeOverdueReportTab />
+            </TabsContent>
+            <TabsContent value="setup">
+              <SetupTab />
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -149,6 +154,79 @@ function TimeOverdueReportTab() {
               </Card>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface DurationFilter {
+  duration: number;
+  timeOverdueFilter: boolean;
+}
+
+/**
+ * "Setup" tab — lets HR restrict Report Time Overdue to only attendance whose
+ * FINAL OTH (overtime hours) matches a checked duration (e.g. only OTH = 1
+ * hour). No duration checked = report shows everything, same as before this
+ * existed. Toggling saves immediately (same pattern as the OT Planning
+ * "show in export" checkboxes it shares its duration list with).
+ */
+function SetupTab() {
+  const [durations, setDurations] = useState<DurationFilter[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingDuration, setSavingDuration] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch("/api/reports/time-overdue/setup", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((v) => setDurations(v.durations ?? []))
+      .catch(() => toast.error("Failed to load setup."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function toggle(duration: number, checked: boolean) {
+    setDurations((prev) => prev.map((d) => (d.duration === duration ? { ...d, timeOverdueFilter: checked } : d)));
+    setSavingDuration(duration);
+    try {
+      const res = await fetch("/api/reports/time-overdue/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ duration, timeOverdueFilter: checked }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      toast.error("Failed to save. Reverting.");
+      setDurations((prev) => prev.map((d) => (d.duration === duration ? { ...d, timeOverdueFilter: !checked } : d)));
+    } finally {
+      setSavingDuration(null);
+    }
+  }
+
+  const checkedCount = durations.filter((d) => d.timeOverdueFilter).length;
+
+  return (
+    <div className="mt-4 space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Centang durasi OTH (Final OTH) yang mau dimasukkan ke Report Time Overdue.{" "}
+        {checkedCount === 0 ? "Belum ada yang dicentang — report menampilkan semua data (tanpa filter)." : `${checkedCount} durasi dicentang — report hanya menghitung data dengan OTH tersebut.`}
+      </p>
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl border border-border bg-card p-4 sm:grid-cols-4 lg:grid-cols-6">
+          {durations.map((d) => (
+            <label key={d.duration} className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={d.timeOverdueFilter}
+                onCheckedChange={(checked) => void toggle(d.duration, checked === true)}
+                aria-label={`Filter OTH ${d.duration} jam`}
+              />
+              OTH {d.duration} jam
+              {savingDuration === d.duration && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
+            </label>
+          ))}
         </div>
       )}
     </div>
