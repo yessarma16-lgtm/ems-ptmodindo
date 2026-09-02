@@ -117,7 +117,6 @@ export function OnlineRegisterTable({ registrations, emptyMessage = "No registra
               <TableHead>Source Platform</TableHead>
               <TableHead>Applied</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Interview Evaluation</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
@@ -143,9 +142,6 @@ export function OnlineRegisterTable({ registrations, emptyMessage = "No registra
                 <TableCell className="text-muted-foreground">{formatAppliedAt(r.createdAt)}</TableCell>
                 <TableCell>
                   <Badge variant={statusVariant(r.registrationStatus)}>{r.registrationStatus}</Badge>
-                </TableCell>
-                <TableCell className="max-w-[220px] truncate" title={r.interviewEvaluation || undefined}>
-                  {r.interviewEvaluation || <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="icon" asChild title="Edit">

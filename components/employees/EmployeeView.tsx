@@ -54,11 +54,9 @@ export function EmployeeView({ employee }: EmployeeViewProps) {
     <div>
       <div className="mb-6 flex items-center justify-end gap-2">
         {isInactive && <Badge variant="destructive">Inactive</Badge>}
-        <Button variant="outline" asChild>
-          <Link href="/employees">
-            <ArrowLeft />
-            Back
-          </Link>
+        <Button variant="outline" onClick={() => router.back()}>
+          <ArrowLeft />
+          Back
         </Button>
         {!isInactive && (
           <Button

@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -54,8 +54,18 @@ export function EmployeeFilters({
             placeholder="Search by name, NIK, or department..."
             value={value.search}
             onChange={(e) => onChange({ ...value, search: e.target.value })}
-            className="pl-9"
+            className="pl-9 pr-9"
           />
+          {value.search && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => onChange({ ...value, search: "" })}
+              className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          )}
         </div>
 
         <Select
