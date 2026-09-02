@@ -32,17 +32,20 @@ export async function POST(request: NextRequest) {
     const whatsappLinks = buildWhatsAppLinks(fullEvent, signer);
     if (!whatsappLinks) return NextResponse.json({ error: "Karyawan ini belum punya nomor HP." }, { status: 400 });
 
+    const sentAt = new Date().toISOString();
+    const sentBy = user?.name ?? "";
     await markMangkirLetterSent({
       recordId: event.recordId,
       nik: event.nik,
       level: event.level,
       episodeStartDate: event.episodeStartDate,
       triggerDates: event.triggerDates,
-      sentBy: user?.name ?? "",
+      sentAt,
+      sentBy,
       phoneNumber: event.phoneNumber,
     });
 
-    return NextResponse.json({ whatsappWebLink: whatsappLinks.web, whatsappAppLink: whatsappLinks.app });
+    return NextResponse.json({ whatsappWebLink: whatsappLinks.web, whatsappAppLink: whatsappLinks.app, sentAt, sentBy });
   } catch (error) {
     return toApiErrorResponse(error);
   }

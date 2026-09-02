@@ -41,9 +41,9 @@ function addDaysISO(iso: string, days: number): string {
 const ROMAN_MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 
 /**
- * Full letter number string, e.g. "5/HRD_SPK/VIII/2026" — HR only ever types
+ * Full letter number string, e.g. "5/HRD-SPK/VIII/2026" — HR only ever types
  * the leading sequence number (`sequence`, `event.letterNumber` as stored);
- * the "/HRD_SPK/{bulan romawi}/{tahun}" part is always derived from the
+ * the "/HRD-SPK/{bulan romawi}/{tahun}" part is always derived from the
  * letter's own issue date (the episode's last absence date), never typed.
  */
 export function buildFullLetterNumber(sequence: string, issueDateIso: string): string {
@@ -51,7 +51,7 @@ export function buildFullLetterNumber(sequence: string, issueDateIso: string): s
   const m = /^(\d{4})-(\d{2})/.exec(issueDateIso);
   if (!m) return sequence;
   const [, year, month] = m;
-  return `${sequence.trim()}/HRD_SPK/${ROMAN_MONTHS[Number(month) - 1]}/${year}`;
+  return `${sequence.trim()}/HRD-SPK/${ROMAN_MONTHS[Number(month) - 1]}/${year}`;
 }
 
 interface LetterContent {

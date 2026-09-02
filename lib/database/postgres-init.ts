@@ -667,7 +667,7 @@ export async function ensureSchema(client: Client): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_mangkir_letters_employee ON mangkir_warning_letters(employee_id);
   `);
-  // Free-text letter number (e.g. "5/HRD_SPK/VII/2026") — entered by HR at
+  // Free-text letter number (e.g. "5/HRD-SPK/VII/2026") — entered by HR at
   // PDF-download time (see saveMangkirLetterNumber), not auto-generated.
   await client.query("ALTER TABLE mangkir_warning_letters ADD COLUMN IF NOT EXISTS letter_number TEXT NOT NULL DEFAULT '';");
   // One-time backfill of the National Holiday bracket + the extra duration rows

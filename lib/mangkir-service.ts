@@ -90,7 +90,7 @@ export interface MangkirEvent {
   episodeLength: number;
   sentAt: string | null;
   sentBy: string | null;
-  /** Free-text letter number (e.g. "5/HRD_SPK/VII/2026") HR typed in at PDF-download time — see saveMangkirLetterNumber. Empty until set. */
+  /** Free-text letter number (e.g. "5/HRD-SPK/VII/2026") HR typed in at PDF-download time — see saveMangkirLetterNumber. Empty until set. */
   letterNumber: string;
   /** Level 2 only: when this same episode's Surat Panggilan 1 was sent (cited in the SP2 letter body). Null if SP1 hasn't been sent yet. */
   previousLevelSentAt: string | null;
@@ -249,6 +249,8 @@ export interface MarkMangkirLetterSentInput {
   level: 1 | 2;
   episodeStartDate: string;
   triggerDates: string[];
+  /** ISO timestamp of the send — the route generates it and also returns it to the client, so the row can be patched in place without re-running the whole report. */
+  sentAt: string;
   sentBy: string;
   phoneNumber: string;
 }
@@ -270,7 +272,7 @@ export async function markMangkirLetterSent(input: MarkMangkirLetterSentInput): 
         level: input.level,
         episode_start_date: input.episodeStartDate,
         trigger_dates: input.triggerDates.join(","),
-        sent_at: new Date().toISOString(),
+        sent_at: input.sentAt,
         sent_by: input.sentBy,
         phone_number: input.phoneNumber,
       },

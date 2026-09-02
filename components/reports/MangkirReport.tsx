@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, FileDown, Loader2, MessageCircle, Play, X } from "lucide-react";
 
@@ -24,13 +24,13 @@ import { toast } from "sonner";
 
 const ROMAN_MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 
-/** Preview-only mirror of buildFullLetterNumber in lib/mangkir-letter.ts (kept separate — that module pulls in pdf-lib + the embedded letterhead, too heavy to import client-side just for this). HR only ever types the leading sequence number; "/HRD_SPK/{bulan romawi}/{tahun}" always comes from the letter's own issue date (its episode's last absence date). */
+/** Preview-only mirror of buildFullLetterNumber in lib/mangkir-letter.ts (kept separate — that module pulls in pdf-lib + the embedded letterhead, too heavy to import client-side just for this). HR only ever types the leading sequence number; "/HRD-SPK/{bulan romawi}/{tahun}" always comes from the letter's own issue date (its episode's last absence date). */
 function previewFullLetterNumber(sequence: string, lastTriggerDateIso: string): string {
   if (!sequence.trim()) return "";
   const m = /^(\d{4})-(\d{2})/.exec(lastTriggerDateIso);
   if (!m) return sequence;
   const [, year, month] = m;
-  return `${sequence.trim()}/HRD_SPK/${ROMAN_MONTHS[Number(month) - 1]}/${year}`;
+  return `${sequence.trim()}/HRD-SPK/${ROMAN_MONTHS[Number(month) - 1]}/${year}`;
 }
 
 function letterPdfUrl(e: MangkirEvent) {
@@ -116,6 +116,8 @@ export function MangkirReport() {
   const [numberInput, setNumberInput] = useState("");
   const [processing, setProcessing] = useState(false);
   const [waTarget, setWaTarget] = useState<"web" | "app">("web");
+  /** The WhatsApp Web tab this page opened — reused (navigated + focused) on the next send so tabs don't pile up. Browsers only let us reuse a tab WE opened, not one the user opened manually. */
+  const waWindowRef = useRef<Window | null>(null);
 
   useEffect(() => {
     fetch("/api/attendance/status", { cache: "no-store" }).then((r) => r.json()).then((v) => setProcessedDates(v.processedDates ?? [])).catch(() => undefined);
@@ -210,11 +212,30 @@ export function MangkirReport() {
           window.location.href = data.whatsappAppLink;
           toast.success("Membuka aplikasi WhatsApp dengan teks surat — tinggal kirim.");
         } else {
-          // Named target: a second send reuses the same WhatsApp Web tab instead of piling up new ones.
-          window.open(data.whatsappWebLink, "modWhatsAppTab");
+          // Reuse the tab we opened before (navigate + focus it) instead of piling up new
+          // ones; the window name is a fallback for when the ref was lost (e.g. page reload).
+          const existing = waWindowRef.current;
+          if (existing && !existing.closed) {
+            existing.location.href = data.whatsappWebLink;
+            existing.focus();
+          } else {
+            waWindowRef.current = window.open(data.whatsappWebLink, "modWhatsAppTab");
+          }
           toast.success("WhatsApp Web terbuka dengan teks surat — tinggal kirim.");
         }
-        void load(); // refresh so the "terkirim" status shows immediately
+        // Patch just this event's status in place — no full re-Run / recompute.
+        setMangkir({
+          report: report
+            ? {
+                ...report,
+                events: report.events.map((x) =>
+                  x.recordId === lvlEvent.recordId && x.episodeStartDate === lvlEvent.episodeStartDate && x.level === lvlEvent.level
+                    ? { ...x, sentAt: data.sentAt ?? new Date().toISOString(), sentBy: data.sentBy ?? x.sentBy }
+                    : x,
+                ),
+              }
+            : report,
+        });
         setActionRow(null);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Gagal memproses.");
@@ -441,7 +462,7 @@ export function MangkirReport() {
                 <p className="text-xs text-muted-foreground">
                   {actionMode === "wa"
                     ? "Nomor mengikuti yang dipakai saat Generate PDF — tidak bisa diubah di sini."
-                    : "Bagian “/HRD_SPK/bulan romawi/tahun” otomatis mengikuti tanggal surat — cukup isi angkanya."}
+                    : "Bagian “/HRD-SPK/bulan romawi/tahun” otomatis mengikuti tanggal surat — cukup isi angkanya."}
                 </p>
                 {actionMode === "wa" && !dialogLevelEvent.letterNumber.trim() && (
                   <p className="text-sm text-amber-600">
