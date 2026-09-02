@@ -1,7 +1,7 @@
-// @ts-expect-error pdfkit does not ship a declaration for its standalone entry.
-import PDFDocument from "pdfkit/js/pdfkit.standalone.js";
+import { PDFDocument, StandardFonts, type PDFFont } from "pdf-lib";
 
 import type { MangkirEvent, MangkirSignerInfo } from "@/lib/mangkir-service";
+import { MANGKIR_LETTERHEAD_PDF_BASE64 } from "@/lib/mangkir-letterhead-data";
 
 /**
  * Surat Panggilan (warning letter) content — modeled directly on the
@@ -136,60 +136,137 @@ export function buildWhatsAppLink(event: MangkirEvent, signer: MangkirSignerInfo
   return `https://wa.me/${number}?text=${encodeURIComponent(buildMangkirLetterWhatsAppText(event, signer))}`;
 }
 
-/** Formal A4 letter, for HR's printed/filed copy — same PDFKit pattern as lib/ot-planning-export.ts's buildOtPlanningPdf. */
+// Content area on the PT MOD INDO letterhead (assets/mangkir-letterhead.pdf,
+// embedded as base64 in mangkir-letterhead-data.ts) — clears the logo/title
+// band at the top and the office-address footer band at the bottom. pdf-lib
+// coordinates are bottom-left origin, unlike PDFKit's top-left.
+const MARGIN_LEFT = 56;
+const MARGIN_RIGHT = 56;
+const MARGIN_TOP = 135; // below the logo + "PT. MOD INDO" + rule
+const MARGIN_BOTTOM = 78; // above the "Head Office & Factory" footer block
+const FONT_SIZE = 10.5;
+const LINE_HEIGHT = FONT_SIZE * 1.5; // "ukuran paragraf 1,5"
+const LABEL_COLUMN_WIDTH = 62; // aligns the ":" in Perihal/Tanggal/Jam/Tempat
+
+/** Greedy word-wrap using the font's actual glyph widths — pdf-lib has no built-in text flow. */
+function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (current && font.widthOfTextAtSize(candidate, size) > maxWidth) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+/** Formal A4 letter on the real PT MOD INDO letterhead, for HR's printed/filed copy. */
 export async function buildMangkirLetterPdf(event: MangkirEvent, signer: MangkirSignerInfo): Promise<Buffer> {
   const c = buildLetterContent(event);
-  const document = new PDFDocument({ size: "A4", margin: 56, bufferPages: true });
-  const chunks: Buffer[] = [];
-  const result = new Promise<Buffer>((resolve, reject) => {
-    document.on("data", (chunk: Buffer) => chunks.push(chunk));
-    document.on("end", () => resolve(Buffer.concat(chunks)));
-    document.on("error", reject);
-  });
+  const letterheadBytes = Buffer.from(MANGKIR_LETTERHEAD_PDF_BASE64, "base64");
+  const doc = await PDFDocument.load(letterheadBytes);
+  // A second, never-drawn-on instance purely as a pristine source for extra
+  // pages — copying from `doc`'s own page 0 after content is already drawn
+  // on it would duplicate that content onto the new page too.
+  const templateSource = await PDFDocument.load(letterheadBytes);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
 
-  const pageWidth = document.page.width - 56 * 2;
+  let page = doc.getPage(0);
+  const { width: pageWidth, height: pageHeight } = page.getSize();
+  const contentWidth = pageWidth - MARGIN_LEFT - MARGIN_RIGHT;
+  let y = pageHeight - MARGIN_TOP;
 
-  document.font("Helvetica-Bold").fontSize(14).text(c.title, { align: "center" });
-  if (event.letterNumber) {
-    document.font("Helvetica").fontSize(10).text(`No. ${event.letterNumber}`, { align: "center" });
+  // Starts a fresh letterhead page (copied from the template) when content
+  // would otherwise run into the footer — a Surat Panggilan is short enough
+  // that this is a rare safety net, not the common case.
+  async function ensureSpace(linesNeeded: number) {
+    if (y - linesNeeded * LINE_HEIGHT >= MARGIN_BOTTOM) return;
+    const [fresh] = await doc.copyPages(templateSource, [0]);
+    page = doc.addPage(fresh);
+    y = pageHeight - MARGIN_TOP;
   }
-  document.moveDown(1.2);
 
-  document.font("Helvetica").fontSize(10);
-  document.text("Kepada Yth,");
-  document.text(`Sdr/sdri: `, { continued: true }).font("Helvetica-Bold").text(event.name);
-  document.font("Helvetica").text(`(${c.unitLine})`);
-  if (event.address) document.text(event.address);
-  if (event.phoneNumber) document.text(`(${event.phoneNumber})`);
-  document.text("Ditempat");
-  document.moveDown(0.8);
-
-  document.text(`Perihal     : ${c.perihal}`);
-  document.moveDown(0.8);
-
-  document.text("Dengan hormat,");
-  document.moveDown(0.4);
-  document.text(c.bodyParagraph, { align: "justify", width: pageWidth });
-  document.moveDown(0.8);
-
-  document.text(`Tanggal    : ${c.meetingDate}`);
-  document.text(`Jam        : ${MEETING_TIME}`);
-  document.text(`Tempat     : ${MEETING_PLACE}`);
-  document.moveDown(0.8);
-
-  for (const paragraph of c.closingParagraphs) {
-    document.text(paragraph, { align: "justify", width: pageWidth });
-    document.moveDown(0.6);
+  async function line(text: string, opts: { bold?: boolean; size?: number; center?: boolean; x?: number } = {}) {
+    await ensureSpace(1);
+    const useFont = opts.bold ? boldFont : font;
+    const size = opts.size ?? FONT_SIZE;
+    const x = opts.center ? MARGIN_LEFT + (contentWidth - useFont.widthOfTextAtSize(text, size)) / 2 : (opts.x ?? MARGIN_LEFT);
+    page.drawText(text, { x, y, size, font: useFont });
+    y -= LINE_HEIGHT;
   }
-  document.text("Atas Perhatian dan kerjasamanya kami sampaikan terima kasih.");
-  document.moveDown(1.2);
 
-  document.text(c.issuePlaceDate);
-  document.text("Hormat kami,");
-  document.moveDown(2.5);
-  document.font("Helvetica-Bold").text(signer.signerName);
-  document.text(signer.signerTitle);
+  async function paragraph(text: string) {
+    for (const wrapped of wrapText(text, font, FONT_SIZE, contentWidth)) await line(wrapped);
+  }
 
-  document.end();
-  return result;
+  async function blank(count = 1) {
+    for (let i = 0; i < count; i++) {
+      await ensureSpace(1);
+      y -= LINE_HEIGHT;
+    }
+  }
+
+  /** "Sdr/sdri: " in regular weight immediately followed by the bold name, on one line. */
+  async function labelPlusBold(label: string, bold: string) {
+    await ensureSpace(1);
+    page.drawText(label, { x: MARGIN_LEFT, y, size: FONT_SIZE, font });
+    const boldX = MARGIN_LEFT + font.widthOfTextAtSize(label, FONT_SIZE);
+    page.drawText(bold, { x: boldX, y, size: FONT_SIZE, font: boldFont });
+    y -= LINE_HEIGHT;
+  }
+
+  /** "Label     : value" with the colon fixed at the same column every time it's called. */
+  async function labeledRow(label: string, value: string) {
+    await ensureSpace(1);
+    page.drawText(label, { x: MARGIN_LEFT, y, size: FONT_SIZE, font });
+    page.drawText(`: ${value}`, { x: MARGIN_LEFT + LABEL_COLUMN_WIDTH, y, size: FONT_SIZE, font });
+    y -= LINE_HEIGHT;
+  }
+
+  await line(c.title, { bold: true, size: 14, center: true });
+  if (event.letterNumber) await line(`No. ${event.letterNumber}`, { center: true });
+  await blank();
+
+  await line("Kepada Yth,");
+  await labelPlusBold("Sdr/sdri: ", event.name);
+  await line(`(${c.unitLine})`);
+  if (event.address) await line(event.address);
+  if (event.phoneNumber) await line(`(${event.phoneNumber})`);
+  await line("Ditempat");
+  await blank(); // "setelah di tempat kemudian enter"
+
+  await labeledRow("Perihal", c.perihal);
+  await blank(); // "setelah perihal di enter"
+
+  await line("Dengan hormat,");
+  await blank();
+  await paragraph(c.bodyParagraph);
+  await blank();
+
+  await labeledRow("Tanggal", c.meetingDate);
+  await labeledRow("Jam", MEETING_TIME);
+  await labeledRow("Tempat", MEETING_PLACE);
+  await blank();
+
+  for (const p of c.closingParagraphs) {
+    await paragraph(p);
+    await blank();
+  }
+  await line("Atas Perhatian dan kerjasamanya kami sampaikan terima kasih.");
+  await blank(2); // "setelah terimakasih di enter 2x"
+
+  await line(c.issuePlaceDate);
+  await line("Hormat kami,");
+  await blank(2); // room for an actual signature
+  await line(signer.signerName, { bold: true });
+  await line(signer.signerTitle);
+
+  return Buffer.from(await doc.save());
 }
