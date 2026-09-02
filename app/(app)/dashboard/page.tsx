@@ -1,4 +1,4 @@
-import { UserCheck, UserPlus, UserX, Clock3, FileClock, CalendarClock } from "lucide-react";
+import { UserCheck, UserPlus, UserX, Clock3, FileClock, CalendarClock, AlertTriangle } from "lucide-react";
 
 import { StatCard } from "@/components/dashboard/StatCard";
 import { DashboardGreeting } from "@/components/dashboard/DashboardGreeting";
@@ -76,6 +76,22 @@ export default async function DashboardPage({ searchParams }: PageProps) {
               icon={UserX}
               tone="rose"
               subtitle={periodLabel}
+            />
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-4">
+            <StatCard
+              label={`Mangkir ${data.mangkirAlert.threshold}+ Hari Kerja Berturut-turut`}
+              value={data.mangkirAlert.employees.length}
+              icon={AlertTriangle}
+              tone="rose"
+              subtitle="30 hari terakhir · lihat Report Mangkir untuk detail lengkap"
+              details={data.mangkirAlert.employees.map((employee) => ({
+                label: employee.name,
+                href: `/employees/${employee.recordId}`,
+                sublabel: employee.department,
+                endDate: `${employee.streakLength}x — ${formatDisplayDate(employee.lastMangkirDate)}`,
+              }))}
             />
           </div>
 

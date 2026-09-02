@@ -2,6 +2,7 @@ import "server-only";
 
 import { getContractEndDates, getEmployeeListItems, getLatestContractEndDates } from "@/lib/employee-service";
 import { getOnlineRegistrations, type OnlineRegistration } from "@/lib/online-register-service";
+import { getMangkirReport } from "@/lib/mangkir-service";
 import type { EmployeeListItem } from "@/lib/database/types";
 
 /** Company data starts in 2017 — years before that are excluded from both the year filter and the per-year charts. */
@@ -76,6 +77,20 @@ export interface WalkinApplicantsMonthPoint {
   rejected: number;
 }
 
+export interface MangkirAlertEmployee {
+  recordId: string;
+  name: string;
+  department: string;
+  streakLength: number;
+  lastMangkirDate: string;
+}
+
+/** Rolling-30-day Report Mangkir check for the Dashboard alert card — see lib/mangkir-service.ts for the detection rule. Fails soft (empty) so a Postgres hiccup never takes down the whole Dashboard. */
+export interface MangkirAlert {
+  threshold: number;
+  employees: MangkirAlertEmployee[];
+}
+
 export interface DashboardData {
   cards: DashboardCards;
   newVsResignByMonth: MonthPoint[];
@@ -86,6 +101,7 @@ export interface DashboardData {
   topDepartments: CountPoint[];
   employeeTypes: CountPoint[];
   availableYears: string[];
+  mangkirAlert: MangkirAlert;
 }
 
 const MONTH_NAMES_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -123,12 +139,33 @@ export function parseDashboardFilter(searchParams: Record<string, string | strin
   return { month, year };
 }
 
+/** Last 30 calendar days ending today (UTC) — a generous window so an employee's streak is still surfaced even with a day or two of attendance import lag. */
+function last30DaysRange(): { dateFrom: string; dateTo: string } {
+  const today = new Date();
+  const from = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+  return { dateFrom: from.toISOString().slice(0, 10), dateTo: today.toISOString().slice(0, 10) };
+}
+
 export async function loadDashboardData(filter: DashboardFilter): Promise<DashboardData> {
-  const [items, latestContractEnd, contractEnds, registrations] = await Promise.all([
+  const { dateFrom, dateTo } = last30DaysRange();
+  const [items, latestContractEnd, contractEnds, registrations, mangkirAlert] = await Promise.all([
     getEmployeeListItems(),
     getLatestContractEndDates(),
     getContractEndDates(),
     getOnlineRegistrations(),
+    getMangkirReport(dateFrom, dateTo)
+      .then((r) => ({
+        threshold: r.threshold,
+        employees: r.employees.map((e) => ({
+          recordId: e.recordId,
+          name: e.name,
+          department: e.department,
+          streakLength: e.streakLength,
+          lastMangkirDate: e.streakDates[e.streakDates.length - 1] ?? "",
+        })),
+      }))
+      // Fail soft — a Postgres hiccup on this rolling check must never take down the whole Dashboard.
+      .catch(() => ({ threshold: 3, employees: [] as MangkirAlertEmployee[] })),
   ]);
 
   const activeYear = Number(filter.year) || new Date().getFullYear();
@@ -167,6 +204,7 @@ export async function loadDashboardData(filter: DashboardFilter): Promise<Dashbo
     topDepartments,
     employeeTypes,
     availableYears,
+    mangkirAlert,
   };
 }
 
