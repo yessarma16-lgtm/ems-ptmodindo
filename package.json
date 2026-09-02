@@ -16,7 +16,8 @@
     "db:backfill:probation-contracts": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/backfill-probation-contracts.ts",
     "db:repair:contract-dates": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/repair-contract-dates.ts",
     "db:repair:inactive-contract-dates": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/repair-inactive-contract-dates.ts",
-    "db:fix:probation-end-dates": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/fix-probation-end-dates.ts"
+    "db:fix:probation-end-dates": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/fix-probation-end-dates.ts",
+    "assets:mangkir": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/generate-mangkir-assets.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

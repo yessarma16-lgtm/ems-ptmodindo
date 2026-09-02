@@ -2,7 +2,7 @@ import { PDFDocument, StandardFonts, type PDFFont } from "pdf-lib";
 
 import type { MangkirEvent, MangkirSignerInfo } from "@/lib/mangkir-service";
 import { MANGKIR_LETTERHEAD_PDF_BASE64 } from "@/lib/mangkir-letterhead-data";
-import { MANGKIR_SIGNATURE_JPG_BASE64 } from "@/lib/mangkir-signature-data";
+import { MANGKIR_SIGNATURE_PNG_BASE64 } from "@/lib/mangkir-signature-data";
 
 /**
  * Surat Panggilan (warning letter) content — modeled directly on the
@@ -97,7 +97,7 @@ function buildLetterContent(event: MangkirEvent): LetterContent {
     bodyParagraph: `Sehubungan dengan ketidak hadiran saudara dari tanggal ${first} s/d ${lastFormatted} selama ${dayCount} hari tanpa keterangan dan telah kami kirimkan surat panggilan ke-1 (satu) pada tanggal ${sp1SentDate}, maka bersama ini kami sampaikan Surat panggilan Ke-2 (dua) untuk Saudara bisa hadir pada :`,
     meetingDate: formatDateLongID(addDaysISO(last, 1)),
     closingParagraphs: [
-      "Apabila Saudara tidak memenuhi Surat Panggilan ke-2 (Kedua) ini tanpa memberikan alasan yang dapat dipertanggung jawabkan, maka perusahaan akan mengambil tindakan sesuai dengan ketentuan dan peraturan perusahaan yang berlaku.",
+      "Apabila Saudara tidak memenuhi Surat Panggilan ke-2 (dua) ini tanpa memberikan alasan yang dapat dipertanggung jawabkan, maka perusahaan akan mengambil tindakan sesuai dengan ketentuan dan peraturan perusahaan yang berlaku.",
       "Ketidak hadiran Saudara dalam memenuhi panggilan tersebut akan kami catat sebagai ketidak patuhan terhadap proses penyelesaian hubungan kerja secara prosedural dan dapat ditindak lanjuti sesuai dengan ketentuan yang berlaku.",
     ],
     issuePlaceDate: `${ISSUE_PLACE}, ${lastFormatted}`,
@@ -197,7 +197,7 @@ export async function buildMangkirLetterPdf(event: MangkirEvent, signer: Mangkir
   const templateSource = await PDFDocument.load(letterheadBytes);
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const boldFont = await doc.embedFont(StandardFonts.HelveticaBold);
-  const signatureImage = await doc.embedJpg(Buffer.from(MANGKIR_SIGNATURE_JPG_BASE64, "base64"));
+  const signatureImage = await doc.embedPng(Buffer.from(MANGKIR_SIGNATURE_PNG_BASE64, "base64"));
   const SIGNATURE_WIDTH = 110;
   const SIGNATURE_HEIGHT = SIGNATURE_WIDTH * (signatureImage.height / signatureImage.width);
 
