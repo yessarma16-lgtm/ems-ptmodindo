@@ -2,6 +2,7 @@ import "server-only";
 
 import * as postgresStore from "@/lib/database/postgres-users";
 import { RecordNotFoundError } from "@/lib/database/errors";
+import type { ModulePermissions } from "@/config/module-permissions";
 
 export type { User, UserInput, UserWithCredentials } from "@/lib/database/postgres-users";
 
@@ -60,4 +61,18 @@ export async function toggleUserStatus(id: string) {
 
 export async function deleteUser(id: string) {
   return store().deleteUser(id);
+}
+
+/* ---- Individual Access (per-user module-permission override) ---- */
+
+export async function getUserPermissionsOverride(id: string) {
+  return store().getUserPermissionsOverride(id);
+}
+
+export async function getAllUserPermissionsOverrides() {
+  return store().getAllUserPermissionsOverrides();
+}
+
+export async function setUserPermissionsOverride(id: string, override: Partial<ModulePermissions>) {
+  return store().setUserPermissionsOverride(id, override);
 }

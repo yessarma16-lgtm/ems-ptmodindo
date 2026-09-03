@@ -3,6 +3,7 @@ import "server-only";
 import { getSupabaseClient, supabaseGuarded } from "@/lib/supabase";
 import { RecordNotFoundError } from "@/lib/database/errors";
 import { hashPassword, DEFAULT_PASSWORD } from "@/lib/auth/password";
+import { sanitizePartialPermissions, type ModulePermissions } from "@/config/module-permissions";
 import type { User, UserWithCredentials, UserInput } from "@/lib/database/sqlite-users";
 
 export type { User, UserWithCredentials, UserInput };
@@ -175,5 +176,53 @@ export async function deleteUser(id: string): Promise<void> {
     const { data, error } = await getSupabaseClient().from("users").delete().eq("id", id).select("id");
     if (error) throw error;
     if (!data || data.length === 0) throw new RecordNotFoundError("User", id);
+  });
+}
+
+/* ---- Individual Access: per-user module-permission override ----
+ * Stored as a PARTIAL JSON object in the long-existing `users.permissions`
+ * column (only the modules the user overrides from their role). Empty string
+ * = no override, user follows their role for every module. */
+
+function parsePartialPermissions(raw: unknown): Partial<ModulePermissions> {
+  const text = raw === null || raw === undefined ? "" : String(raw);
+  if (!text) return {};
+  try {
+    return sanitizePartialPermissions(JSON.parse(text) as Record<string, unknown>);
+  } catch {
+    return {};
+  }
+}
+
+export async function getUserPermissionsOverride(id: string): Promise<Partial<ModulePermissions>> {
+  return supabaseGuarded(async () => {
+    const { data, error } = await getSupabaseClient().from("users").select("permissions").eq("id", id).maybeSingle();
+    if (error) throw error;
+    return data ? parsePartialPermissions((data as SqlRow).permissions) : {};
+  });
+}
+
+export async function getAllUserPermissionsOverrides(): Promise<{ id: string; override: Partial<ModulePermissions> }[]> {
+  return supabaseGuarded(async () => {
+    const { data, error } = await getSupabaseClient().from("users").select("id,permissions");
+    if (error) throw error;
+    return (data as SqlRow[]).map((r) => ({ id: String(r.id), override: parsePartialPermissions(r.permissions) }));
+  });
+}
+
+export async function setUserPermissionsOverride(id: string, override: Partial<ModulePermissions>): Promise<void> {
+  return supabaseGuarded(async () => {
+    const client = getSupabaseClient();
+    const { data: existing, error: findError } = await client.from("users").select("id").eq("id", id).maybeSingle();
+    if (findError) throw findError;
+    if (!existing) throw new RecordNotFoundError("User", id);
+
+    const clean = sanitizePartialPermissions(override);
+    const value = Object.keys(clean).length > 0 ? JSON.stringify(clean) : "";
+    const { error } = await client
+      .from("users")
+      .update({ permissions: value, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw error;
   });
 }

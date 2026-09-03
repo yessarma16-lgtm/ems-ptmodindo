@@ -39,6 +39,26 @@ export function defaultModulePermissions(): ModulePermissions {
   return Object.fromEntries(PERMISSION_MODULES.map((m) => [m.key, "edit" as AccessLevel])) as ModulePermissions;
 }
 
+/** Every module set to "hidden" — the safe fallback when a user's role has no permissions row. */
+export function allHiddenModulePermissions(): ModulePermissions {
+  return Object.fromEntries(PERMISSION_MODULES.map((m) => [m.key, "hidden" as AccessLevel])) as ModulePermissions;
+}
+
+/**
+ * Keeps ONLY the module keys explicitly present with a valid level — no
+ * default fill. Used for per-user Individual Access overrides, which layer on
+ * top of the role's permissions (a key absent here means "inherit from role").
+ */
+export function sanitizePartialPermissions(value: Partial<Record<string, unknown>> | undefined | null): Partial<ModulePermissions> {
+  const result: Partial<ModulePermissions> = {};
+  if (!value) return result;
+  for (const { key } of PERMISSION_MODULES) {
+    const level = value[key];
+    if (level === "edit" || level === "view" || level === "hidden") result[key] = level;
+  }
+  return result;
+}
+
 /** Fills in any missing module keys with "edit" — keeps old/short-hand records usable after this list grows. */
 export function normalizeModulePermissions(value: Partial<ModulePermissions> | undefined | null): ModulePermissions {
   const defaults = defaultModulePermissions();

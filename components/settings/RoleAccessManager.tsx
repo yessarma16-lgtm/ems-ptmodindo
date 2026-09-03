@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { EyeOff, Loader2, Save, ShieldCheck } from "lucide-react";
+import { EyeOff, Loader2, Lock, Save, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { PERMISSION_MODULES, normalizeModulePermissions, type ModulePermissions, type AccessLevel } from "@/config/module-permissions";
+import { FULL_ACCESS_ROLE } from "@/config/user-roles";
 import type { RoleAccess } from "@/lib/role-access-service";
 import { cn } from "@/lib/utils";
 
@@ -88,26 +89,32 @@ export function RoleAccessManager() {
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      {roles.map((r) => (
+      {roles.map((r) => {
+        const locked = r.role === FULL_ACCESS_ROLE;
+        return (
         <Card key={r.role}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="size-4 text-primary" />
+              {locked ? <Lock className="size-4 text-muted-foreground" /> : <ShieldCheck className="size-4 text-primary" />}
               {r.role}
             </CardTitle>
+            {locked && (
+              <p className="text-xs text-muted-foreground">Selalu akses penuh ke semua module — tidak bisa diubah.</p>
+            )}
           </CardHeader>
           <CardContent className="space-y-1">
             {PERMISSION_MODULES.map((mod) => {
-              const level = draft[r.role]?.[mod.key];
+              const level = locked ? "edit" : draft[r.role]?.[mod.key];
               return (
-                <div key={mod.key} className="flex items-center justify-between gap-3 rounded-md px-1 py-1.5">
+                <div key={mod.key} className={cn("flex items-center justify-between gap-3 rounded-md px-1 py-1.5", locked && "opacity-60")}>
                   <span className="text-sm">{mod.label}</span>
                   <div className="flex overflow-hidden rounded-md border border-border">
                     <button
                       type="button"
+                      disabled={locked}
                       onClick={() => setLevel(r.role, mod.key, "edit")}
                       className={cn(
-                        "px-2.5 py-1 text-xs font-medium transition-colors",
+                        "px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed",
                         level === "edit" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted",
                       )}
                     >
@@ -115,9 +122,10 @@ export function RoleAccessManager() {
                     </button>
                     <button
                       type="button"
+                      disabled={locked}
                       onClick={() => setLevel(r.role, mod.key, "view")}
                       className={cn(
-                        "border-l border-border px-2.5 py-1 text-xs font-medium transition-colors",
+                        "border-l border-border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed",
                         level === "view" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted",
                       )}
                     >
@@ -125,10 +133,11 @@ export function RoleAccessManager() {
                     </button>
                     <button
                       type="button"
+                      disabled={locked}
                       onClick={() => setLevel(r.role, mod.key, "hidden")}
                       title="Hide this page from this role entirely"
                       className={cn(
-                        "flex items-center gap-1 border-l border-border px-2.5 py-1 text-xs font-medium transition-colors",
+                        "flex items-center gap-1 border-l border-border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed",
                         level === "hidden" ? "bg-destructive text-destructive-foreground" : "bg-card text-muted-foreground hover:bg-muted",
                       )}
                     >
@@ -139,18 +148,21 @@ export function RoleAccessManager() {
                 </div>
               );
             })}
-            <Button
-              size="sm"
-              className="mt-3 w-full"
-              onClick={() => handleSave(r.role)}
-              disabled={savingRole === r.role}
-            >
-              {savingRole === r.role ? <Loader2 className="animate-spin" /> : <Save />}
-              Save {r.role}
-            </Button>
+            {!locked && (
+              <Button
+                size="sm"
+                className="mt-3 w-full"
+                onClick={() => handleSave(r.role)}
+                disabled={savingRole === r.role}
+              >
+                {savingRole === r.role ? <Loader2 className="animate-spin" /> : <Save />}
+                Save {r.role}
+              </Button>
+            )}
           </CardContent>
         </Card>
-      ))}
+        );
+      })}
     </div>
   );
 }

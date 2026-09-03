@@ -404,6 +404,10 @@ export async function ensureSchema(client: Client): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+  // Individual Access — per-user module-permission override (partial JSON,
+  // layered on top of the user's role). Additive for a `users` table created
+  // before this column existed in the CREATE above.
+  await client.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT NOT NULL DEFAULT '';");
   await seedDefaultUserIfEmpty(client);
 
   // Role Access — module permissions per ROLE (not per user). One row per

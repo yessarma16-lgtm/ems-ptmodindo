@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { UserManagement } from "@/components/settings/UserManagement";
 import { RoleAccessManager } from "@/components/settings/RoleAccessManager";
+import { IndividualAccessManager } from "@/components/settings/IndividualAccessManager";
 import { getCurrentSessionUser } from "@/lib/auth/current-user";
 import { isDeveloperUser } from "@/lib/auth/developer-access";
 
@@ -26,11 +27,13 @@ export default async function UserManagementPage() {
             <TabsList>
               <TabsTrigger value="users">User Management</TabsTrigger>
               {isDeveloper && <TabsTrigger value="roles">Role Access</TabsTrigger>}
+              {isDeveloper && <TabsTrigger value="individual">Individual Access</TabsTrigger>}
             </TabsList>
             <TabsContent value="users">
               <UserManagement />
             </TabsContent>
             {isDeveloper && <TabsContent value="roles"><RoleAccessManager /></TabsContent>}
+            {isDeveloper && <TabsContent value="individual"><IndividualAccessManager /></TabsContent>}
           </Tabs>
         </CardContent>
       </Card>
