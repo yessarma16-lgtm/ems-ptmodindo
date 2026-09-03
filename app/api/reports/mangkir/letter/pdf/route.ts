@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: NextRequest) {
   try {
-    await requireModuleAccess("attendanceReport");
+    await requireModuleAccess("reportMangkir");
     const sp = request.nextUrl.searchParams;
     const level = Number(sp.get("level"));
     if (level !== 1 && level !== 2) return NextResponse.json({ error: "Invalid level." }, { status: 400 });

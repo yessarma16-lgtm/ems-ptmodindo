@@ -5,7 +5,7 @@ import { toApiErrorResponse } from "@/lib/api-error";
 
 export async function GET(request: NextRequest) {
   try {
-    await requireModuleAccess("attendanceReport");
+    await requireModuleAccess("reportMangkir");
     const dateFrom = request.nextUrl.searchParams.get("dateFrom");
     const dateTo = request.nextUrl.searchParams.get("dateTo");
     if (!dateFrom || !dateTo) return NextResponse.json({ error: "dateFrom and dateTo are required." }, { status: 400 });

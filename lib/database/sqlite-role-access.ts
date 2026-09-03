@@ -8,9 +8,9 @@ import type { DatabaseSync } from "node:sqlite";
 
 /**
  * Role Access storage — module permissions configured per ROLE (Settings ->
- * User Management -> Role Access tab), not per individual user. Scaffold
- * only, like the rest of User Management: nothing in the app actually
- * checks these values yet.
+ * User Management -> Role Access tab), not per individual user. Enforced at
+ * the API layer via requireModuleAccess() for the Attendance, Report and
+ * Recruitment modules; the rest of the list is still display-only scaffold.
  */
 
 type SqlRow = Record<string, unknown>;

@@ -14,7 +14,7 @@ import { toApiErrorResponse } from "@/lib/api-error";
  */
 export async function POST(request: NextRequest) {
   try {
-    await requireModuleAccess("attendanceReport");
+    await requireModuleAccess("reportMangkir");
     const user = await getCurrentSessionUser();
     const body = await request.json();
     const event = body.event as MangkirEvent | undefined;

@@ -5,7 +5,7 @@ import { requireModuleAccess } from "@/lib/module-permission";
 
 export async function POST(request: NextRequest) {
   try {
-    await requireModuleAccess("onlineRegister", "edit");
+    await requireModuleAccess("recruitmentApplicantPool", "edit");
     const form = await request.formData();
     const applicantId = String(form.get("applicant_id") ?? "");
     const file = form.get("file");

@@ -6,7 +6,7 @@ import { toApiErrorResponse } from "@/lib/api-error";
 
 export async function POST(request: NextRequest) {
   try {
-    await requireModuleAccess("onlineRegister", "edit");
+    await requireModuleAccess("recruitmentNewHiring", "edit");
     const parsed = generateNewHiringLinkSchema.safeParse(await request.json());
     if (!parsed.success) return NextResponse.json({ error: "Validation failed.", issues: parsed.error.flatten().fieldErrors }, { status: 400 });
     return NextResponse.json(await generateNewHiringLink(parsed.data.applicant_id), { status: 201 });

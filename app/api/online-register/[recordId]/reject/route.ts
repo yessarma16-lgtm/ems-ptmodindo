@@ -6,7 +6,7 @@ import { requireModuleAccess } from "@/lib/module-permission";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ recordId: string }> }) {
   try {
-    await requireModuleAccess("onlineRegister", "edit");
+    await requireModuleAccess("recruitmentApplicantPool", "edit");
     const { recordId } = await params;
     const registration = await rejectOnlineRegistration(recordId);
     return NextResponse.json({ registration });

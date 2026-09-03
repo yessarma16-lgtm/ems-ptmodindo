@@ -6,7 +6,7 @@ import { toApiErrorResponse } from "@/lib/api-error";
 /** Saves the free-text Surat Panggilan number HR types in before downloading the PDF. Body: { recordId, nik, level, episodeStartDate, triggerDates, letterNumber }. */
 export async function POST(request: NextRequest) {
   try {
-    await requireModuleAccess("attendanceReport");
+    await requireModuleAccess("reportMangkir");
     const body = await request.json();
     const level = Number(body.level);
     if (level !== 1 && level !== 2) return NextResponse.json({ error: "Invalid level." }, { status: 400 });

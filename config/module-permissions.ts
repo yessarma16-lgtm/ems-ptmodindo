@@ -1,18 +1,28 @@
 /**
  * Per-module access level a Role can be assigned in Settings -> User
- * Management -> Role Access. Scaffold only, like the rest of User
- * Management: stored data, not enforced anywhere in the app yet (no page
- * actually checks these values before rendering).
+ * Management -> Role Access. The list mirrors the sidebar (config/navigation.ts).
+ *
+ * Enforcement today is at the API-route layer via requireModuleAccess()
+ * (lib/module-permission.ts) — wired for the Attendance, Report and
+ * Recruitment routes. The remaining entries (Dashboard, Employees, Export,
+ * Master Data, Settings) are still scaffold: shown and stored, not yet
+ * checked before rendering.
  */
 export const PERMISSION_MODULES = [
   { key: "dashboard", label: "Dashboard" },
   { key: "employeesActive", label: "Employees - Active" },
   { key: "employeesInactive", label: "Employees - Inactive" },
   { key: "employeesExpatriate", label: "Employees - Expatriate" },
-  { key: "onlineRegister", label: "Recruitment - Online Register" },
+  { key: "recruitmentNewHiring", label: "Recruitment - New Hiring" },
+  { key: "recruitmentApplicantPool", label: "Recruitment - Applicant Pool" },
+  { key: "recruitmentVacantPosition", label: "Recruitment - Vacant Position" },
   { key: "attendanceImport", label: "Attendance - NK Attendance Data" },
   { key: "attendanceCalculation", label: "Attendance - MPP Calculation" },
   { key: "attendanceReport", label: "Attendance - Overtime Report" },
+  { key: "reportEmployee", label: "Report - Employee Report" },
+  { key: "reportMangkir", label: "Report - Report Mangkir" },
+  { key: "reportOtPlanning", label: "Report - OT Planning" },
+  { key: "reportSetup", label: "Report - Report Setup" },
   { key: "export", label: "Export" },
   { key: "masterData", label: "Master Data" },
   { key: "settingsDatabase", label: "Settings - Database" },

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    await requireModuleAccess("attendanceReport");
+    await requireModuleAccess("reportOtPlanning");
     const date = request.nextUrl.searchParams.get("dateFrom") ?? request.nextUrl.searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
     const dateTo = request.nextUrl.searchParams.get("dateTo") ?? undefined;
     const sheds = request.nextUrl.searchParams.getAll("shed");

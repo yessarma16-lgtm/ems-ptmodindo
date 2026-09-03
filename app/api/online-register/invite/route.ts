@@ -8,7 +8,7 @@ import { requireModuleAccess } from "@/lib/module-permission";
 /** HR-only: generates a shareable /apply/[token] link from Name/HP Number/Position. */
 export async function POST(request: NextRequest) {
   try {
-    await requireModuleAccess("onlineRegister", "edit");
+    await requireModuleAccess("recruitmentApplicantPool", "edit");
     const body = await request.json();
     const parsed = registrationInviteSchema.safeParse(body);
     if (!parsed.success) {

@@ -6,7 +6,7 @@ import { toApiErrorResponse } from "@/lib/api-error";
 /** Report Mangkir "Setup" — the two Surat Panggilan escalation thresholds (consecutive work days), plus who signs the letters. */
 export async function GET() {
   try {
-    await requireModuleAccess("attendanceReport");
+    await requireModuleAccess("reportSetup");
     const [thresholds, signer] = await Promise.all([getMangkirThresholds(), getMangkirSignerInfo()]);
     return NextResponse.json({ ...thresholds, ...signer });
   } catch (error) {
@@ -17,7 +17,7 @@ export async function GET() {
 /** Body: either { level: 1 | 2, threshold: number } or { signerName, signerTitle }. */
 export async function POST(request: NextRequest) {
   try {
-    await requireModuleAccess("attendanceReport");
+    await requireModuleAccess("reportSetup");
     const body = await request.json();
 
     if (body.signerName !== undefined || body.signerTitle !== undefined) {
