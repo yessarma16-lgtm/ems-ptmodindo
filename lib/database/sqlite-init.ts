@@ -562,6 +562,7 @@ export function ensureSchema(db: DatabaseSync): void {
     );
     CREATE INDEX IF NOT EXISTS idx_raw_attendance_tanggal ON raw_attendance(tanggal);
     CREATE INDEX IF NOT EXISTS idx_raw_attendance_nik ON raw_attendance(nik);
+    CREATE INDEX IF NOT EXISTS idx_raw_attendance_kategori_tanggal ON raw_attendance(kategori, tanggal);
   `);
 
   // raw_id -> RESTRICT (bukan CASCADE): raw_attendance adalah "sumber

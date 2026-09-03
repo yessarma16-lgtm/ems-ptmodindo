@@ -516,6 +516,9 @@ export async function ensureSchema(client: Client): Promise<void> {
   `);
   await client.query("CREATE INDEX IF NOT EXISTS idx_raw_attendance_tanggal ON raw_attendance(tanggal);");
   await client.query("CREATE INDEX IF NOT EXISTS idx_raw_attendance_nik ON raw_attendance(nik);");
+  // Report Mangkir / Dashboard rolling check: "which NIKs have a Mangkir day
+  // in this window" is the first query it runs — this makes it an index scan.
+  await client.query("CREATE INDEX IF NOT EXISTS idx_raw_attendance_kategori_tanggal ON raw_attendance(kategori, tanggal);");
 
   await client.query(`
     CREATE TABLE IF NOT EXISTS calculated_attendance (

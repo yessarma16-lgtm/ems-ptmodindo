@@ -143,10 +143,32 @@ export async function getMangkirReport(dateFrom: string, dateTo: string): Promis
     const { sp1Threshold, sp2Threshold } = await getMangkirThresholds();
 
     type RawRow = { nik: string; nama: string; department: string; tanggal: string; kategori: string | null };
-    const raw = await fetchAllPages<RawRow>(
-      client, "raw_attendance", "nik,nama,department,tanggal,kategori",
-      (q: any) => q.gte("tanggal", dateFrom).lte("tanggal", dateTo).order("tanggal", { ascending: true }),
+
+    // Only an employee with at least one "Mangkir" day in the window can
+    // produce an episode (findEpisodes returns [] otherwise) — so fetch that
+    // small set of NIKs first, then pull the full day-by-day rows for just
+    // those. Their non-Mangkir / off days are still needed to place streak
+    // boundaries, but every OTHER employee's rows are dead weight. This turns
+    // a ~100k-row scan-and-transfer (every attendance row for 30 days, ~100
+    // PostgREST pages) into a few thousand rows — the Dashboard's rolling
+    // check and the Report page both went from ~24s to a couple of seconds.
+    const mangkirNikRows = await fetchAllPages<{ nik: string }>(
+      client, "raw_attendance", "nik",
+      (q: any) => q.eq("kategori", MANGKIR_KATEGORI).gte("tanggal", dateFrom).lte("tanggal", dateTo),
     );
+    const mangkirNiks = Array.from(new Set(mangkirNikRows.map((r) => r.nik)));
+    if (mangkirNiks.length === 0) {
+      return { sp1Threshold, sp2Threshold, events: [] };
+    }
+
+    const raw: RawRow[] = [];
+    for (const nikBatch of chunk(mangkirNiks, 100)) {
+      const rows = await fetchAllPages<RawRow>(
+        client, "raw_attendance", "nik,nama,department,tanggal,kategori",
+        (q: any) => q.in("nik", nikBatch).gte("tanggal", dateFrom).lte("tanggal", dateTo).order("tanggal", { ascending: true }),
+      );
+      raw.push(...rows);
+    }
 
     const niks = Array.from(new Set(raw.map((r) => r.nik)));
     const employeeByNik = new Map<string, { recordId: string; status: string; position: string; phoneNumber: string; address: string }>();
