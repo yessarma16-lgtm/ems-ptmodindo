@@ -42,3 +42,13 @@ export async function setBackgroundImage(surface: BackgroundSurface, dataUri: st
 export async function resetBackgroundImage(surface: BackgroundSurface): Promise<void> {
   await store().deleteSettingValue(backgroundKey(surface));
 }
+
+const TIME_OVERDUE_ZERO_FILTER_KEY = "time_overdue_filter_zero";
+
+export async function getTimeOverdueZeroFilter(): Promise<boolean> {
+  return (await store().getSettingValue(TIME_OVERDUE_ZERO_FILTER_KEY)) === "true";
+}
+
+export async function setTimeOverdueZeroFilter(enabled: boolean): Promise<void> {
+  await store().setSettingValue(TIME_OVERDUE_ZERO_FILTER_KEY, String(enabled), "Report Time Overdue: include attendance with OTH = 0.");
+}

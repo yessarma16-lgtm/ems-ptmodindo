@@ -7,6 +7,7 @@ interface ApplicationReceivedProps {
   candidateNumber?: string;
   /** Applicant Pool has no NIK/Application-ID login, so the code is just noise there — New Hiring's lookup feature relies on it, so it stays visible by default. */
   showApplicationId?: boolean;
+  language?: "en" | "id";
 }
 
 const REQUIRED_DOCUMENTS: { label: string; qty: string }[] = [
@@ -23,7 +24,8 @@ const REQUIRED_DOCUMENTS: { label: string; qty: string }[] = [
 ];
 
 /** Shown after a successful public apply/walk-in submission (and again if the candidate revisits the link) — same design for both entry points. */
-export function ApplicationReceived({ applicationDate, applicationId, positionApplied, candidateNumber, showApplicationId = true }: ApplicationReceivedProps) {
+export function ApplicationReceived({ applicationDate, applicationId, positionApplied, candidateNumber, showApplicationId = true, language = "en" }: ApplicationReceivedProps) {
+  const id = language === "id";
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <div className="relative mb-4 flex justify-center">
@@ -36,18 +38,18 @@ export function ApplicationReceived({ applicationDate, applicationId, positionAp
         </div>
       </div>
 
-      <h1 className="text-center text-2xl font-bold text-foreground sm:text-3xl">Thank you — application received!</h1>
+      <h1 className="text-center text-2xl font-bold text-foreground sm:text-3xl">{id ? "Terima kasih — lamaran telah diterima!" : "Thank you — application received!"}</h1>
       <p className="mx-auto mt-2 max-w-md text-center text-sm text-muted-foreground">
-        Your application has been successfully submitted to HR PT MOD INDO.
+        {id ? "Lamaran Anda telah berhasil dikirim ke HR PT MOD INDO." : "Your application has been successfully submitted to HR PT MOD INDO."}
       </p>
 
       <div className={`mt-8 grid grid-cols-1 gap-6 rounded-2xl border border-border bg-card p-6 shadow-sm ${showApplicationId ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
-        <SummaryItem icon={<Calendar className="size-5 text-sky-600" />} iconBg="bg-sky-50 dark:bg-sky-950/40" label="Application Date" value={applicationDate} />
+        <SummaryItem icon={<Calendar className="size-5 text-sky-600" />} iconBg="bg-sky-50 dark:bg-sky-950/40" label={id ? "Tanggal Lamaran" : "Application Date"} value={applicationDate} />
         {showApplicationId && (
-          <SummaryItem icon={<BadgeCheck className="size-5 text-emerald-600" />} iconBg="bg-emerald-50 dark:bg-emerald-950/40" label="Application ID" value={applicationId} />
+          <SummaryItem icon={<BadgeCheck className="size-5 text-emerald-600" />} iconBg="bg-emerald-50 dark:bg-emerald-950/40" label={id ? "ID Lamaran" : "Application ID"} value={applicationId} />
         )}
-        <SummaryItem icon={<BadgeCheck className="size-5 text-amber-600" />} iconBg="bg-amber-50 dark:bg-amber-950/40" label="Candidate Number" value={candidateNumber ?? ""} valueClassName="text-lg" />
-        <SummaryItem icon={<Briefcase className="size-5 text-violet-600" />} iconBg="bg-violet-50 dark:bg-violet-950/40" label="Position Applied" value={positionApplied} />
+        <SummaryItem icon={<BadgeCheck className="size-5 text-amber-600" />} iconBg="bg-amber-50 dark:bg-amber-950/40" label={id ? "Nomor Kandidat" : "Candidate Number"} value={candidateNumber ?? ""} valueClassName="text-lg" />
+        <SummaryItem icon={<Briefcase className="size-5 text-violet-600" />} iconBg="bg-violet-50 dark:bg-violet-950/40" label={id ? "Posisi yang Dilamar" : "Position Applied"} value={positionApplied} />
       </div>
 
       <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-6 dark:border-emerald-900 dark:bg-emerald-950/20">
@@ -56,9 +58,9 @@ export function ApplicationReceived({ applicationDate, applicationId, positionAp
             <ClipboardList className="size-5 text-white" />
           </div>
           <div>
-            <h2 className="font-semibold text-foreground">Prepare and Bring Your Documents:</h2>
+            <h2 className="font-semibold text-foreground">{id ? "Siapkan dan Bawa Dokumen Berikut:" : "Prepare and Bring Your Documents:"}</h2>
             <p className="text-sm text-muted-foreground">
-              Please prepare and bring the following documents to support your recruitment process.
+              {id ? "Silakan siapkan dan bawa dokumen berikut untuk mendukung proses rekrutmen Anda." : "Please prepare and bring the following documents to support your recruitment process."}
             </p>
           </div>
         </div>
@@ -83,10 +85,9 @@ export function ApplicationReceived({ applicationDate, applicationId, positionAp
           <BellRing className="size-5 text-amber-600" />
         </div>
         <div className="flex-1">
-          <h2 className="font-semibold text-foreground">Important Reminder</h2>
+          <h2 className="font-semibold text-foreground">{id ? "Pengingat Penting" : "Important Reminder"}</h2>
           <p className="text-sm text-muted-foreground">
-            Please bring the original documents and photocopies where required for verification during the recruitment
-            process.
+            {id ? "Bawa dokumen asli dan fotokopi sesuai kebutuhan untuk verifikasi selama proses rekrutmen." : "Please bring the original documents and photocopies where required for verification during the recruitment process."}
           </p>
         </div>
         <FileCheck2 className="hidden size-10 shrink-0 text-amber-500 sm:block" />
@@ -94,7 +95,7 @@ export function ApplicationReceived({ applicationDate, applicationId, positionAp
 
       <p className="mt-8 flex items-center justify-center gap-2 text-center text-xs text-muted-foreground">
         <ShieldCheck className="size-4 shrink-0" />
-        Your information is secure with us. PT MOD INDO is committed to protecting your personal data.
+        {id ? "Informasi Anda aman bersama kami. PT MOD INDO berkomitmen melindungi data pribadi Anda." : "Your information is secure with us. PT MOD INDO is committed to protecting your personal data."}
       </p>
     </div>
   );

@@ -7,10 +7,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, ChevronLeft, ChevronRight, LogOut, X } from "lucide-react";
 
 import { MAIN_NAV, FOOTER_NAV, type NavItem } from "@/config/navigation";
+import type { ModulePermissions } from "@/config/module-permissions";
 import { cn } from "@/lib/utils";
 
 interface SidebarProps {
   isDeveloper: boolean;
+  permissions: ModulePermissions;
   mobileOpen: boolean;
   onClose: () => void;
   collapsed: boolean;
@@ -156,8 +158,10 @@ function SidebarContent({
   showMobileClose,
   showCollapseToggle,
   isDeveloper,
+  permissions,
 }: {
   isDeveloper: boolean;
+  permissions: ModulePermissions;
   collapsed: boolean;
   onClose: () => void;
   onToggleCollapsed?: () => void;
@@ -207,9 +211,15 @@ function SidebarContent({
       </div>
 
       <nav className={cn("flex-1 space-y-1 overflow-y-auto py-2", collapsed ? "px-2" : "px-3")}>
-        {MAIN_NAV.map((item) => (
-          <NavGroup key={item.href} item={item.label === "Settings" && !isDeveloper ? { ...item, children: item.children?.filter((child) => child.label !== "Database") } : item} pathname={pathname} collapsed={collapsed} onNavigate={onClose} />
-        ))}
+        {MAIN_NAV.map((item) => {
+          const filteredChildren = item.children?.filter((child) => child.moduleKey === undefined || permissions[child.moduleKey] !== "hidden");
+          const visibleItem = item.label === "Settings" && !isDeveloper
+            ? { ...item, children: filteredChildren?.filter((child) => child.label !== "Database") }
+            : { ...item, children: filteredChildren };
+          if (visibleItem.moduleKey && permissions[visibleItem.moduleKey] === "hidden") return null;
+          if (visibleItem.children && visibleItem.children.length === 0) return null;
+          return <NavGroup key={item.href} item={visibleItem} pathname={pathname} collapsed={collapsed} onNavigate={onClose} />;
+        })}
       </nav>
 
       <div className={cn("space-y-1 border-t border-sidebar-border py-3", collapsed ? "px-2" : "px-3")}>
@@ -233,7 +243,7 @@ function SidebarContent({
   );
 }
 
-export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapsed, isDeveloper }: SidebarProps) {
+export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapsed, isDeveloper, permissions }: SidebarProps) {
   return (
     <>
       {/* Desktop / tablet persistent sidebar */}
@@ -251,6 +261,7 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapsed, isD
             showMobileClose={false}
             showCollapseToggle
             isDeveloper={isDeveloper}
+            permissions={permissions}
           />
         </div>
       </aside>
@@ -266,6 +277,7 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapsed, isD
               showMobileClose
               showCollapseToggle={false}
               isDeveloper={isDeveloper}
+              permissions={permissions}
             />
           </div>
         </div>

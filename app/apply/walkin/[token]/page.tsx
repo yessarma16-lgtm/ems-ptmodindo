@@ -40,7 +40,7 @@ export default async function WalkInApplyPage({ params, searchParams }: { params
           <XCircle className="size-12 text-destructive" />
           <h1 className="text-xl font-semibold text-foreground">Link not found</h1>
           <p className="text-sm text-muted-foreground">
-            This application link is no longer valid. Please scan the current QR code, or contact PT MOD INDO HR.
+            Tautan lamaran ini sudah tidak berlaku. Silakan pindai QR code terbaru atau hubungi HR PT MOD INDO.
           </p>
         </div>
       </ApplyBackground>
@@ -79,7 +79,7 @@ export default async function WalkInApplyPage({ params, searchParams }: { params
       masterDataError = err instanceof DatabaseConnectionError ? err.message : "Unable to load form data.";
     }
   } else {
-    masterDataError = "Application form is temporarily unavailable.";
+      masterDataError = "Formulir lamaran sedang tidak tersedia.";
   }
 
   return (
@@ -88,8 +88,8 @@ export default async function WalkInApplyPage({ params, searchParams }: { params
         <div className="mb-6 flex items-center gap-3">
           <Image src="/logo-mod.jpg" alt="PT MOD INDO" width={44} height={44} className="rounded" />
           <div>
-            <h1 className="text-lg font-semibold text-foreground">PT MOD INDO - Pra-Employment Application</h1>
-            <p className="text-sm text-muted-foreground">Please complete the form below to apply.</p>
+            <h1 className="text-lg font-semibold text-foreground">PT MOD INDO - Formulir Lamaran Kerja</h1>
+            <p className="text-sm text-muted-foreground">Silakan lengkapi formulir di bawah ini untuk melamar.</p>
           </div>
         </div>
 
@@ -99,7 +99,9 @@ export default async function WalkInApplyPage({ params, searchParams }: { params
           masterDataError={masterDataError}
           submitUrl={`/api/apply/walkin/${token}`}
           redirectTo="/apply/walkin/thanks"
-          successMessage="Application submitted. Thank you!"
+          successMessage="Lamaran berhasil dikirim. Terima kasih!"
+          submitLabel="Kirim Lamaran"
+          language="id"
           excludeFields={WALKIN_EXCLUDED_FIELDS}
           sectionOrder={PUBLIC_APPLY_SECTION_ORDER}
         />

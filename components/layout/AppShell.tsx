@@ -5,13 +5,14 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
 import type { User } from "@/lib/user-service";
+import type { ModulePermissions } from "@/config/module-permissions";
 import { isDeveloperUser } from "@/lib/auth/developer-access";
 import { CalculationSessionProvider } from "@/components/attendance/CalculationSession";
 import { EmployeeReportSessionProvider } from "@/components/reports/EmployeeReportSession";
 
 const COLLAPSE_STORAGE_KEY = "sidebar-collapsed";
 
-export function AppShell({ children, currentUser }: { children: React.ReactNode; currentUser: User | null }) {
+export function AppShell({ children, currentUser, permissions }: { children: React.ReactNode; currentUser: User | null; permissions: ModulePermissions }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -33,6 +34,7 @@ export function AppShell({ children, currentUser }: { children: React.ReactNode;
     <div className="flex min-h-screen bg-background">
       <Sidebar
         isDeveloper={isDeveloperUser(currentUser)}
+        permissions={permissions}
         mobileOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}
         collapsed={collapsed}

@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseClient, supabaseGuarded } from "@/lib/supabase";
 import { getOtReferences, getTimeOverdueFilterDurations } from "@/lib/ot-planning-service";
+import { getTimeOverdueZeroFilter } from "@/lib/settings-service";
 
 /* Supabase's dynamic table facade is intentionally untyped at this boundary. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -99,6 +100,7 @@ export async function getTimeOverdueReport(date: string, dateTo?: string): Promi
     // matches a checked duration counts. Empty set = no filtering (default).
     const filterEntries = await getTimeOverdueFilterDurations();
     const filterDurations = new Set(filterEntries.filter((x) => x.timeOverdueFilter).map((x) => x.duration));
+    const filterZero = await getTimeOverdueZeroFilter();
 
     const { mappings, divisions } = await getOtReferences();
     const mapByDepartment = new Map<string, { shed: string; division: string }>(
@@ -110,7 +112,10 @@ export async function getTimeOverdueReport(date: string, dateTo?: string): Promi
 
     for (const row of raw) {
       if (!validRawIds.has(Number(row.id))) continue;
-      if (filterDurations.size > 0 && !filterDurations.has(othByRawId.get(Number(row.id)) ?? -1)) continue;
+      const oth = othByRawId.get(Number(row.id));
+      if (filterDurations.size > 0 || filterZero) {
+        if (!(oth !== undefined && ((filterZero && oth === 0) || filterDurations.has(oth)))) continue;
+      }
       const unit = mapByDepartment.get(String(row.department).trim().toUpperCase());
       if (!unit) continue;
       const inMinutes = timeToMinutes(row.intime);

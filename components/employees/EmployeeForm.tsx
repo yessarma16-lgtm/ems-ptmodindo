@@ -100,6 +100,28 @@ interface EmployeeFormProps {
     /** Shown in the confirmation dialog, e.g. the employee's name. */
     itemLabel?: string;
   };
+  language?: "en" | "id";
+}
+
+const ID_SECTION_LABELS: Record<EmployeeSection, string> = {
+  "Personal Information": "Informasi Pribadi", "Employment Information": "Informasi Pekerjaan", "Contract Information": "Informasi Kontrak",
+  "Tax Information": "Informasi Pajak", "Bank Information": "Informasi Bank", "BPJS Information": "Informasi BPJS",
+  "Family Information": "Informasi Keluarga", "Address & Contact": "Alamat & Kontak", "Other Information": "Informasi Lainnya",
+};
+
+const ID_FIELD_LABELS: Record<string, string> = {
+  category: "Kategori", nik: "NIK", name: "Nama", department: "Departemen", position: "Posisi", level: "Level", skill: "Keahlian", type: "Tipe", shed: "Shed", ktpNo: "Nomor KTP",
+  birthDate: "Tanggal Lahir", birthPlace: "Tempat Lahir", age: "Usia", joinDate: "Tanggal Masuk", contractStatus: "Status Kontrak", permanenDate: "Tanggal Permanen",
+  contractCriteria: "Kriteria Kontrak", maritalStatus: "Status Pernikahan", gender: "Jenis Kelamin", ptkpStatus: "Status PTKP", ptkpTaxStatus: "Status Pajak PTKP", npwp: "NPWP",
+  bankName: "Nama Bank", rekeningNo: "Nomor Rekening", bpjsKetenagakerjaanNumber: "Nomor BPJS Ketenagakerjaan", bpjsKesehatanNumber: "Nomor BPJS Kesehatan",
+  education: "Pendidikan", religion: "Agama", address: "Alamat", districtCity: "Kabupaten / Kota", postalCode: "Kode Pos", hpNumber: "Nomor HP", kkNo: "Nomor KK",
+  spouseName: "Nama Pasangan", childNameFirst: "Nama Anak Pertama", childNameSecond: "Nama Anak Kedua", childNameThird: "Nama Anak Ketiga", motherName: "Nama Ibu", status: "Status",
+  exitDate: "Tanggal Keluar", reason: "Alasan", blood: "Golongan Darah", email: "Email", positionApplied: "Posisi yang Dilamar", branch: "Cabang", detailDisabilitas: "Detail Disabilitas",
+  mutasiI: "Mutasi I", mutasiII: "Mutasi II", fingerCode: "Kode Finger", sn: "Nomor Seri", masaKerja: "Masa Kerja",
+};
+
+function localizedFieldLabel(field: EmployeeField, language: "en" | "id") {
+  return language === "id" ? ID_FIELD_LABELS[field.key] ?? field.label : field.label;
 }
 
 /**
@@ -141,6 +163,7 @@ export function EmployeeForm({
   contractCriteria = [],
   stayOnPage = false,
   hrReview = false,
+  language = "en",
 }: EmployeeFormProps) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -620,7 +643,7 @@ export function EmployeeForm({
         setErrors(flat);
         const errorLabels = Object.keys(flat).map((key) => {
           const fieldMeta = ALL_EMPLOYEE_FORM_FIELDS.find((f) => f.key === key);
-          return fieldMeta?.label ?? key;
+          return fieldMeta ? localizedFieldLabel(fieldMeta, language) : key;
         });
         toast.error(
           errorLabels.length > 0
@@ -709,11 +732,11 @@ export function EmployeeForm({
           <AlertTriangle className="mt-0.5" />
           <div className="flex w-full items-center justify-between gap-4">
             <div>
-              <AlertTitle>Unable to load master data.</AlertTitle>
+              <AlertTitle>{language === "id" ? "Data pilihan tidak dapat dimuat." : "Unable to load master data."}</AlertTitle>
               <AlertDescription>{masterDataError}</AlertDescription>
             </div>
             <Button type="button" variant="outline" size="sm" onClick={() => router.refresh()}>
-              Retry
+              {language === "id" ? "Coba Lagi" : "Retry"}
             </Button>
           </div>
         </Alert>
@@ -727,7 +750,7 @@ export function EmployeeForm({
             <Fragment key={section}>
               <Card>
                 <CardHeader>
-                  <CardTitle>{section}</CardTitle>
+                  <CardTitle>{language === "id" ? ID_SECTION_LABELS[section] : section}</CardTitle>
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
                   {fields.map((field) => {
@@ -750,6 +773,7 @@ export function EmployeeForm({
                         }
                         onChange={(v) => setField(field.key, v)}
                         mode={mode}
+                        label={localizedFieldLabel(field, language)}
                       />
                     );
                   })}
@@ -789,15 +813,15 @@ export function EmployeeForm({
       </div>
 
       <Card className="mt-6">
-        <CardHeader><CardTitle>Work Experience</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{language === "id" ? "Pengalaman Kerja" : "Work Experience"}</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {workExperiences.map((item) => (
             <div key={item.key} className="grid grid-cols-1 items-start gap-4 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-6">
-              <Input placeholder="Company" value={item.company} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, company: e.target.value } : row))} />
-              <Input placeholder="Job Position" value={item.position} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, position: e.target.value } : row))} />
-              <Input type="number" placeholder="Start Year" aria-label="Start Year" value={item.startYear} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, startYear: e.target.value } : row))} />
-              <Input type="number" placeholder="End Year" aria-label="End Year (blank = present)" value={item.endYear} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, endYear: e.target.value } : row))} />
-              <Textarea placeholder="Work Experience" value={item.experience} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, experience: e.target.value } : row))} />
+              <Input placeholder={language === "id" ? "Nama Perusahaan" : "Company"} value={item.company} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, company: e.target.value } : row))} />
+              <Input placeholder={language === "id" ? "Posisi Pekerjaan" : "Job Position"} value={item.position} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, position: e.target.value } : row))} />
+              <Input type="number" placeholder={language === "id" ? "Tahun Mulai" : "Start Year"} aria-label={language === "id" ? "Tahun Mulai" : "Start Year"} value={item.startYear} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, startYear: e.target.value } : row))} />
+              <Input type="number" placeholder={language === "id" ? "Tahun Selesai" : "End Year"} aria-label={language === "id" ? "Tahun Selesai (kosong = masih bekerja)" : "End Year (blank = present)"} value={item.endYear} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, endYear: e.target.value } : row))} />
+              <Textarea placeholder={language === "id" ? "Pengalaman Kerja" : "Work Experience"} value={item.experience} readOnly={readOnly} onChange={(e) => setWorkExperiences((rows) => rows.map((row) => row.key === item.key ? { ...row, experience: e.target.value } : row))} />
               {!readOnly && (
                 <Button type="button" variant="ghost" size="icon" title="Remove this entry" className="justify-self-start sm:justify-self-end" onClick={() => handleRemoveWorkExperience(item.key)}>
                   <Trash2 className="size-4" />
@@ -812,17 +836,17 @@ export function EmployeeForm({
               onClick={handleAddWorkExperience}
             >
               <Plus className="size-4" />
-              Add Work Experience
+              {language === "id" ? "Tambah Pengalaman Kerja" : "Add Work Experience"}
             </button>
           )}
-          {readOnly && workExperiences.length === 0 && <p className="text-sm text-muted-foreground">No work experience recorded.</p>}
+          {readOnly && workExperiences.length === 0 && <p className="text-sm text-muted-foreground">{language === "id" ? "Belum ada pengalaman kerja." : "No work experience recorded."}</p>}
         </CardContent>
       </Card>
 
       {!readOnly && (
         <div className="mt-6 flex items-center justify-end gap-3 border-t border-border py-4">
           <Button type="button" variant="outline" onClick={() => router.back()}>
-            Cancel
+            {language === "id" ? "Batal" : "Cancel"}
           </Button>
           {deleteConfig && (
             <Button
@@ -895,9 +919,10 @@ function FieldControl({
   label?: string;
 }) {
   const id = `field-${field.key}`;
+  const displayedLabel = label ?? field.label;
   const labelNode = (
     <Label htmlFor={id} className="mb-1.5 block">
-      {label ?? field.label}
+      {displayedLabel}
       {field.required && <span className="ml-0.5 text-destructive">*</span>}
     </Label>
   );
@@ -965,7 +990,7 @@ function FieldControl({
             browsers' native picker wheel that needs an extra "Done" tap to confirm. */}
         <Select name={field.key} value={value || undefined} onValueChange={onChange} disabled={isEmpty && !hasUnknownValue}>
           <SelectTrigger id={id}>
-            <SelectValue placeholder={isEmpty ? `No ${field.label.toLowerCase()} available` : "Select..."} />
+            <SelectValue placeholder={isEmpty ? (label ? `Tidak ada pilihan ${displayedLabel.toLowerCase()}` : `No ${displayedLabel.toLowerCase()} available`) : label ? "Pilih..." : "Select..."} />
           </SelectTrigger>
           <SelectContent>
             {displayOptions.map((opt) => (

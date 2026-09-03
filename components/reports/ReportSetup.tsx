@@ -25,6 +25,7 @@ export function ReportSetup() {
   const [durations, setDurations] = useState<DurationFilter[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingDuration, setSavingDuration] = useState<number | null>(null);
+  const [othZeroFilter, setOthZeroFilter] = useState(false);
 
   const [sp1Threshold, setSp1Threshold] = useState<number | "">("");
   const [sp2Threshold, setSp2Threshold] = useState<number | "">("");
@@ -38,7 +39,7 @@ export function ReportSetup() {
   useEffect(() => {
     fetch("/api/reports/time-overdue/setup", { cache: "no-store" })
       .then((r) => r.json())
-      .then((v) => setDurations(v.durations ?? []))
+      .then((v) => { setDurations(v.durations ?? []); setOthZeroFilter(v.othZeroFilter === true); })
       .catch(() => toast.error("Failed to load setup."))
       .finally(() => setLoading(false));
 
@@ -108,7 +109,22 @@ export function ReportSetup() {
     }
   }
 
-  const checkedCount = durations.filter((d) => d.timeOverdueFilter).length;
+  async function toggleOthZero(checked: boolean) {
+    setOthZeroFilter(checked);
+    try {
+      const res = await fetch("/api/reports/time-overdue/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ othZeroFilter: checked }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      toast.error("Gagal menyimpan filter OTH = 0. Perubahan dibatalkan.");
+      setOthZeroFilter(!checked);
+    }
+  }
+
+  const checkedCount = durations.filter((d) => d.timeOverdueFilter).length + (othZeroFilter ? 1 : 0);
 
   return (
     <div className="space-y-8">
@@ -181,6 +197,10 @@ export function ReportSetup() {
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : (
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl border border-border bg-card p-4 sm:grid-cols-4 lg:grid-cols-6">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <Checkbox checked={othZeroFilter} onCheckedChange={(checked) => void toggleOthZero(checked === true)} aria-label="Filter OTH sama dengan 0" />
+              OTH = 0
+            </label>
             {durations.map((d) => (
               <label key={d.duration} className="flex items-center gap-2 text-sm">
                 <Checkbox

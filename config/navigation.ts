@@ -21,11 +21,13 @@ import {
   Briefcase,
   type LucideIcon,
 } from "lucide-react";
+import type { ModuleKey } from "@/config/module-permissions";
 
 export interface NavChild {
   label: string;
   href: string;
   icon: LucideIcon;
+  moduleKey?: ModuleKey;
 }
 
 export interface NavItem {
@@ -34,6 +36,7 @@ export interface NavItem {
   icon: LucideIcon;
   /** Sub-views nested under this item in the sidebar (e.g. Employees -> Active/Inactive/...). */
   children?: NavChild[];
+  moduleKey?: ModuleKey;
   /**
    * When true, the parent row is a pure open/close toggle (children hidden
    * until clicked) instead of also being a navigable link. When false/unset,
@@ -43,24 +46,24 @@ export interface NavItem {
 }
 
 export const MAIN_NAV: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, moduleKey: "dashboard" },
   {
     label: "Employees",
     href: "/employees",
     icon: UsersRound,
     collapsible: true,
     children: [
-      { label: "Active Employees", href: "/employees", icon: UserCheck },
-      { label: "Inactive Employees", href: "/employees/inactive", icon: UserX },
-      { label: "Expatriate", href: "/employees/expatriate", icon: Globe2 },
+      { label: "Active Employees", href: "/employees", icon: UserCheck, moduleKey: "employeesActive" },
+      { label: "Inactive Employees", href: "/employees/inactive", icon: UserX, moduleKey: "employeesInactive" },
+      { label: "Expatriate", href: "/employees/expatriate", icon: Globe2, moduleKey: "employeesExpatriate" },
     ],
   },
   {
     label: "Recruitment", href: "/recruitment", icon: UserPlus, collapsible: true,
     children: [
-      { label: "New Hiring", href: "/recruitment/new-hiring", icon: UserPlus },
-      { label: "Applicant Pool", href: "/recruitment/applicant-pool", icon: UsersRound },
-      { label: "Vacant Position", href: "/recruitment/vacant-position", icon: Briefcase },
+      { label: "New Hiring", href: "/recruitment/new-hiring", icon: UserPlus, moduleKey: "recruitmentNewHiring" },
+      { label: "Applicant Pool", href: "/recruitment/applicant-pool", icon: UsersRound, moduleKey: "recruitmentApplicantPool" },
+      { label: "Vacant Position", href: "/recruitment/vacant-position", icon: Briefcase, moduleKey: "recruitmentVacantPosition" },
     ],
   },
   {
@@ -69,9 +72,9 @@ export const MAIN_NAV: NavItem[] = [
     icon: ClipboardCheck,
     collapsible: true,
     children: [
-      { label: "NK Attendance Data", href: "/attendance/import", icon: FileClock },
-      { label: "MPP Calculation", href: "/attendance/calculation", icon: Calculator },
-      { label: "Overtime Report", href: "/attendance/report", icon: TimerReset },
+      { label: "NK Attendance Data", href: "/attendance/import", icon: FileClock, moduleKey: "attendanceImport" },
+      { label: "MPP Calculation", href: "/attendance/calculation", icon: Calculator, moduleKey: "attendanceCalculation" },
+      { label: "Overtime Report", href: "/attendance/report", icon: TimerReset, moduleKey: "attendanceReport" },
     ],
   },
   {
@@ -80,23 +83,23 @@ export const MAIN_NAV: NavItem[] = [
     icon: FileBarChart2,
     collapsible: true,
     children: [
-      { label: "Employee Report", href: "/reports/employee", icon: FileBarChart2 },
-      { label: "Report Mangkir", href: "/reports/mangkir", icon: AlertTriangle },
-      { label: "OT Planning", href: "/reports/ot-planning", icon: TimerReset },
-      { label: "Report Setup", href: "/reports/setup", icon: SlidersHorizontal },
+      { label: "Employee Report", href: "/reports/employee", icon: FileBarChart2, moduleKey: "reportEmployee" },
+      { label: "Report Mangkir", href: "/reports/mangkir", icon: AlertTriangle, moduleKey: "reportMangkir" },
+      { label: "OT Planning", href: "/reports/ot-planning", icon: TimerReset, moduleKey: "reportOtPlanning" },
+      { label: "Report Setup", href: "/reports/setup", icon: SlidersHorizontal, moduleKey: "reportSetup" },
     ],
   },
-  { label: "Export", href: "/export", icon: FileSpreadsheet },
+  { label: "Export", href: "/export", icon: FileSpreadsheet, moduleKey: "export" },
   {
     label: "Settings",
     href: "/settings",
     icon: Settings2,
     collapsible: true,
     children: [
-      { label: "Database", href: "/settings", icon: Database },
-      { label: "My Profile", href: "/settings/profile", icon: UserRound },
-      { label: "Master Data", href: "/settings/master-data", icon: ListTree },
-      { label: "User Management", href: "/settings/users", icon: Users },
+      { label: "Database", href: "/settings", icon: Database, moduleKey: "settingsDatabase" },
+      { label: "My Profile", href: "/settings/profile", icon: UserRound, moduleKey: "myProfile" },
+      { label: "Master Data", href: "/settings/master-data", icon: ListTree, moduleKey: "masterData" },
+      { label: "User Management", href: "/settings/users", icon: Users, moduleKey: "userManagement" },
     ],
   },
 ];

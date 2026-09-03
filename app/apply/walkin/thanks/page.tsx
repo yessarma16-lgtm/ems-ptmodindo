@@ -24,9 +24,9 @@ export default async function WalkInThanksPage({ searchParams }: PageProps) {
       <ApplyBackground backgroundDataUri={backgroundDataUri}>
         <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
           <CheckCircle2 className="size-12 text-emerald-600" />
-          <h1 className="text-xl font-semibold text-foreground">Thank you — application received</h1>
+          <h1 className="text-xl font-semibold text-foreground">Terima kasih — lamaran telah diterima</h1>
           <p className="text-sm text-muted-foreground">
-            Your application has been submitted and is awaiting review by PT MOD INDO HR.
+            Lamaran Anda telah dikirim dan sedang menunggu peninjauan oleh HR PT MOD INDO.
           </p>
         </div>
       </ApplyBackground>
@@ -41,6 +41,7 @@ export default async function WalkInThanksPage({ searchParams }: PageProps) {
         positionApplied={registration.positionApplied || registration.position}
         candidateNumber={registration.candidateNumber}
         showApplicationId={false}
+        language="id"
       />
     </ApplyBackground>
   );

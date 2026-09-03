@@ -35,7 +35,7 @@ export default async function PublicNewHiringPage({
           <XCircle className="size-12 text-destructive" />
           <h1 className="text-xl font-semibold text-foreground">Link not found</h1>
           <p className="text-sm text-muted-foreground">
-            This application link is no longer valid. Please scan the current QR code, or contact PT MOD INDO HR.
+            Tautan lamaran ini sudah tidak berlaku. Silakan pindai QR code terbaru atau hubungi HR PT MOD INDO.
           </p>
         </div>
       </ApplyBackground>
@@ -48,10 +48,10 @@ export default async function PublicNewHiringPage({
     try {
       masterData = toEmployeeFormMasterData(await getAllMasterData());
     } catch (error) {
-      masterDataError = error instanceof DatabaseConnectionError ? error.message : "Unable to load form data.";
+      masterDataError = error instanceof DatabaseConnectionError ? error.message : "Data formulir tidak dapat dimuat.";
     }
   } else {
-    masterDataError = "Application form is temporarily unavailable.";
+    masterDataError = "Formulir lamaran sedang tidak tersedia.";
   }
 
   return (
@@ -60,8 +60,8 @@ export default async function PublicNewHiringPage({
         <div className="mb-6 flex items-center gap-3">
           <Image src="/logo-mod.jpg" alt="PT MOD INDO" width={44} height={44} className="rounded" />
           <div>
-            <h1 className="text-lg font-semibold text-foreground">PT MOD INDO - Employment Application</h1>
-            <p className="text-sm text-muted-foreground">Please Review Your Application</p>
+            <h1 className="text-lg font-semibold text-foreground">PT MOD INDO - Formulir Lamaran Kerja</h1>
+            <p className="text-sm text-muted-foreground">Silakan tinjau dan lengkapi lamaran Anda.</p>
           </div>
         </div>
         <NewHiringApplication
