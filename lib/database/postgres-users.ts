@@ -184,6 +184,18 @@ export async function deleteUser(id: string): Promise<void> {
  * column (only the modules the user overrides from their role). Empty string
  * = no override, user follows their role for every module. */
 
+/**
+ * True when a query failed only because the `users.permissions` column isn't
+ * there yet (schema migration not run). Lets permission reads degrade to "no
+ * override" instead of 503-ing every gated route in an un-migrated env.
+ */
+function isMissingPermissionsColumn(error: unknown): boolean {
+  const e = error as { code?: string; message?: string } | null;
+  if (e?.code === "42703" || e?.code === "PGRST204") return true;
+  const msg = String(e?.message ?? "").toLowerCase();
+  return msg.includes("permissions") && msg.includes("column");
+}
+
 function parsePartialPermissions(raw: unknown): Partial<ModulePermissions> {
   const text = raw === null || raw === undefined ? "" : String(raw);
   if (!text) return {};
@@ -202,7 +214,10 @@ function parsePartialPermissions(raw: unknown): Partial<ModulePermissions> {
 export async function getUserPermissionsOverride(id: string): Promise<Partial<ModulePermissions>> {
   return supabaseGuarded(async () => {
     const { data, error } = await getSupabaseClient().from("users").select("permissions").eq("id", id).maybeSingle();
-    if (error) throw error;
+    if (error) {
+      if (isMissingPermissionsColumn(error)) return {};
+      throw error;
+    }
     return data ? parsePartialPermissions((data as SqlRow).permissions) : {};
   });
 }
@@ -210,7 +225,10 @@ export async function getUserPermissionsOverride(id: string): Promise<Partial<Mo
 export async function getAllUserPermissionsOverrides(): Promise<{ id: string; override: Partial<ModulePermissions> }[]> {
   return supabaseGuarded(async () => {
     const { data, error } = await getSupabaseClient().from("users").select("id,permissions");
-    if (error) throw error;
+    if (error) {
+      if (isMissingPermissionsColumn(error)) return [];
+      throw error;
+    }
     return (data as SqlRow[]).map((r) => ({ id: String(r.id), override: parsePartialPermissions(r.permissions) }));
   });
 }
