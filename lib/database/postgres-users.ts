@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseClient, supabaseGuarded } from "@/lib/supabase";
 import { RecordNotFoundError } from "@/lib/database/errors";
 import { hashPassword, DEFAULT_PASSWORD } from "@/lib/auth/password";
-import { sanitizePartialPermissions, type ModulePermissions } from "@/config/module-permissions";
+import { PERMISSION_MODULES, sanitizePartialPermissions, type ModulePermissions } from "@/config/module-permissions";
 import type { User, UserWithCredentials, UserInput } from "@/lib/database/sqlite-users";
 
 export type { User, UserWithCredentials, UserInput };
@@ -188,7 +188,12 @@ function parsePartialPermissions(raw: unknown): Partial<ModulePermissions> {
   const text = raw === null || raw === undefined ? "" : String(raw);
   if (!text) return {};
   try {
-    return sanitizePartialPermissions(JSON.parse(text) as Record<string, unknown>);
+    const parsed = sanitizePartialPermissions(JSON.parse(text) as Record<string, unknown>);
+    // An old scaffold (pre-Individual-Access) seeded some `users.permissions`
+    // rows with a FULL module map. A real per-user override never covers every
+    // module — so treat a complete map as "no override, follow the role".
+    if (Object.keys(parsed).length >= PERMISSION_MODULES.length) return {};
+    return parsed;
   } catch {
     return {};
   }

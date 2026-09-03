@@ -7,7 +7,6 @@ import { SIMPLE_MASTER_SHEETS, LOOKUP_TYPES } from "@/config/master-data-sheets"
 import { SIMPLE_MASTER_SEED, LOOKUP_SEED } from "@/config/master-data-seed";
 import { OT_DURATION_MULTIPLIER_SEED } from "@/config/ot-planning-multipliers";
 import { EMPLOYEE_COLUMNS } from "@/lib/database/sqlite-columns";
-import { defaultModulePermissions } from "@/config/module-permissions";
 import { hashPassword, DEFAULT_PASSWORD } from "@/lib/auth/password";
 
 /**
@@ -297,7 +296,7 @@ function seedDefaultUserIfEmpty(db: DatabaseSync): void {
     "admin",
     "admin@ptmodindo.com",
     "HR Administrator",
-    JSON.stringify(defaultModulePermissions()),
+    "", // permissions: per-user Individual Access override — empty = follow the role
     hash,
     salt,
     now,

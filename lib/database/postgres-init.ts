@@ -4,7 +4,6 @@ import { SIMPLE_MASTER_SHEETS, LOOKUP_TYPES } from "@/config/master-data-sheets"
 import { SIMPLE_MASTER_SEED, LOOKUP_SEED } from "@/config/master-data-seed";
 import { OT_DURATION_MULTIPLIER_SEED } from "@/config/ot-planning-multipliers";
 import { EMPLOYEE_COLUMNS, WRITABLE_EMPLOYEE_COLUMNS } from "@/lib/database/sqlite-columns";
-import { defaultModulePermissions } from "@/config/module-permissions";
 import { hashPassword, DEFAULT_PASSWORD } from "@/lib/auth/password";
 
 /**
@@ -208,8 +207,8 @@ async function seedDefaultUserIfEmpty(client: Client): Promise<void> {
   const { hash, salt } = hashPassword(DEFAULT_PASSWORD);
   await client.query(
     `INSERT INTO users (name, username, email, role, status, permissions, password_hash, password_salt)
-     VALUES ($1, $2, $3, $4, 'Active', $5, $6, $7)`,
-    ["Admin User", "admin", "admin@ptmodindo.com", "HR Administrator", JSON.stringify(defaultModulePermissions()), hash, salt],
+     VALUES ($1, $2, $3, $4, 'Active', '', $5, $6)`,
+    ["Admin User", "admin", "admin@ptmodindo.com", "HR Administrator", hash, salt],
   );
 }
 
