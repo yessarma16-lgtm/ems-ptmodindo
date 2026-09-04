@@ -84,6 +84,8 @@ export const MAIN_NAV: NavItem[] = [
     collapsible: true,
     children: [
       { label: "Employee Report", href: "/reports/employee", icon: FileBarChart2, moduleKey: "reportEmployee" },
+      { label: "HR Report Center", href: "/reports/hr", icon: Users, moduleKey: "reportHr" },
+      { label: "Overdue Employee", href: "/reports/overdue-employee", icon: TimerReset, moduleKey: "reportOverdueEmployee" },
       { label: "Report Mangkir", href: "/reports/mangkir", icon: AlertTriangle, moduleKey: "reportMangkir" },
       { label: "OT Planning", href: "/reports/ot-planning", icon: TimerReset, moduleKey: "reportOtPlanning" },
       { label: "Report Setup", href: "/reports/setup", icon: SlidersHorizontal, moduleKey: "reportSetup" },

@@ -79,7 +79,7 @@ function buildLetterContent(event: MangkirEvent): LetterContent {
       perihal: "Surat Panggilan ke-1",
       unitLine,
       bodyParagraph: `Sehubungan dengan ketidak hadiran saudara dari tanggal ${first} s/d ${lastFormatted} selama ${dayCount} hari tanpa keterangan yang dapat di pertanggung jawabkan, maka bersama ini kami harapkan Saudara bisa hadir pada`,
-      meetingDate: formatDateLongID(addDaysISO(last, 1)),
+      meetingDate: formatDateLongID(addDaysISO(last, 2)),
       closingParagraphs: [
         "Bersama surat ini kami sampaikan Surat Panggilan Ke-1 kepada Saudara/i untuk segera melapor dan memberikan keterangan kepada pihak HRD/Personalia.",
         "Demikian surat panggilan ini kami sampaikan untuk dilaksanakan sebagaimana mestinya.",
@@ -95,7 +95,7 @@ function buildLetterContent(event: MangkirEvent): LetterContent {
     perihal: "Surat Panggilan ke-2",
     unitLine,
     bodyParagraph: `Sehubungan dengan ketidak hadiran saudara dari tanggal ${first} s/d ${lastFormatted} selama ${dayCount} hari tanpa keterangan dan telah kami kirimkan surat panggilan ke-1 (satu) pada tanggal ${sp1SentDate}, maka bersama ini kami sampaikan Surat panggilan Ke-2 (dua) untuk Saudara bisa hadir pada :`,
-    meetingDate: formatDateLongID(addDaysISO(last, 1)),
+    meetingDate: formatDateLongID(addDaysISO(last, 2)),
     closingParagraphs: [
       "Apabila Saudara tidak memenuhi Surat Panggilan ke-2 (dua) ini tanpa memberikan alasan yang dapat dipertanggung jawabkan, maka perusahaan akan mengambil tindakan sesuai dengan ketentuan dan peraturan perusahaan yang berlaku.",
       "Ketidak hadiran Saudara dalam memenuhi panggilan tersebut akan kami catat sebagai ketidak patuhan terhadap proses penyelesaian hubungan kerja secara prosedural dan dapat ditindak lanjuti sesuai dengan ketentuan yang berlaku.",

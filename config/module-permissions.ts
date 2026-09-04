@@ -20,6 +20,8 @@ export const PERMISSION_MODULES = [
   { key: "attendanceCalculation", label: "Attendance - MPP Calculation" },
   { key: "attendanceReport", label: "Attendance - Overtime Report" },
   { key: "reportEmployee", label: "Report - Employee Report" },
+  { key: "reportHr", label: "Report - HR Report Center" },
+  { key: "reportOverdueEmployee", label: "Report - Overdue Employee" },
   { key: "reportMangkir", label: "Report - Report Mangkir" },
   { key: "reportOtPlanning", label: "Report - OT Planning" },
   { key: "reportSetup", label: "Report - Report Setup" },
